@@ -1,6 +1,7 @@
 import "server-only";
 import { env } from "../env";
 import { localStorage } from "./local";
+import { blobStorage } from "./blob";
 
 export type StoredFile = {
   url: string; // publicly-accessible URL (e.g. /uploads/abc.pdf)
@@ -26,6 +27,8 @@ function resolveProvider(): StorageProvider {
   switch (env.STORAGE_DRIVER) {
     case "local":
       return localStorage;
+    case "blob":
+      return blobStorage;
     // future: case "s3": return s3Storage;
     // future: case "cloudinary": return cloudinaryStorage;
     default:

@@ -11,7 +11,7 @@ export const ALLOWED_UPLOAD_MIMES = [
   "image/png",
 ] as const;
 
-export type UploadedFile = StoredFile & { fieldName: string };
+export type UploadedFile = StoredFile & { fieldName: string; buffer: Buffer };
 
 export type ParsedMultipart = {
   fields: Record<string, string | string[]>;
@@ -67,7 +67,7 @@ export async function parseMultipart(req: NextRequest): Promise<ParsedMultipart>
         contentType: value.type || "application/octet-stream",
         buffer,
       });
-      pushIntoRecord<UploadedFile>(files, key, { ...stored, fieldName: key });
+      pushIntoRecord<UploadedFile>(files, key, { ...stored, fieldName: key, buffer });
     } else {
       pushIntoRecord<string>(fields, key, value);
     }

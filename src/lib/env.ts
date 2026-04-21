@@ -14,7 +14,8 @@ const schema = z.object({
   UPLOAD_DIR: z.string().default("public/uploads"),
   PUBLIC_UPLOADS_BASE: z.string().default("/uploads"),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
-  STORAGE_DRIVER: z.enum(["local", "s3", "cloudinary"]).default("local"),
+  STORAGE_DRIVER: z.enum(["local", "blob", "s3", "cloudinary"]).default("local"),
+  BLOB_READ_WRITE_TOKEN: z.string().optional(),
 
   SUREPASS_ENABLED: z
     .string()

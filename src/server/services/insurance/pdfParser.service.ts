@@ -1,6 +1,5 @@
 import "server-only";
 import { promises as fs } from "fs";
-import path from "path";
 
 export type ExtractedInsurance = {
   policyNumber: string | null;
@@ -16,17 +15,21 @@ export type ExtractedInsurance = {
 
 /**
  * Extract insurance details from PDF text.
+ * Accepts a Buffer directly (works for both local disk and Vercel Blob flows).
  * Uses pdf-parse for text-based PDFs, falls back to mock data for scanned/empty PDFs.
  */
-export async function extractFromPDF(filePath: string): Promise<ExtractedInsurance> {
+export async function extractFromPDF(
+  source: Buffer | string,
+): Promise<ExtractedInsurance> {
   let text = "";
+  let buffer: Buffer;
 
   try {
+    buffer = Buffer.isBuffer(source) ? source : await fs.readFile(source);
     const pdfParseMod = (await import("pdf-parse")) as unknown as {
       default?: (buffer: Buffer) => Promise<{ text?: string }>;
     } & ((buffer: Buffer) => Promise<{ text?: string }>);
     const pdfParse = pdfParseMod.default ?? pdfParseMod;
-    const buffer = await fs.readFile(filePath);
     const data = await pdfParse(buffer);
     text = data.text ?? "";
   } catch (err) {
@@ -37,7 +40,7 @@ export async function extractFromPDF(filePath: string): Promise<ExtractedInsuran
   }
 
   if (text.length > 50) return parseInsuranceText(text);
-  return getMockExtraction(filePath);
+  return getMockExtraction();
 }
 
 function parseInsuranceText(text: string): ExtractedInsurance {
@@ -124,8 +127,7 @@ function parseInsuranceText(text: string): ExtractedInsurance {
   return result;
 }
 
-function getMockExtraction(filePath: string): ExtractedInsurance {
-  const fileName = path.basename(filePath || "");
+function getMockExtraction(): ExtractedInsurance {
   return {
     policyNumber: `POL-${Date.now().toString().slice(-8)}`,
     insurer: "Unable to detect — please fill manually",
@@ -135,6 +137,6 @@ function getMockExtraction(filePath: string): ExtractedInsurance {
     premium: null,
     vehicleType: "Private Car",
     coverageType: null,
-    raw: `Scanned/unreadable PDF: ${fileName}. Please fill details manually.`,
+    raw: "Scanned/unreadable PDF. Please fill details manually.",
   };
 }

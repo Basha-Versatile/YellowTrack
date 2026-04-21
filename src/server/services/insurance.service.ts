@@ -18,13 +18,13 @@ function computeStatus(expiryDate: Date | string | null | undefined) {
 
 export async function uploadAndExtract(
   vehicleId: string,
-  filePath: string,
+  source: Buffer | string,
   documentUrl: string,
 ) {
   const vehicle = await vehicleRepo.findById(vehicleId);
   if (!vehicle) throw new NotFoundError("Vehicle not found");
 
-  const extracted = await extractFromPDF(filePath);
+  const extracted = await extractFromPDF(source);
   const status = computeStatus(extracted.expiryDate);
 
   const policy = await insuranceRepo.create({
