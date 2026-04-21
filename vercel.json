@@ -8,12 +8,8 @@
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron/compliance-check",
-      "schedule": "0 */6 * * *"
-    },
-    {
       "path": "/api/cron/fastag-simulate",
-      "schedule": "30 */6 * * *"
+      "schedule": "30 0 * * *"
     },
     {
       "path": "/api/cron/insurance-check",
