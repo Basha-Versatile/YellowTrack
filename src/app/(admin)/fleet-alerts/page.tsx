@@ -1,10 +1,12 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { notificationAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { NotificationsSkeleton } from "@/components/ui/Skeleton";
 import Pagination, { useClientPagination } from "@/components/ui/Pagination";
-import { FileText, Truck, Users, CreditCard, AlertTriangle, Check, Info, Bell, Wrench, Wallet, type LucideIcon } from "lucide-react";
+import { FileText, Truck, Users, CreditCard, AlertTriangle, Check, Info, Bell, Wrench, Wallet, ChevronRight, type LucideIcon } from "lucide-react";
+import { getNotificationHref } from "@/lib/notification-link";
 
 interface Notification {
   id: string;
@@ -29,6 +31,7 @@ const TYPE_CONFIG: Record<string, { Icon: LucideIcon; color: string; bg: string 
 };
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const toast = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +60,15 @@ export default function NotificationsPage() {
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       toast.success("All Marked Read");
     } catch { }
+  };
+
+  const handleNavigate = (n: Notification) => {
+    const href = getNotificationHref(n);
+    if (!n.isRead) {
+      notificationAPI.markAsRead(n.id).catch(() => undefined);
+      setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+    }
+    if (href) router.push(href);
   };
 
   const filtered = filter === "unread" ? notifications.filter((n) => !n.isRead) : notifications;
@@ -111,12 +123,23 @@ export default function NotificationsPage() {
             const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.SYSTEM;
             const timeAgo = getTimeAgo(n.createdAt);
             return (
-              <div key={n.id}
-                className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${
+              <div
+                key={n.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleNavigate(n)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleNavigate(n);
+                  }
+                }}
+                className={`flex items-start gap-4 p-4 rounded-xl border cursor-pointer transition-all ${
                   n.isRead
-                    ? "border-gray-100 bg-white dark:border-gray-800 dark:bg-white/[0.01]"
-                    : "border-yellow-200 bg-yellow-50/30 dark:border-yellow-500/20 dark:bg-yellow-500/5"
-                }`}>
+                    ? "border-gray-100 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.01] dark:hover:bg-white/[0.04]"
+                    : "border-yellow-200 bg-yellow-50/30 hover:bg-yellow-50 dark:border-yellow-500/20 dark:bg-yellow-500/5 dark:hover:bg-yellow-500/10"
+                }`}
+              >
                 {/* Icon */}
                 <div className={`w-10 h-10 rounded-xl ${cfg.bg} flex items-center justify-center flex-shrink-0`}>
                   <cfg.Icon className={`w-5 h-5 ${cfg.color}`} strokeWidth={1.5} />
@@ -134,18 +157,16 @@ export default function NotificationsPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {n.entityId && (
-                    <a href={getNotifLink(n.type, n.entityId)}
-                      className="text-[11px] font-medium text-brand-500 hover:text-brand-600 whitespace-nowrap">
-                      View &rarr;
-                    </a>
-                  )}
                   {!n.isRead && (
-                    <button onClick={() => handleMarkRead(n.id)} title="Mark as read"
-                      className="w-7 h-7 rounded-lg bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center transition-colors">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
+                      title="Mark as read"
+                      className="w-7 h-7 rounded-lg bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center transition-colors"
+                    >
                       <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
                     </button>
                   )}
+                  <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600" />
                 </div>
               </div>
             );
@@ -156,14 +177,6 @@ export default function NotificationsPage() {
       <Pagination currentPage={page} totalPages={totalPages} totalItems={totalItems} itemsPerPage={perPage} onPageChange={setPage} onItemsPerPageChange={setPerPage} itemLabel="notifications" />
     </div>
   );
-}
-
-function getNotifLink(type: string, entityId: string): string {
-  if (type === "LICENSE_EXPIRY" || type === "DRIVER_DOC_EXPIRY") return `/drivers/${entityId}`;
-  if (type === "SERVICE_DUE") return `/vehicles/services/${entityId}`;
-  if (type === "FASTAG_LOW_BALANCE") return `/fastag`;
-  if (type === "CHALLAN_NEW" || type === "CHALLAN_PAID" || type === "VEHICLE_DOC_EXPIRY" || type === "DOCUMENT_EXPIRY") return `/vehicles/${entityId}`;
-  return `/vehicles/${entityId}`;
 }
 
 function getTimeAgo(dateStr: string): string {

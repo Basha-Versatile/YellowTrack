@@ -17,6 +17,7 @@ const schema = z.object({
   STORAGE_DRIVER: z.enum(["local", "blob", "s3", "cloudinary"]).default("local"),
   BLOB_READ_WRITE_TOKEN: z.string().optional(),
 
+  // Vehicle RC lookup (Surepass kyc-api)
   SUREPASS_ENABLED: z
     .string()
     .optional()
@@ -24,6 +25,15 @@ const schema = z.object({
   SUREPASS_BASE_URL: z.string().default("https://kyc-api.surepass.io/api/v1"),
   SUREPASS_API_TOKEN: z.string().optional(),
   SUREPASS_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+
+  // Driving License lookup (Surepass sandbox — different endpoint + token)
+  SUREPASS_DL_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v !== "false"),
+  SUREPASS_DL_BASE_URL: z.string().default("https://sandbox.surepass.io/api/v1"),
+  SUREPASS_DL_API_TOKEN: z.string().optional(),
+  SUREPASS_DL_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
 
   CRON_SECRET: z.string().min(16).optional(),
 

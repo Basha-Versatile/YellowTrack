@@ -9,6 +9,9 @@ import {
 import * as driverRepo from "../repositories/driver.repository";
 import * as vehicleRepo from "../repositories/vehicle.repository";
 import { fetchDriverByLicense } from "./mock/dl.mock";
+import { fetchDrivingLicense, type SurepassDlData } from "@/lib/surepass-dl";
+import { env } from "@/lib/env";
+import { storage } from "@/lib/storage";
 import { calculateComplianceStatus } from "./compliance.service";
 
 type LicenseStatus = "GREEN" | "YELLOW" | "ORANGE" | "RED";
@@ -116,45 +119,149 @@ export async function assignDriverToVehicle(
   return driverRepo.assignToVehicle(driverId, vehicleId);
 }
 
-export async function autoCreateDriver(licenseNumber: string) {
+type NormalizedDl = {
+  licenseNumber: string;
+  name: string;
+  phone: string | null;
+  aadhaarLast4: string | null;
+  licenseExpiry: Date;
+  vehicleClass: string;
+  bloodGroup: string | null;
+  fatherName: string | null;
+  permanentAddress: string | null;
+  currentAddress: string | null;
+  profilePhoto: string | null;
+};
+
+/**
+ * Upload a base64-encoded profile image from Surepass to our storage provider.
+ * Returns a public URL, or null if anything goes wrong — creation must not fail
+ * because of a profile photo upload issue.
+ */
+async function uploadProfileImageFromBase64(
+  raw: string | undefined | null,
+  licenseNumber: string,
+): Promise<string | null> {
+  if (!raw) return null;
+  try {
+    const stripped = raw.replace(/^data:image\/[a-zA-Z]+;base64,/, "");
+    const buffer = Buffer.from(stripped, "base64");
+    if (buffer.length === 0) return null;
+    const stored = await storage.save({
+      fieldName: `driver-photo-${licenseNumber}`,
+      originalName: `${licenseNumber}.jpg`,
+      contentType: "image/jpeg",
+      buffer,
+    });
+    return stored.url;
+  } catch (err) {
+    console.error(
+      "[AutoCreateDriver] profile image upload failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+function normalizeFromSurepassDl(data: SurepassDlData): NormalizedDl {
+  const expiry = data.doe ? new Date(data.doe) : null;
+  if (!expiry || Number.isNaN(expiry.getTime())) {
+    throw new BadRequestError("DL response missing a valid expiry date");
+  }
+  return {
+    licenseNumber: (data.license_number || "").toUpperCase().replace(/\s/g, ""),
+    name: data.name,
+    phone: null,
+    aadhaarLast4: null,
+    licenseExpiry: expiry,
+    vehicleClass: data.vehicle_classes?.[0] ?? "LMV",
+    bloodGroup: data.blood_group || null,
+    fatherName: data.father_or_husband_name || null,
+    permanentAddress: data.permanent_address || null,
+    currentAddress: data.temporary_address || null,
+    profilePhoto: null, // filled in after upload
+  };
+}
+
+function normalizeFromMock(mock: Awaited<ReturnType<typeof fetchDriverByLicense>>): NormalizedDl {
+  return {
+    licenseNumber: mock.licenseNumber,
+    name: mock.name,
+    phone: mock.phone ?? null,
+    aadhaarLast4: mock.aadhaarLast4 ?? null,
+    licenseExpiry: new Date(mock.licenseExpiry),
+    vehicleClass: mock.vehicleClass,
+    bloodGroup: mock.bloodGroup ?? null,
+    fatherName: mock.fatherName ?? null,
+    permanentAddress: mock.permanentAddress ?? null,
+    currentAddress: null,
+    profilePhoto: null,
+  };
+}
+
+export async function autoCreateDriver(
+  licenseNumber: string,
+  dob?: string | null,
+) {
   const existing = await driverRepo.findByLicenseNumber(licenseNumber);
   if (existing) {
     throw new ConflictError("Driver with this license number already exists");
   }
 
-  let dlData: Awaited<ReturnType<typeof fetchDriverByLicense>>;
-  try {
-    dlData = await fetchDriverByLicense(licenseNumber);
-  } catch {
-    throw new AppError("Failed to verify license from DL database", 502);
+  let normalized: NormalizedDl;
+
+  const useRealApi =
+    env.SUREPASS_DL_ENABLED && env.SUREPASS_DL_API_TOKEN && dob && dob.trim();
+
+  if (useRealApi) {
+    // Real Surepass DL lookup — errors propagate (they already carry proper HTTP codes)
+    const raw = await fetchDrivingLicense(licenseNumber, String(dob).trim());
+    normalized = normalizeFromSurepassDl(raw);
+
+    // Best-effort profile photo from the license image
+    if (raw.profile_image) {
+      normalized.profilePhoto = await uploadProfileImageFromBase64(
+        raw.profile_image,
+        normalized.licenseNumber,
+      );
+    }
+  } else {
+    // Fallback to deterministic mock (local dev / missing DOB / disabled)
+    let mock: Awaited<ReturnType<typeof fetchDriverByLicense>>;
+    try {
+      mock = await fetchDriverByLicense(licenseNumber);
+    } catch {
+      throw new AppError("Failed to verify license from DL database", 502);
+    }
+    normalized = normalizeFromMock(mock);
   }
 
-  const licenseExpiry = new Date(dlData.licenseExpiry);
-  if (licenseExpiry < new Date()) {
+  if (normalized.licenseExpiry < new Date()) {
     throw new BadRequestError("Cannot add driver with expired license");
   }
 
   const driver = await driverRepo.create({
-    name: dlData.name,
-    phone: dlData.phone,
-    aadhaarLast4: dlData.aadhaarLast4,
-    licenseNumber: dlData.licenseNumber,
-    licenseExpiry,
-    vehicleClass: dlData.vehicleClass,
-    bloodGroup: dlData.bloodGroup ?? null,
-    fatherName: dlData.fatherName ?? null,
+    name: normalized.name,
+    phone: normalized.phone,
+    aadhaarLast4: normalized.aadhaarLast4,
+    licenseNumber: normalized.licenseNumber,
+    licenseExpiry: normalized.licenseExpiry,
+    vehicleClass: normalized.vehicleClass,
+    bloodGroup: normalized.bloodGroup,
+    fatherName: normalized.fatherName,
     motherName: null,
     emergencyContact: null,
-    currentAddress: null,
-    permanentAddress: dlData.permanentAddress ?? null,
+    currentAddress: normalized.currentAddress,
+    permanentAddress: normalized.permanentAddress,
+    profilePhoto: normalized.profilePhoto,
     verificationToken: randomUUID(),
   });
 
   const obj = driver.toObject() as Record<string, unknown>;
   return {
     ...obj,
-    licenseStatus: calculateLicenseStatus(licenseExpiry),
-    daysToExpiry: daysToExpiry(licenseExpiry),
+    licenseStatus: calculateLicenseStatus(normalized.licenseExpiry),
+    daysToExpiry: daysToExpiry(normalized.licenseExpiry),
     verified: true,
   };
 }

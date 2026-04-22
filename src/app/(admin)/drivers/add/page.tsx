@@ -37,6 +37,7 @@ export default function AddDriverPage() {
 
   // Auto mode
   const [autoLicense, setAutoLicense] = useState("");
+  const [autoDob, setAutoDob] = useState("");
   const [autoLoading, setAutoLoading] = useState(false);
   const [autoStep, setAutoStep] = useState(-1);
 
@@ -69,10 +70,13 @@ export default function AddDriverPage() {
     if (!autoLicense.trim() || autoLicense.trim().length < 5) {
       setError("Enter a valid driving license number"); return;
     }
+    if (!autoDob) {
+      setError("Date of birth is required to verify the license"); return;
+    }
     setAutoLoading(true);
     for (let i = 0; i < AUTO_STEPS.length; i++) { setAutoStep(i); await new Promise((r) => setTimeout(r, 800)); }
     try {
-      const res = await driverAPI.autoCreate(autoLicense.trim());
+      const res = await driverAPI.autoCreate(autoLicense.trim(), autoDob);
       setAutoStep(AUTO_STEPS.length);
       setSuccess(`${res.data.data.name} added successfully!`);
       toast.success("Driver Added!", `${res.data.data.name} verified and added`);
@@ -178,6 +182,16 @@ export default function AddDriverPage() {
                     disabled={autoLoading}
                     className="w-full h-14 rounded-xl border-2 border-gray-200 bg-gray-50 px-5 text-lg font-mono font-bold tracking-widest text-gray-900 placeholder:text-gray-300 placeholder:font-normal placeholder:tracking-normal focus:border-yellow-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:opacity-60 transition-all"
                   />
+                  <label className="mt-5 mb-2 block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={autoDob}
+                    onChange={(e) => setAutoDob(e.target.value)}
+                    disabled={autoLoading}
+                    max={new Date().toISOString().split("T")[0]}
+                    className="w-full h-12 rounded-xl border-2 border-gray-200 bg-gray-50 px-5 text-sm font-medium text-gray-900 focus:border-yellow-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:opacity-60 transition-all"
+                  />
+                  <p className="mt-1.5 text-[11px] text-gray-400">DOB is required to verify the license against the Sarathi / Surepass database.</p>
                   <button type="submit" disabled={autoLoading || !!success}
                     className="mt-5 w-full h-12 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
                     {autoLoading ? (<><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Verifying...</>) : "Verify & Add Driver"}

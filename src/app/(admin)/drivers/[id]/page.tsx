@@ -8,7 +8,7 @@ import Link from "next/link";
 import { DriverDetailSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
 import VerificationLinkShare from "@/components/ui/VerificationLinkShare";
-import { ChevronLeft, ChevronRight, Pencil, Upload, FileText, Plus, ExternalLink, RefreshCw, Clock, MapPin, Check, User, Users, Bell, CreditCard, Calendar, Car } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Upload, FileText, Plus, ExternalLink, RefreshCw, Clock, MapPin, Check, User, Users, Bell, CreditCard, Calendar, Car, Navigation } from "lucide-react";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface DriverDoc {
@@ -616,8 +616,8 @@ export default function DriverDetailPage() {
               {driver.currentAddress || driver.permanentAddress ? (
                 <div className="space-y-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <AddressBlock label="Current Address" address={driver.currentAddress} icon="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-                    <AddressBlock label="Permanent Address" address={driver.permanentAddress} icon="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                    <AddressBlock label="Current Address" address={driver.currentAddress} lat={driver.currentAddressLat} lng={driver.currentAddressLng} icon="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                    <AddressBlock label="Permanent Address" address={driver.permanentAddress} lat={driver.permanentAddressLat} lng={driver.permanentAddressLng} icon="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
                   </div>
                   {/* Address Photos */}
                   {(driver.currentAddressPhotos?.length > 0 || driver.permanentAddressPhotos?.length > 0) && (
@@ -904,13 +904,50 @@ function InfoRow({ icon, label, value, highlight, valueClass = "" }: { icon: str
   );
 }
 
-function AddressBlock({ label, address, icon }: { label: string; address: string | null; icon: string }) {
+function AddressBlock({
+  label,
+  address,
+  icon,
+  lat,
+  lng,
+}: {
+  label: string;
+  address: string | null;
+  icon: string;
+  lat?: number | null;
+  lng?: number | null;
+}) {
   if (!address) return null;
+
+  // Prefer precise coords when available (Google Maps will pinpoint them);
+  // fall back to the address string (Google Maps will geocode).
+  // Omitting `origin` makes Google Maps use the user's current location by default —
+  // it prompts for location permission on first use.
+  const destination =
+    lat != null && lng != null ? `${lat},${lng}` : address;
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+    destination,
+  )}&travelmode=driving`;
+
   return (
-    <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d={icon} /></svg>
-        <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{label}</span>
+    <div className="relative rounded-xl bg-gray-50 dark:bg-gray-800/50 p-4">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <svg className="w-4 h-4 text-yellow-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
+          </svg>
+          <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{label}</span>
+        </div>
+        <a
+          href={directionsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Open directions in Google Maps (from your location to ${address})`}
+          className="inline-flex items-center gap-1 rounded-md bg-white/70 dark:bg-gray-900/40 px-2 py-1 text-[10px] font-semibold text-brand-600 hover:bg-brand-50 hover:text-brand-700 dark:text-brand-400 dark:hover:bg-brand-500/10 dark:hover:text-brand-300 border border-brand-200 dark:border-brand-500/20 transition-colors"
+        >
+          <Navigation className="w-3 h-3" strokeWidth={2.2} />
+          Route
+        </a>
       </div>
       <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{address}</p>
     </div>

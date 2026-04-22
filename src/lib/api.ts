@@ -255,8 +255,8 @@ export const driverAPI = {
   getStats: () => api.get("/drivers/stats"),
   create: (data: Record<string, unknown>) => api.post("/drivers", data),
   update: (id: string, data: Record<string, unknown>) => api.put(`/drivers/${id}`, data),
-  autoCreate: (licenseNumber: string) =>
-    api.post("/drivers/auto", { licenseNumber }),
+  autoCreate: (licenseNumber: string, dob?: string) =>
+    api.post("/drivers/auto", dob ? { licenseNumber, dob } : { licenseNumber }),
   toggleVerification: (id: string) => api.patch(`/drivers/${id}/toggle-verification`),
   updateDocExpiry: (docId: string, expiryDate?: string, lifetime?: boolean) =>
     api.put(`/drivers/documents/${docId}/expiry`, { expiryDate, lifetime }),

@@ -1,8 +1,10 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import React, { useState, useEffect, useCallback } from "react";
 import { notificationAPI } from "@/lib/api";
 import { Dropdown } from "../ui/dropdown/Dropdown";
+import { getNotificationHref } from "@/lib/notification-link";
 
 interface NotifItem {
   id: string;
@@ -15,6 +17,7 @@ interface NotifItem {
 }
 
 export default function NotificationDropdown() {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -58,6 +61,18 @@ export default function NotificationDropdown() {
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch { }
+  };
+
+  const handleNavigate = async (n: NotifItem) => {
+    const href = getNotificationHref(n);
+    setIsOpen(false);
+    if (!n.isRead) {
+      // fire-and-forget — don't block navigation on the read write
+      notificationAPI.markAsRead(n.id).catch(() => undefined);
+      setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, isRead: true } : x));
+      setUnreadCount((c) => Math.max(0, c - 1));
+    }
+    if (href) router.push(href);
   };
 
   return (
@@ -104,7 +119,16 @@ export default function NotificationDropdown() {
             notifications.map((n) => (
               <div
                 key={n.id}
-                className={`flex items-start gap-3 px-5 py-3 border-b border-gray-50 dark:border-gray-800/50 last:border-0 transition-colors ${!n.isRead ? "bg-yellow-50/50 dark:bg-yellow-500/5" : "hover:bg-gray-50 dark:hover:bg-white/5"}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleNavigate(n)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleNavigate(n);
+                  }
+                }}
+                className={`flex items-start gap-3 px-5 py-3 border-b border-gray-50 dark:border-gray-800/50 last:border-0 cursor-pointer transition-colors ${!n.isRead ? "bg-yellow-50/50 dark:bg-yellow-500/5 hover:bg-yellow-50 dark:hover:bg-yellow-500/10" : "hover:bg-gray-50 dark:hover:bg-white/5"}`}
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${getNotifStyle(n.type).bg}`}>
                   <svg className={`w-4 h-4 ${getNotifStyle(n.type).icon}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d={getNotifStyle(n.type).path} /></svg>
@@ -115,8 +139,11 @@ export default function NotificationDropdown() {
                   <p className="text-[9px] text-gray-300 dark:text-gray-600 mt-1">{getTimeAgo(n.createdAt)}</p>
                 </div>
                 {!n.isRead && (
-                  <button onClick={() => handleMarkRead(n.id)} title="Mark as read"
-                    className="w-6 h-6 rounded-full bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center flex-shrink-0 mt-1 transition-colors">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
+                    title="Mark as read"
+                    className="w-6 h-6 rounded-full bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center flex-shrink-0 mt-1 transition-colors"
+                  >
                     <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
                   </button>
                 )}
