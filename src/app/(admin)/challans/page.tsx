@@ -5,8 +5,8 @@ import Link from "next/link";
 import { ChallansSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/context/ToastContext";
 import Pagination, { useClientPagination } from "@/components/ui/Pagination";
-import { AlertTriangle, Clock, Check, Banknote, Search, Calendar, X, Car, ChevronRight, RefreshCw, List, LayoutGrid } from "lucide-react";
-import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
+import { AlertTriangle, Clock, Check, Banknote, Search, Calendar, X, ChevronRight, RefreshCw, List, LayoutGrid } from "lucide-react";
+import { VehicleThumb, resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface Challan {
   id: string;
@@ -276,13 +276,18 @@ export default function ChallansPage() {
             const paidAmt = paid.reduce((s, c) => s + c.amount, 0);
             return (
               <div key={v.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                {(() => { const GroupIcon = v.group?.icon ? getVehicleTypeIcon(v.group.icon) : Car; return (
-                <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden ${!v.profileImage ? "bg-gray-100 dark:bg-gray-800" : ""}`}
-                  style={!v.profileImage && v.group?.color ? { backgroundColor: `${v.group.color}12` } : undefined}
-                  onMouseEnter={(e) => { if (v.profileImage) { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${API_URL}${v.profileImage}`, x: r.right + 12, y: r.top + r.height / 2 }); } }}
-                  onMouseLeave={() => setHoverPhoto(null)}>
-                  {v.profileImage ? <img src={`${API_URL}${v.profileImage}`} alt="" className="w-full h-full object-cover" /> : <GroupIcon className="w-5 h-5" style={v.group?.color ? { color: v.group.color } : undefined} />}
-                </div>); })()}
+                <div
+                  onMouseEnter={(e) => {
+                    const url = resolveImageUrl(v.profileImage);
+                    if (url) {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setHoverPhoto({ url, x: r.right + 12, y: r.top + r.height / 2 });
+                    }
+                  }}
+                  onMouseLeave={() => setHoverPhoto(null)}
+                >
+                  <VehicleThumb profileImage={v.profileImage} group={v.group} />
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <Link href={`/vehicles/${v.id}`} className="text-sm font-bold text-gray-900 dark:text-white hover:text-brand-500 font-mono tracking-wide">{v.registrationNumber}</Link>
@@ -316,11 +321,7 @@ export default function ChallansPage() {
             return (
               <div key={v.id} className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-5 hover:shadow-lg transition-all">
                 <div className="flex items-center gap-3 mb-3">
-                  {(() => { const GroupIcon = v.group?.icon ? getVehicleTypeIcon(v.group.icon) : Car; return (
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${!v.profileImage ? "bg-gray-100 dark:bg-gray-800" : ""}`}
-                    style={!v.profileImage && v.group?.color ? { backgroundColor: `${v.group.color}12` } : undefined}>
-                    {v.profileImage ? <img src={`${API_URL}${v.profileImage}`} alt="" className="w-full h-full object-cover" /> : <GroupIcon className="w-5 h-5" style={v.group?.color ? { color: v.group.color } : undefined} />}
-                  </div>); })()}
+                  <VehicleThumb profileImage={v.profileImage} group={v.group} />
                   <div className="min-w-0">
                     <Link href={`/vehicles/${v.id}`} className="text-sm font-bold text-gray-900 dark:text-white hover:text-brand-500 font-mono tracking-wide">{v.registrationNumber}</Link>
                     <p className="text-xs text-gray-500">{v.make} {v.model}</p>

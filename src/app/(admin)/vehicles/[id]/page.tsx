@@ -10,6 +10,7 @@ import Link from "next/link";
 import { AlertTriangle, Calendar, Car, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, CreditCard, Download, ExternalLink, FileText, ImageIcon, Pencil, Plus, Printer, RefreshCw, ShieldCheck, Trash2, Upload, User, Wrench, X } from "lucide-react";
 import { GiCarWheel } from "react-icons/gi";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface ComplianceDoc {
   id: string;
@@ -396,10 +397,10 @@ export default function VehicleDetailPage() {
               <div className="flex items-center gap-4">
                 {/* Profile Image */}
                 {vehicle.profileImage ? (
-                  <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${vehicle.profileImage}`} alt={vehicle.registrationNumber}
+                  <img src={`${resolveImageUrl(vehicle.profileImage) ?? ""}`} alt={vehicle.registrationNumber}
                     className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover ring-4 ring-white/20 shadow-2xl flex-shrink-0 cursor-pointer hover:ring-white/40 transition-all"
-                    onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${vehicle.profileImage}`, x: r.right + 16, y: r.top + r.height / 2 }); }}
-                    onMouseLeave={() => setHoverPhoto(null)} />
+                    onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(vehicle.profileImage) ?? ""}`, x: r.right + 16, y: r.top + r.height / 2 }); }}
+                    onMouseLeave={() => setHoverPhoto(null)} onError={(e) => (e.currentTarget.style.display = "none")} />
                 ) : (
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white/15 backdrop-blur-sm ring-4 ring-white/10 flex items-center justify-center flex-shrink-0">
                     <Car className="w-10 h-10 text-white/60" strokeWidth={1.5} />

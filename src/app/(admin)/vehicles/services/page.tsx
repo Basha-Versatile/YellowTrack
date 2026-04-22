@@ -9,6 +9,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { Plus, List, Calendar, Wrench, Car, ChevronRight, X, Upload, LayoutGrid, CheckCircle2, Clock, AlertTriangle, Banknote, Search } from "lucide-react";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5001";
 
@@ -264,10 +265,10 @@ export default function VehicleServicesPage() {
                   className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors group">
                   <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${!data.vehicle.profileImage ? "bg-gray-100 dark:bg-gray-800" : ""}`}
                     style={!data.vehicle.profileImage && data.vehicle.group?.color ? { backgroundColor: `${data.vehicle.group.color}12` } : undefined}
-                    onMouseEnter={(e) => { if (data.vehicle.profileImage) { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${API_URL}${data.vehicle.profileImage}`, x: r.right + 12, y: r.top + r.height / 2 }); } }}
+                    onMouseEnter={(e) => { if (data.vehicle.profileImage) { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(data.vehicle.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); } }}
                     onMouseLeave={() => setHoverPhoto(null)}>
                     {data.vehicle.profileImage ? (
-                      <img src={`${API_URL}${data.vehicle.profileImage}`} alt="" className="w-full h-full object-cover" />
+                      <img src={`${resolveImageUrl(data.vehicle.profileImage) ?? ""}`} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
                     ) : (
                       <GroupIcon className="w-5 h-5" style={data.vehicle.group?.color ? { color: data.vehicle.group.color } : undefined} />
                     )}
@@ -301,7 +302,7 @@ export default function VehicleServicesPage() {
                       <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${!data.vehicle.profileImage ? "bg-gray-100 dark:bg-gray-800" : ""}`}
                         style={!data.vehicle.profileImage && data.vehicle.group?.color ? { backgroundColor: `${data.vehicle.group.color}12` } : undefined}>
                         {data.vehicle.profileImage ? (
-                          <img src={`${API_URL}${data.vehicle.profileImage}`} alt="" className="w-full h-full object-cover" />
+                          <img src={`${resolveImageUrl(data.vehicle.profileImage) ?? ""}`} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
                         ) : (
                           <GroupIcon className="w-5 h-5" style={data.vehicle.group?.color ? { color: data.vehicle.group.color } : undefined} />
                         )}

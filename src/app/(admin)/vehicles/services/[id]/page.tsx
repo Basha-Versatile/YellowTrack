@@ -8,6 +8,7 @@ import Badge from "@/components/ui/badge/Badge";
 import { ServiceDetailSkeleton } from "@/components/ui/Skeleton";
 import { ChevronLeft, Car, ChevronRight, AlertTriangle, Wrench, ChevronDown, ImageIcon, Clock, FileText, Trash2, CheckCircle2, Banknote, Search } from "lucide-react";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface ServicePart { name: string; quantity: number; unitCost: number; proofUrl?: string | null; }
 interface ServiceRecord {
@@ -86,10 +87,10 @@ export default function VehicleServiceDetailPage() {
               </Link>
               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden border-2 border-white/10 ${vehicle.profileImage ? "cursor-pointer" : ""}`}
                 style={!vehicle.profileImage && vehicle.group?.color ? { backgroundColor: `${vehicle.group.color}25` } : { backgroundColor: "rgba(255,255,255,0.1)" }}
-                onMouseEnter={(e) => { if (vehicle.profileImage) { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${API_URL}${vehicle.profileImage}`, x: r.right + 12, y: r.top + r.height / 2 }); } }}
+                onMouseEnter={(e) => { if (vehicle.profileImage) { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(vehicle.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); } }}
                 onMouseLeave={() => setHoverPhoto(null)}>
                 {vehicle.profileImage ? (
-                  <img src={`${API_URL}${vehicle.profileImage}`} alt="" className="w-full h-full object-cover" />
+                  <img src={`${resolveImageUrl(vehicle.profileImage) ?? ""}`} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
                 ) : (
                   <GroupIcon className="w-6 h-6" style={vehicle.group?.color ? { color: vehicle.group.color } : { color: "rgba(255,255,255,0.5)" }} />
                 )}

@@ -8,6 +8,7 @@ import Pagination from "@/components/ui/Pagination";
 import { FASTagSkeleton } from "@/components/ui/Skeleton";
 import { Plus, Search, CreditCard, List, LayoutGrid, Truck, RefreshCw } from "lucide-react";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface Fastag {
   id: string;
@@ -199,9 +200,9 @@ export default function FASTagPage() {
                 {/* Vehicle Image / Group Icon */}
                 {f.vehicle.profileImage ? (
                   <div className="w-11 h-11 rounded-xl overflow-hidden flex-shrink-0 cursor-pointer"
-                    onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${API_URL}${f.vehicle.profileImage}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
+                    onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(f.vehicle.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
                     onMouseLeave={() => setHoverPhoto(null)}>
-                    <img src={`${API_URL}${f.vehicle.profileImage}`} alt={f.vehicle.registrationNumber} className="w-full h-full object-cover" />
+                    <img src={`${resolveImageUrl(f.vehicle.profileImage) ?? ""}`} alt={f.vehicle.registrationNumber} className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
                   </div>
                 ) : (
                   <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: f.vehicle.group?.color ? f.vehicle.group.color + '12' : '#f3f4f6' }}>
@@ -262,7 +263,7 @@ export default function FASTagPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       {f.vehicle.profileImage ? (
-                        <img src={`${API_URL}${f.vehicle.profileImage}`} alt={f.vehicle.registrationNumber} className="w-11 h-11 rounded-xl object-cover shadow-md" />
+                        <img src={`${resolveImageUrl(f.vehicle.profileImage) ?? ""}`} alt={f.vehicle.registrationNumber} className="w-11 h-11 rounded-xl object-cover shadow-md" onError={(e) => (e.currentTarget.style.display = "none")} />
                       ) : (
                         <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md" style={{ backgroundColor: f.vehicle.group?.color ? f.vehicle.group.color + '12' : undefined, background: !f.vehicle.group?.color ? (f.isActive ? 'linear-gradient(to bottom right, #facc15, #ca8a04)' : undefined) : undefined }}>
                           <GroupIcon className="w-5 h-5" style={f.vehicle.group?.color ? { color: f.vehicle.group.color } : { color: 'white' }} />

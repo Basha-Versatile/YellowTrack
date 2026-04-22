@@ -7,6 +7,7 @@ import { VehiclesListSkeleton } from "@/components/ui/Skeleton";
 import Pagination from "@/components/ui/Pagination";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { Plus, Search, Truck, LayoutGrid, List, ChevronRight, User } from "lucide-react";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface VehicleGroup {
   id: string;
@@ -222,9 +223,9 @@ export default function VehiclesPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       {(() => { const GroupIcon = v.group?.icon ? getVehicleTypeIcon(v.group.icon) : Truck; return v.profileImage ? (
-                        <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${v.profileImage}`} alt={v.registrationNumber} className={`w-11 h-11 rounded-xl object-cover shadow-lg ${shadowClr}`}
-                          onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${v.profileImage}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
-                          onMouseLeave={() => setHoverPhoto(null)} />
+                        <img src={`${resolveImageUrl(v.profileImage) ?? ""}`} alt={v.registrationNumber} className={`w-11 h-11 rounded-xl object-cover shadow-lg ${shadowClr}`}
+                          onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(v.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
+                          onMouseLeave={() => setHoverPhoto(null)} onError={(e) => (e.currentTarget.style.display = "none")} />
                       ) : (
                         <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-lg ${shadowClr} ${!v.group?.color ? `bg-gradient-to-br ${grad}` : ''}`} style={{ backgroundColor: v.group?.color ? v.group.color + '12' : undefined }}>
                           <GroupIcon className="w-5 h-5" style={v.group?.color ? { color: v.group.color } : { color: 'white' }} />
@@ -311,9 +312,9 @@ export default function VehiclesPage() {
 
                 {/* Icon */}
                 {(() => { const GroupIcon = v.group?.icon ? getVehicleTypeIcon(v.group.icon) : Truck; return v.profileImage ? (
-                  <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${v.profileImage}`} alt={v.registrationNumber} className="w-10 h-10 rounded-xl object-cover flex-shrink-0 shadow-md"
-                    onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${v.profileImage}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
-                    onMouseLeave={() => setHoverPhoto(null)} />
+                  <img src={`${resolveImageUrl(v.profileImage) ?? ""}`} alt={v.registrationNumber} className="w-10 h-10 rounded-xl object-cover flex-shrink-0 shadow-md"
+                    onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(v.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
+                    onMouseLeave={() => setHoverPhoto(null)} onError={(e) => (e.currentTarget.style.display = "none")} />
                 ) : (
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md ${!v.group?.color ? `bg-gradient-to-br ${grad}` : ''}`} style={{ backgroundColor: v.group?.color ? v.group.color + '12' : undefined }}>
                     <GroupIcon className="w-4 h-4" style={v.group?.color ? { color: v.group.color } : { color: 'white' }} />
