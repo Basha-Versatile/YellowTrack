@@ -6,6 +6,7 @@ import Link from "next/link";
 import { DriverComplianceSkeleton } from "@/components/ui/Skeleton";
 import Pagination, { useClientPagination } from "@/components/ui/Pagination";
 import { Users, List, LayoutGrid, User, ChevronRight } from "lucide-react";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface DriverDoc {
   type: string;
@@ -167,8 +168,8 @@ export default function DriverCompliancePage() {
                 <div className={`w-1 h-14 rounded-full bg-gradient-to-b ${grad} flex-shrink-0`} />
                 <div className="flex-shrink-0">
                   {driver.profilePhoto ? (
-                    <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`} alt={driver.name} className="w-10 h-10 rounded-xl object-cover shadow-md"
-                      onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
+                    <img src={(resolveImageUrl(driver.profilePhoto) ?? "")} alt={driver.name} className="w-10 h-10 rounded-xl object-cover shadow-md"
+                      onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: (resolveImageUrl(driver.profilePhoto) ?? ""), x: r.right + 12, y: r.top + r.height / 2 }); }}
                       onMouseLeave={() => setHoverPhoto(null)} />
                   ) : (
                     <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center shadow-md`}>
@@ -234,8 +235,8 @@ export default function DriverCompliancePage() {
                     <div className="flex items-center gap-3">
                       <div>
                         {driver.profilePhoto ? (
-                          <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`} alt={driver.name} className="w-11 h-11 rounded-xl object-cover shadow-md"
-                            onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
+                          <img src={(resolveImageUrl(driver.profilePhoto) ?? "")} alt={driver.name} className="w-11 h-11 rounded-xl object-cover shadow-md"
+                            onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: (resolveImageUrl(driver.profilePhoto) ?? ""), x: r.right + 12, y: r.top + r.height / 2 }); }}
                             onMouseLeave={() => setHoverPhoto(null)} />
                         ) : (
                           <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center shadow-md`}>

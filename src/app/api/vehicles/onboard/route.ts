@@ -3,6 +3,7 @@ import { created } from "@/lib/http";
 import { onboardVehicleSchema } from "@/validations/vehicle.schema";
 import { parseMultipart, manyFiles, firstString } from "@/lib/upload";
 import { onboardVehicle } from "@/server/services/vehicle.service";
+import { getRequestOrigin } from "@/lib/request-origin";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ export const POST = withRoute(
       input.registrationNumber,
       images,
       input.groupId,
+      getRequestOrigin(req),
     );
     return created(vehicle, "Vehicle onboarded successfully");
   },

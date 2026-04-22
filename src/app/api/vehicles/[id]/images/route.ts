@@ -17,8 +17,15 @@ export const POST = withRoute<{ id: string }>(
     const vehicle = await vehicleRepo.findById(params.id);
     if (!vehicle) throw new NotFoundError("Vehicle not found");
 
-    const allImages = [...((vehicle.images as string[]) ?? []), ...newImages];
-    await vehicleRepo.update(params.id, { images: allImages });
+    const existingImages = (vehicle.images as string[]) ?? [];
+    const allImages = [...existingImages, ...newImages];
+    const currentProfile = (vehicle.profileImage as string | null | undefined) ?? null;
+    // Default the profile image to the first image in the full set if one isn't set yet.
+    const update: Record<string, unknown> = { images: allImages };
+    if (!currentProfile && allImages.length > 0) {
+      update.profileImage = allImages[0];
+    }
+    await vehicleRepo.update(params.id, update);
 
     const updated = await vehicleRepo.findById(params.id);
     return success(updated, "Images uploaded successfully");
@@ -38,7 +45,13 @@ export const DELETE = withRoute<{ id: string }>(
     const updatedImages = ((vehicle.images as string[]) ?? []).filter(
       (img) => img !== imageUrl,
     );
-    await vehicleRepo.update(params.id, { images: updatedImages });
+    const currentProfile = (vehicle.profileImage as string | null | undefined) ?? null;
+    const update: Record<string, unknown> = { images: updatedImages };
+    // If the deleted image was the current profile, promote the next one (or clear).
+    if (currentProfile === imageUrl) {
+      update.profileImage = updatedImages[0] ?? null;
+    }
+    await vehicleRepo.update(params.id, update);
 
     const updated = await vehicleRepo.findById(params.id);
     return success(updated, "Image deleted successfully");

@@ -11,6 +11,8 @@ import {
   Flame, Settings, MoreHorizontal, BarChart3, PieChart, FileText,
   ImageIcon, Upload
 } from "lucide-react";
+import { VehicleAutocomplete } from "@/components/vehicles/VehicleAutocomplete";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -48,8 +50,6 @@ const CATEGORY_COLORS_HEX: Record<string, string> = {
   challans: "#ef4444", services: "#3b82f6", parts: "#6366f1", insurance: "#8b5cf6",
   tolls: "#f59e0b", compliance: "#10b981", fuel: "#f97316", maintenance: "#06b6d4", misc: "#6b7280",
 };
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5001";
 
 export default function VehicleExpensesPage() {
   return (
@@ -394,11 +394,14 @@ function VehicleExpensesContent() {
 
       {/* Filters — glassy */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/20 bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl p-4 shadow-lg shadow-gray-200/30 dark:shadow-none dark:border-gray-700/50">
-        <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}
-          className="h-9 rounded-lg border border-gray-200/80 bg-white/80 dark:bg-gray-800/80 backdrop-blur px-3 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:text-white min-w-[180px]">
-          <option value="">All Vehicles</option>
-          {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>)}
-        </select>
+        <VehicleAutocomplete
+          vehicles={vehicles}
+          value={vehicleId}
+          onChange={setVehicleId}
+          className="min-w-[220px]"
+          placeholder="All Vehicles"
+          size="sm"
+        />
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
           className="h-9 rounded-lg border border-gray-200/80 bg-white/80 dark:bg-gray-800/80 backdrop-blur px-3 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:text-white min-w-[150px]">
           <option value="">All Categories</option>
@@ -567,7 +570,7 @@ function VehicleExpensesContent() {
                           <td className="px-5 py-3.5 text-right font-black text-gray-900 dark:text-white whitespace-nowrap">&#8377;{exp.amount.toLocaleString("en-IN")}</td>
                           <td className="px-5 py-3.5 text-center">
                             {exp.proofUrl ? (
-                              <a href={`${API_URL}${exp.proofUrl}`} target="_blank" rel="noreferrer" className="w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center text-brand-500 hover:text-brand-600 mx-auto transition-colors">
+                              <a href={resolveImageUrl(exp.proofUrl) ?? "#"} target="_blank" rel="noreferrer" className="w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center text-brand-500 hover:text-brand-600 mx-auto transition-colors">
                                 <ImageIcon className="w-3.5 h-3.5" />
                               </a>
                             ) : <span className="text-gray-300 dark:text-gray-600">—</span>}

@@ -6,9 +6,10 @@ import { useToast } from "@/context/ToastContext";
 import Link from "next/link";
 import Badge from "@/components/ui/badge/Badge";
 import { ServiceDetailSkeleton } from "@/components/ui/Skeleton";
-import { ChevronLeft, Car, ChevronRight, AlertTriangle, Wrench, ChevronDown, ImageIcon, Clock, FileText, Trash2, CheckCircle2, Banknote, Search } from "lucide-react";
+import { ChevronLeft, Car, ChevronRight, AlertTriangle, Wrench, ChevronDown, ImageIcon, Clock, FileText, Trash2, CheckCircle2, Banknote } from "lucide-react";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 interface ServicePart { name: string; quantity: number; unitCost: number; proofUrl?: string | null; }
 interface ServiceRecord {
@@ -20,8 +21,6 @@ interface Vehicle {
   id: string; registrationNumber: string; make: string; model: string; profileImage: string | null;
   group?: { name: string; icon: string; color?: string } | null;
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5001";
 
 export default function VehicleServiceDetailPage() {
   const params = useParams();
@@ -75,32 +74,43 @@ export default function VehicleServiceDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header — hero style */}
-      <div className="rounded-2xl bg-gradient-to-r from-gray-900 via-gray-800 to-gray-950 p-6 relative overflow-hidden">
-        <div className="absolute top-4 right-6 w-32 h-32 rounded-full border border-white/5" />
-        <div className="absolute -bottom-8 right-20 w-40 h-40 rounded-full border border-white/3" />
+      {/* Header — hero style (theme-aware) */}
+      <div className="relative overflow-hidden rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+        <div className="pointer-events-none absolute top-4 right-6 w-32 h-32 rounded-full border border-yellow-500/10 dark:border-white/5" />
+        <div className="pointer-events-none absolute -bottom-8 right-20 w-40 h-40 rounded-full border border-yellow-500/5 dark:border-white/5" />
         <div className="relative z-10">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <Link href="/vehicles/services" className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/50 hover:bg-white/10 hover:text-white transition-colors">
+              <Link
+                href="/vehicles/services"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors"
+              >
                 <ChevronLeft className="w-4 h-4" />
               </Link>
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden border-2 border-white/10 ${vehicle.profileImage ? "cursor-pointer" : ""}`}
-                style={!vehicle.profileImage && vehicle.group?.color ? { backgroundColor: `${vehicle.group.color}25` } : { backgroundColor: "rgba(255,255,255,0.1)" }}
+              <div
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden border-2 border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-white/5 ${vehicle.profileImage ? "cursor-pointer" : ""}`}
+                style={!vehicle.profileImage && vehicle.group?.color ? { backgroundColor: `${vehicle.group.color}20` } : undefined}
                 onMouseEnter={(e) => { if (vehicle.profileImage) { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(vehicle.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); } }}
-                onMouseLeave={() => setHoverPhoto(null)}>
+                onMouseLeave={() => setHoverPhoto(null)}
+              >
                 {vehicle.profileImage ? (
                   <img src={`${resolveImageUrl(vehicle.profileImage) ?? ""}`} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
                 ) : (
-                  <GroupIcon className="w-6 h-6" style={vehicle.group?.color ? { color: vehicle.group.color } : { color: "rgba(255,255,255,0.5)" }} />
+                  <GroupIcon
+                    className="w-6 h-6"
+                    style={vehicle.group?.color ? { color: vehicle.group.color } : undefined}
+                  />
                 )}
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white font-mono tracking-wide">{vehicle.registrationNumber}</h1>
-                <p className="text-sm text-white/40">{vehicle.make} {vehicle.model} — Service History</p>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white font-mono tracking-wide">{vehicle.registrationNumber}</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{vehicle.make} {vehicle.model} — Service History</p>
               </div>
             </div>
-            <Link href={`/vehicles/${vehicleId}`} className="text-xs font-medium text-white/50 hover:text-white flex items-center gap-1 transition-colors">
+            <Link
+              href={`/vehicles/${vehicleId}`}
+              className="text-xs font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white flex items-center gap-1 transition-colors"
+            >
               View Vehicle Details <ChevronRight className="w-3 h-3" />
             </Link>
           </div>
@@ -159,11 +169,13 @@ export default function VehicleServiceDetailPage() {
             </button>
           ))}
         </div>
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input type="text" placeholder="Search service title..." value={titleSearch} onChange={(e) => setTitleSearch(e.target.value)}
-            className="h-9 w-52 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-        </div>
+        <SearchInput
+          className="w-52"
+          size="sm"
+          value={titleSearch}
+          onChange={setTitleSearch}
+          placeholder="Search service title..."
+        />
       </div>
 
       {/* Service list */}
@@ -240,7 +252,7 @@ export default function VehicleServiceDetailPage() {
                                   <td className="px-3 py-2.5 text-right font-bold text-gray-900 dark:text-white">&#8377;{(p.unitCost * p.quantity).toLocaleString("en-IN")}</td>
                                   <td className="px-3 py-2.5 text-center">
                                     {p.proofUrl ? (
-                                      <a href={`${API_URL}${p.proofUrl}`} target="_blank" rel="noreferrer" className="inline-flex w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 items-center justify-center text-brand-500 hover:text-brand-600 mx-auto">
+                                      <a href={resolveImageUrl(p.proofUrl) ?? "#"} target="_blank" rel="noreferrer" className="inline-flex w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 items-center justify-center text-brand-500 hover:text-brand-600 mx-auto">
                                         <ImageIcon className="w-3.5 h-3.5" />
                                       </a>
                                     ) : <span className="text-gray-300">—</span>}
@@ -270,7 +282,7 @@ export default function VehicleServiceDetailPage() {
                         <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Receipts</p>
                         <div className="flex flex-wrap gap-2">
                           {svc.receiptUrls.map((url, i) => (
-                            <a key={i} href={`${API_URL}${url}`} target="_blank" rel="noreferrer"
+                            <a key={i} href={resolveImageUrl(url) ?? "#"} target="_blank" rel="noreferrer"
                               className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-brand-300 hover:text-brand-600 dark:hover:border-brand-500/30 transition-all shadow-sm">
                               <FileText className="w-3.5 h-3.5" />
                               Receipt {i + 1}

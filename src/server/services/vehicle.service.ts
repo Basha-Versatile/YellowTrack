@@ -93,6 +93,7 @@ export async function onboardVehicle(
   registrationNumber: string,
   images: string[] = [],
   groupId: string | null,
+  origin?: string,
 ) {
   if (!groupId) throw new BadRequestError("Vehicle group is required for onboarding");
 
@@ -147,13 +148,14 @@ export async function onboardVehicle(
     registrationNumber,
     ...vehicleData,
     images,
+    profileImage: images[0] ?? null,
     groupId,
   });
   const vehicleId = String(createdDoc._id);
 
   // 6. QR (best-effort)
   try {
-    const qrCodeUrl = await generateQRCodeForVehicle(vehicleId);
+    const qrCodeUrl = await generateQRCodeForVehicle(vehicleId, origin);
     await vehicleRepo.update(vehicleId, { qrCodeUrl });
   } catch (err) {
     console.error(
@@ -257,6 +259,7 @@ export async function manualOnboard(
   data: Record<string, unknown>,
   docFiles: Record<string, string | null | undefined> = {},
   images: string[] = [],
+  origin?: string,
 ) {
   const {
     registrationNumber,
@@ -302,12 +305,13 @@ export async function manualOnboard(
     seatingCapacity: seatingCapacity ?? null,
     permitType: permitType ?? null,
     images,
+    profileImage: images[0] ?? null,
     groupId,
   });
   const vehicleId = String(createdDoc._id);
 
   try {
-    const qrCodeUrl = await generateQRCodeForVehicle(vehicleId);
+    const qrCodeUrl = await generateQRCodeForVehicle(vehicleId, origin);
     await vehicleRepo.update(vehicleId, { qrCodeUrl });
   } catch (err) {
     console.error(

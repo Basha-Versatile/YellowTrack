@@ -7,7 +7,9 @@ import Link from "next/link";
 import { DriversListSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/context/ToastContext";
 import Pagination, { useClientPagination } from "@/components/ui/Pagination";
-import { Download, UserPlus, Users, Check, AlertTriangle, AlertCircle, Search, List, LayoutGrid, User, Link2, ChevronRight } from "lucide-react";
+import { Download, UserPlus, Users, Check, AlertTriangle, AlertCircle, List, LayoutGrid, User, Link2, ChevronRight } from "lucide-react";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface Driver {
   id: string;
@@ -184,11 +186,12 @@ export default function DriversPage() {
 
       {/* Search + Filter */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search by name or license..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500" />
-        </div>
+        <SearchInput
+          className="flex-1"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name or license..."
+        />
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
           {(["ALL", "GREEN", "YELLOW", "ORANGE", "RED"] as const).map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
@@ -240,9 +243,9 @@ export default function DriversPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       {driver.profilePhoto ? (
-                        <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`} alt={driver.name}
+                        <img src={(resolveImageUrl(driver.profilePhoto) ?? "")} alt={driver.name}
                           className={`w-12 h-12 rounded-xl object-cover shadow-lg ${shadowClr}`}
-                          onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
+                          onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: (resolveImageUrl(driver.profilePhoto) ?? ""), x: r.right + 12, y: r.top + r.height / 2 }); }}
                           onMouseLeave={() => setHoverPhoto(null)} />
                       ) : (
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-lg font-black shadow-lg ${avatarCls} ${shadowClr}`}>
@@ -321,12 +324,12 @@ export default function DriversPage() {
                   <Link href={`/drivers/${driver.id}`} className="flex-shrink-0">
                     {driver.profilePhoto ? (
                       <img
-                        src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`}
+                        src={(resolveImageUrl(driver.profilePhoto) ?? "")}
                         alt={driver.name}
                         className="w-12 h-12 rounded-xl object-cover shadow-lg cursor-pointer"
                         onMouseEnter={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
-                          setHoverPhoto({ url: `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`, x: rect.right + 12, y: rect.top + rect.height / 2 });
+                          setHoverPhoto({ url: (resolveImageUrl(driver.profilePhoto) ?? ""), x: rect.right + 12, y: rect.top + rect.height / 2 });
                         }}
                         onMouseLeave={() => setHoverPhoto(null)}
                       />

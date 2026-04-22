@@ -6,7 +6,8 @@ import Link from "next/link";
 import { VehiclesListSkeleton } from "@/components/ui/Skeleton";
 import Pagination from "@/components/ui/Pagination";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
-import { Plus, Search, Truck, LayoutGrid, List, ChevronRight, User } from "lucide-react";
+import { Plus, Truck, LayoutGrid, List, ChevronRight, User } from "lucide-react";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface VehicleGroup {
@@ -81,7 +82,14 @@ export default function VehiclesPage() {
     vehicleGroupAPI.getAll().then((res) => setGroups(res.data.data)).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSearch = (e: React.FormEvent) => { e.preventDefault(); fetchVehicles(1); };
+  // Debounce live search so every keystroke doesn't hit the API
+  const [didMount, setDidMount] = useState(false);
+  useEffect(() => {
+    if (!didMount) { setDidMount(true); return; }
+    const timer = setTimeout(() => fetchVehicles(1), 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   // Stats
   const greenCount = vehicles.filter((v) => v.overallStatus === "GREEN").length;
@@ -154,16 +162,12 @@ export default function VehiclesPage() {
 
       {/* Search + Filters + View Toggle */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <form onSubmit={handleSearch} className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search registration, make, model..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500"
-          />
-        </form>
+        <SearchInput
+          className="flex-1"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search registration, make, model..."
+        />
 
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
           {(["ALL", "GREEN", "YELLOW", "ORANGE", "RED"] as const).map((s) => {

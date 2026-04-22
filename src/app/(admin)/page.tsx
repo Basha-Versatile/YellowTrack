@@ -53,18 +53,18 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* ── HERO BANNER ── */}
-      <div className="relative rounded-2xl overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950" />
-        <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-yellow-500/10 blur-[100px]" />
-        <div className="absolute bottom-0 left-1/4 w-72 h-72 rounded-full bg-yellow-400/5 blur-[80px]" />
-        <div className="absolute top-10 right-16 w-48 h-48 rounded-full border border-yellow-500/10" />
-        <div className="absolute top-6 right-12 w-48 h-48 rounded-full border border-yellow-500/5" />
+      <div className="relative rounded-2xl overflow-hidden border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
+        {/* decorative accents — very subtle, theme-agnostic */}
+        <div className="pointer-events-none absolute top-0 right-0 w-96 h-96 rounded-full bg-yellow-500/5 dark:bg-yellow-500/10 blur-[100px]" />
+        <div className="pointer-events-none absolute bottom-0 left-1/4 w-72 h-72 rounded-full bg-yellow-400/5 blur-[80px]" />
+        <div className="pointer-events-none absolute top-10 right-16 w-48 h-48 rounded-full border border-yellow-500/10" />
+        <div className="pointer-events-none absolute top-6 right-12 w-48 h-48 rounded-full border border-yellow-500/5" />
 
         <div className="relative z-10 px-6 sm:px-8 py-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
             <div>
-              <h1 className="text-3xl font-black text-white tracking-tight">Dashboard</h1>
-              <p className="text-white/40 text-sm mt-1">Fleet compliance overview at a glance</p>
+              <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight">Dashboard</h1>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Fleet compliance overview at a glance</p>
             </div>
             <div className="flex gap-3">
               <Link href="/vehicles/onboard"
@@ -73,7 +73,7 @@ export default function DashboardPage() {
                 Onboard Vehicle
               </Link>
               <Link href="/drivers/add"
-                className="inline-flex items-center gap-2 rounded-xl bg-white/10 border border-white/10 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/20 transition-all">
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10 transition-all">
                 <UserPlus className="w-4 h-4" />
                 Add Driver
               </Link>
@@ -248,17 +248,45 @@ export default function DashboardPage() {
 /* ── Sub-components ── */
 
 function StatCard({ Icon, label, value, sub, href, accent, success }: { Icon: LucideIcon; label: string; value: string; sub?: string; href?: string; accent?: boolean; success?: boolean }) {
+  const wrapperCls = accent
+    ? "bg-red-50 border border-red-200 dark:bg-red-500/10 dark:border-red-500/20"
+    : success
+      ? "bg-emerald-50 border border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/20"
+      : "bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10";
+
+  const iconCls = accent
+    ? "text-red-500 dark:text-red-400"
+    : success
+      ? "text-emerald-500 dark:text-emerald-400"
+      : "text-gray-400 dark:text-white/40";
+
+  const labelCls = "text-gray-500 dark:text-white/40";
+
+  const valueCls = accent
+    ? "text-red-600 dark:text-red-400"
+    : success
+      ? "text-emerald-600 dark:text-emerald-400"
+      : "text-gray-900 dark:text-white";
+
+  const subCls = "text-gray-400 dark:text-white/30";
+
   const content = (
-    <div className={`rounded-xl px-4 py-4 ${accent ? "bg-red-500/10 border border-red-500/20" : success ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-white/5 border border-white/10"}`}>
+    <div className={`rounded-xl px-4 py-4 h-full flex flex-col ${wrapperCls}`}>
       <div className="flex items-center gap-2 mb-2">
-        <Icon className={`w-4 h-4 ${accent ? "text-red-400" : success ? "text-emerald-400" : "text-white/40"}`} strokeWidth={1.5} />
-        <span className="text-[11px] text-white/40 uppercase tracking-wider font-medium">{label}</span>
+        <Icon className={`w-4 h-4 ${iconCls}`} strokeWidth={1.5} />
+        <span className={`text-[11px] uppercase tracking-wider font-medium ${labelCls}`}>{label}</span>
       </div>
-      <p className={`text-2xl font-black ${accent ? "text-red-400" : success ? "text-emerald-400" : "text-white"}`}>{value}</p>
-      {sub && <p className="text-[11px] text-white/30 mt-0.5">{sub}</p>}
+      <p className={`text-2xl font-black ${valueCls}`}>{value}</p>
+      <p className={`text-[11px] mt-0.5 ${subCls} ${sub ? "" : "invisible"}`} aria-hidden={!sub}>
+        {sub ?? "—"}
+      </p>
     </div>
   );
-  return href ? <Link href={href} className="hover:opacity-80 transition-opacity">{content}</Link> : content;
+  return href ? (
+    <Link href={href} className="block h-full hover:opacity-80 transition-opacity">{content}</Link>
+  ) : (
+    content
+  );
 }
 
 function StatusTile({ label, sublabel, count, dotColor, bgColor, textColor }: { label: string; sublabel: string; count: number; dotColor: string; bgColor: string; textColor: string }) {

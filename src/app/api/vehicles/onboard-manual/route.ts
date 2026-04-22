@@ -3,6 +3,7 @@ import { created } from "@/lib/http";
 import { manualOnboardSchema } from "@/validations/vehicle.schema";
 import { parseMultipart } from "@/lib/upload";
 import { manualOnboard } from "@/server/services/vehicle.service";
+import { getRequestOrigin } from "@/lib/request-origin";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,7 @@ export const POST = withRoute(
       { ...validated, ...flatFields },
       docFiles,
       images,
+      getRequestOrigin(req),
     );
     return created(vehicle, "Vehicle onboarded manually");
   },

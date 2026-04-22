@@ -1,7 +1,9 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+// On Vercel, NEXT_PUBLIC_API_URL should be `/api` (same-origin). If the env var
+// is missing the safe default is also `/api`: both local `npm run dev` and
+// production Vercel deploys serve the API from the same Next.js app.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,

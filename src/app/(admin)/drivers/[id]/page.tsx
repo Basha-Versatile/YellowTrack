@@ -9,6 +9,7 @@ import { DriverDetailSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
 import VerificationLinkShare from "@/components/ui/VerificationLinkShare";
 import { ChevronLeft, ChevronRight, Pencil, Upload, FileText, Plus, ExternalLink, RefreshCw, Clock, MapPin, Check, User, Users, Bell, CreditCard, Calendar, Car } from "lucide-react";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface DriverDoc {
   id: string;
@@ -239,9 +240,9 @@ export default function DriverDetailPage() {
                 <ChevronLeft className="w-5 h-5" />
               </Link>
               {driver.profilePhoto ? (
-                <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`} alt={driver.name}
+                <img src={(resolveImageUrl(driver.profilePhoto) ?? "")} alt={driver.name}
                   className="w-20 h-20 rounded-2xl object-cover shadow-2xl shadow-yellow-500/30 ring-4 ring-white/10 cursor-pointer hover:ring-white/40 transition-all"
-                  onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${driver.profilePhoto}`, x: r.right + 16, y: r.top + r.height / 2 }); }}
+                  onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: (resolveImageUrl(driver.profilePhoto) ?? ""), x: r.right + 16, y: r.top + r.height / 2 }); }}
                   onMouseLeave={() => setHoverPhoto(null)} />
               ) : (
                 <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-white text-3xl font-black shadow-2xl shadow-yellow-500/30 ring-4 ring-white/10">
@@ -522,7 +523,7 @@ export default function DriverDetailPage() {
                         <div className="flex items-center gap-3 pt-3 border-t border-gray-200/50 dark:border-gray-700/50">
                           {doc.documentUrl ? (
                             <>
-                              <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${doc.documentUrl}`} target="_blank" rel="noopener noreferrer"
+                              <a href={(resolveImageUrl(doc.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-yellow-600 hover:text-yellow-700 dark:text-yellow-400">
                                 <ExternalLink className="w-3.5 h-3.5" />
                                 View File
@@ -587,7 +588,7 @@ export default function DriverDetailPage() {
                             </div>
                           </div>
                           {h.documentUrl && (
-                            <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${h.documentUrl}`} target="_blank" rel="noopener noreferrer"
+                            <a href={(resolveImageUrl(h.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
                               className="text-yellow-600 hover:text-yellow-700 dark:text-yellow-400 font-medium">View</a>
                           )}
                         </div>
@@ -627,9 +628,9 @@ export default function DriverDetailPage() {
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {driver.currentAddressPhotos.map((url, i) => (
                               <button key={i} type="button"
-                                onClick={() => setLightbox({ images: driver.currentAddressPhotos.map((u) => `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${u}`), index: i })}
+                                onClick={() => setLightbox({ images: driver.currentAddressPhotos.map((u) => (resolveImageUrl(u) ?? "")), index: i })}
                                 className="aspect-[4/3] rounded-xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-yellow-400 hover:shadow-lg transition-all cursor-pointer">
-                                <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${url}`} alt={`Current address ${i + 1}`} className="w-full h-full object-cover" />
+                                <img src={(resolveImageUrl(url) ?? "")} alt={`Current address ${i + 1}`} className="w-full h-full object-cover" />
                               </button>
                             ))}
                           </div>
@@ -641,9 +642,9 @@ export default function DriverDetailPage() {
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {driver.permanentAddressPhotos.map((url, i) => (
                               <button key={i} type="button"
-                                onClick={() => setLightbox({ images: driver.permanentAddressPhotos.map((u) => `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${u}`), index: i })}
+                                onClick={() => setLightbox({ images: driver.permanentAddressPhotos.map((u) => (resolveImageUrl(u) ?? "")), index: i })}
                                 className="aspect-[4/3] rounded-xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-yellow-400 hover:shadow-lg transition-all cursor-pointer">
-                                <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${url}`} alt={`Permanent address ${i + 1}`} className="w-full h-full object-cover" />
+                                <img src={(resolveImageUrl(url) ?? "")} alt={`Permanent address ${i + 1}`} className="w-full h-full object-cover" />
                               </button>
                             ))}
                           </div>

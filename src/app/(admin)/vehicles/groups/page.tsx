@@ -5,7 +5,8 @@ import { getVehicleTypeIcon, VEHICLE_TYPE_ICONS } from "@/components/icons/Vehic
 import { useToast } from "@/context/ToastContext";
 import { VehicleGroupsSkeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, FileText, Pencil, Trash2, Check, LayoutGrid, List, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, FileText, Pencil, Trash2, Check, LayoutGrid, List } from "lucide-react";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 interface DocumentType {
   id: string;
@@ -167,11 +168,13 @@ export default function VehicleGroupsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="text" placeholder="Search groups..." value={search} onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-44 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-          </div>
+          <SearchInput
+            className="w-44"
+            size="sm"
+            value={search}
+            onChange={setSearch}
+            placeholder="Search groups..."
+          />
           <div className="flex gap-0.5 p-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg">
             <button onClick={() => setView("list")} className={`p-1.5 rounded-md transition-all ${view === "list" ? "bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white" : "text-gray-400 hover:text-gray-600"}`} title="List view">
               <List className="w-4 h-4" />

@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ChevronLeft, Banknote, RefreshCw, Clock, Check, AlertTriangle, Search, Calendar, X, ImageIcon, CheckCircle2 } from "lucide-react";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface Challan {
   id: string;
@@ -286,11 +288,12 @@ export default function VehicleChallansPage() {
       {/* Search + Filters */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Search by challan number */}
-        <div className="relative w-64">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search challan / violation..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500" />
-        </div>
+        <SearchInput
+          className="w-64"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search challan / violation..."
+        />
 
         {/* Date Range Filter */}
         <div className="flex items-center gap-2">
@@ -575,7 +578,7 @@ export default function VehicleChallansPage() {
                     Proof Image
                   </p>
                   <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-                    <img src={detailChallan.proofImageUrl.startsWith("http") ? detailChallan.proofImageUrl : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${detailChallan.proofImageUrl}`} alt="Challan Proof" className="w-full h-48 object-cover" />
+                    <img src={detailChallan.proofImageUrl.startsWith("http") ? detailChallan.proofImageUrl : (resolveImageUrl(detailChallan.proofImageUrl) ?? "")} alt="Challan Proof" className="w-full h-48 object-cover" />
                   </div>
                 </div>
               ) : (

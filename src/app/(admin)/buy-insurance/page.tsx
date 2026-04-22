@@ -4,7 +4,8 @@ import { insuranceAPI, vehicleAPI } from "@/lib/api";
 import Badge from "@/components/ui/badge/Badge";
 import { useToast } from "@/context/ToastContext";
 import Pagination from "@/components/ui/Pagination";
-import { Plus, Search, ChevronLeft, Check, ShieldCheck, Eye, Star, FileText } from "lucide-react";
+import { Plus, ChevronLeft, Check, ShieldCheck, Eye, Star, FileText } from "lucide-react";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 interface Policy {
   id: string; vehicleId: string; policyNumber: string | null; insurer: string | null; planName: string | null;
@@ -57,6 +58,15 @@ export default function InsurancePage() {
   };
 
   useEffect(() => { fetchData(); }, []); // eslint-disable-line
+
+  // Debounced live search
+  const [didMountSearch, setDidMountSearch] = useState(false);
+  useEffect(() => {
+    if (!didMountSearch) { setDidMountSearch(true); return; }
+    const timer = setTimeout(() => fetchData(1), 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const openUpload = async () => {
     try { setVehicles((await vehicleAPI.getAll({ limit: 100 })).data.data.vehicles); } catch { /* */ }
@@ -247,10 +257,12 @@ export default function InsurancePage() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <form onSubmit={(e) => { e.preventDefault(); fetchData(1); }} className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search by vehicle or policy..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-        </form>
+        <SearchInput
+          className="flex-1"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by vehicle or policy..."
+        />
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
           {["ALL", "ACTIVE", "EXPIRING", "EXPIRED"].map((s) => (
             <button key={s} onClick={() => { setStatusFilter(s); setTimeout(() => fetchData(1), 0); }} className={`rounded-lg px-3 text-xs font-semibold transition-all ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500"}`}>{s === "ALL" ? "All" : s}</button>

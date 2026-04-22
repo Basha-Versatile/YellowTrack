@@ -6,8 +6,9 @@ import Link from "next/link";
 import { ComplianceSkeleton } from "@/components/ui/Skeleton";
 import Pagination, { useClientPagination } from "@/components/ui/Pagination";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
-import { Truck, LayoutGrid, List, ChevronRight, ShieldCheck, Search } from "lucide-react";
+import { Truck, LayoutGrid, List, ChevronRight, ShieldCheck } from "lucide-react";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 interface ComplianceDoc {
   type: string;
@@ -190,11 +191,13 @@ export default function ComplianceOverviewPage() {
           })}
         </div>
         <div className="flex items-center gap-2 ml-auto">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="text" placeholder="Search reg. no..." value={regSearch} onChange={(e) => setRegSearch(e.target.value)}
-              className="h-9 w-44 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-          </div>
+          <SearchInput
+            className="w-44"
+            size="sm"
+            value={regSearch}
+            onChange={setRegSearch}
+            placeholder="Search reg. no..."
+          />
           <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
             <button onClick={() => setView("list")} className={`rounded-lg px-2.5 transition-all ${view === "list" ? "bg-white shadow-sm dark:bg-gray-700" : ""}`}>
               <List className={`w-4 h-4 ${view === "list" ? "text-gray-900 dark:text-white" : "text-gray-400"}`} />

@@ -11,6 +11,8 @@ import { AlertTriangle, Calendar, Car, Check, CheckCircle2, ChevronLeft, Chevron
 import { GiCarWheel } from "react-icons/gi";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/modal";
 
 interface ComplianceDoc {
   id: string;
@@ -154,6 +156,8 @@ export default function VehicleDetailPage() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [imageToDelete, setImageToDelete] = useState<string | null>(null);
+  const [deletingImage, setDeletingImage] = useState(false);
   const [allGroups, setAllGroups] = useState<Array<{ id: string; name: string; icon: string; color?: string }>>([]);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
@@ -314,13 +318,70 @@ export default function VehicleDetailPage() {
   };
 
 
-  const handleDeleteImage = async (imageUrl: string) => {
-    if (!params.id || !confirm("Delete this photo?")) return;
+  const openTyreEditor = () => {
+    if (!vehicle) return;
+    const tyreCount = vehicle.group?.tyreCount || 4;
+    const positions = getTyrePositions(tyreCount);
+    setTyreForm(
+      positions.map((pos) => {
+        const existing = vehicle.tyres.find((t) => t.position === pos);
+        return {
+          position: pos,
+          brand: existing?.brand || "",
+          size: existing?.size || "",
+          installedAt: existing?.installedAt ? existing.installedAt.split("T")[0] : "",
+          kmAtInstall: existing?.kmAtInstall?.toString() || "",
+          condition: existing?.condition || "GOOD",
+        };
+      }),
+    );
+    setEditingTyres(true);
+  };
+
+  const handleSaveTyres = async () => {
+    if (!vehicle) return;
+    setSavingTyres(true);
     try {
-      await vehicleAPI.deleteImage(params.id as string, imageUrl);
+      const tyresData = tyreForm
+        .filter((t) => t.brand || t.size || t.installedAt || t.kmAtInstall)
+        .map((t) => ({
+          position: t.position,
+          brand: t.brand || undefined,
+          size: t.size || undefined,
+          installedAt: t.installedAt || undefined,
+          kmAtInstall: t.kmAtInstall ? parseInt(t.kmAtInstall) : undefined,
+          condition: t.condition,
+        }));
+      await vehicleAPI.upsertTyres(vehicle.id, tyresData);
+      const res = await vehicleAPI.getById(vehicle.id);
+      setVehicle(res.data.data);
+      setEditingTyres(false);
+      toast.success("Tyres Updated", "Saved");
+    } catch {
+      toast.error("Error", "Failed");
+    } finally {
+      setSavingTyres(false);
+    }
+  };
+
+  const handleDeleteImage = (imageUrl: string) => {
+    setImageToDelete(imageUrl);
+  };
+
+  const handleConfirmDeleteImage = async () => {
+    if (!params.id || !imageToDelete) return;
+    setDeletingImage(true);
+    try {
+      await vehicleAPI.deleteImage(params.id as string, imageToDelete);
       toast.success("Photo Deleted");
+      setImageToDelete(null);
       fetchVehicle();
-    } catch (err) { console.error(err); toast.error("Delete Failed"); }
+    } catch (err) {
+      console.error(err);
+      toast.error("Delete Failed");
+    } finally {
+      setDeletingImage(false);
+    }
   };
 
   const handleImageUpload = async (files: FileList | null) => {
@@ -530,8 +591,8 @@ export default function VehicleDetailPage() {
                   const isProfile = vehicle.profileImage === img;
                   return (
                     <div key={i} className={`group relative aspect-video rounded-xl overflow-hidden border-2 transition-colors ${isProfile ? "border-yellow-400 ring-2 ring-yellow-400/30" : "border-gray-200 dark:border-gray-700 hover:border-brand-400"}`}>
-                      <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${img}`} target="_blank" rel="noopener noreferrer">
-                        <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${img}`} alt={`Vehicle photo ${i + 1}`}
+                      <a href={(resolveImageUrl(img) ?? "")} target="_blank" rel="noopener noreferrer">
+                        <img src={(resolveImageUrl(img) ?? "")} alt={`Vehicle photo ${i + 1}`}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       </a>
                       {isProfile && (
@@ -558,7 +619,7 @@ export default function VehicleDetailPage() {
                         className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg" title="Delete photo">
                         <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
                       </button>
-                      <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${img}`} target="_blank" rel="noopener noreferrer"
+                      <a href={(resolveImageUrl(img) ?? "")} target="_blank" rel="noopener noreferrer"
                         className="absolute bottom-2 left-2 w-7 h-7 rounded-lg bg-white/80 hover:bg-white text-gray-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg">
                         <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
                       </a>
@@ -653,7 +714,7 @@ export default function VehicleDetailPage() {
                     {/* Document file + actions */}
                     <div className="mt-3 ml-2 flex items-center gap-2 flex-wrap">
                       {doc.documentUrl && (
-                        <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${doc.documentUrl}`} target="_blank" rel="noopener noreferrer"
+                        <a href={(resolveImageUrl(doc.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-500 hover:text-brand-600 transition-colors">
                           <ExternalLink className="w-3 h-3" strokeWidth={2} />
                           View File
@@ -742,7 +803,7 @@ export default function VehicleDetailPage() {
                             )}
                             {c.comment && <span className="text-[10px] text-gray-400">{c.comment}</span>}
                             {c.proofImageUrl && (
-                              <a href={c.proofImageUrl.startsWith("http") ? c.proofImageUrl : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${c.proofImageUrl}`} target="_blank" rel="noopener noreferrer"
+                              <a href={c.proofImageUrl.startsWith("http") ? c.proofImageUrl : (resolveImageUrl(c.proofImageUrl) ?? "")} target="_blank" rel="noopener noreferrer"
                                 className="text-[10px] text-yellow-600 dark:text-yellow-400 flex items-center gap-0.5 font-semibold">
                                 <ImageIcon className="w-3 h-3" strokeWidth={2} />
                                 View Proof
@@ -939,7 +1000,7 @@ export default function VehicleDetailPage() {
                     <p className="text-[10px] text-gray-400">Permanent document</p>
                   </div>
                 </div>
-                <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${vehicle.invoiceUrl}`} target="_blank" rel="noopener noreferrer"
+                <a href={(resolveImageUrl(vehicle.invoiceUrl) ?? "")} target="_blank" rel="noopener noreferrer"
                   className="text-xs font-medium text-brand-500 hover:text-brand-600 flex items-center gap-1">
                   <ExternalLink className="w-3 h-3" strokeWidth={2} />
                   View
@@ -1067,7 +1128,7 @@ export default function VehicleDetailPage() {
                       </div>
                     </div>
                     {h.documentUrl && (
-                      <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${h.documentUrl}`} target="_blank" rel="noopener noreferrer"
+                      <a href={(resolveImageUrl(h.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600 flex-shrink-0">
                         <ExternalLink className="w-3 h-3" strokeWidth={2} />
                         View
@@ -1079,9 +1140,8 @@ export default function VehicleDetailPage() {
             )}
           </div>
 
-          {/* Tyre Profile */}
+          {/* Tyre Profile — view only; Edit/Set Up opens modal */}
           <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
-            {/* Header — single compact row */}
             <div className="flex items-center justify-between px-5 py-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center shadow-sm">
@@ -1092,82 +1152,46 @@ export default function VehicleDetailPage() {
                   <p className="text-[10px] text-gray-400">{vehicle.tyres.length > 0 ? `${vehicle.tyres.length} tracked` : "Not set up"}</p>
                 </div>
               </div>
-              {!editingTyres ? (
-                <button onClick={() => { const tyreCount = vehicle.group?.tyreCount || 4; const positions = getTyrePositions(tyreCount); setTyreForm(positions.map((pos) => { const existing = vehicle.tyres.find((t) => t.position === pos); return { position: pos, brand: existing?.brand || "", size: existing?.size || "", installedAt: existing?.installedAt ? existing.installedAt.split("T")[0] : "", kmAtInstall: existing?.kmAtInstall?.toString() || "", condition: existing?.condition || "GOOD" }; })); setEditingTyres(true); }}
-                  className="text-[11px] font-semibold text-brand-500 hover:text-brand-600 flex items-center gap-1">
-                  <Pencil className="w-3 h-3" />{vehicle.tyres.length > 0 ? "Edit" : "Set Up"}
-                </button>
-              ) : (
-                <div className="flex gap-1.5">
-                  <button onClick={async () => { setSavingTyres(true); try { const tyresData = tyreForm.filter((t) => t.brand || t.size || t.installedAt || t.kmAtInstall).map((t) => ({ position: t.position, brand: t.brand || undefined, size: t.size || undefined, installedAt: t.installedAt || undefined, kmAtInstall: t.kmAtInstall ? parseInt(t.kmAtInstall) : undefined, condition: t.condition })); await vehicleAPI.upsertTyres(vehicle.id, tyresData); const res = await vehicleAPI.getById(vehicle.id); setVehicle(res.data.data); setEditingTyres(false); toast.success("Tyres Updated", "Saved"); } catch { toast.error("Error", "Failed"); } finally { setSavingTyres(false); } }} disabled={savingTyres}
-                    className="text-[11px] font-semibold text-white bg-brand-500 hover:bg-brand-600 px-3 py-1 rounded-lg disabled:opacity-50">
-                    {savingTyres ? "..." : "Save"}
-                  </button>
-                  <button onClick={() => setEditingTyres(false)} className="text-[11px] font-semibold text-gray-500 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700">Cancel</button>
-                </div>
-              )}
+              <button
+                onClick={openTyreEditor}
+                className="text-[11px] font-semibold text-brand-500 hover:text-brand-600 flex items-center gap-1"
+              >
+                <Pencil className="w-3 h-3" />
+                {vehicle.tyres.length > 0 ? "Edit" : "Set Up"}
+              </button>
             </div>
 
-            {/* Content */}
-            {!editingTyres ? (
-              vehicle.tyres.length === 0 ? (
-                <div className="text-center px-5 pb-5">
-                  <div className="py-8 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
-                    <GiCarWheel className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-                    <p className="text-xs font-medium text-gray-400">No tyre data yet</p>
-                  </div>
+            {vehicle.tyres.length === 0 ? (
+              <div className="text-center px-5 pb-5">
+                <div className="py-8 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+                  <GiCarWheel className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                  <p className="text-xs font-medium text-gray-400">No tyre data yet</p>
                 </div>
-              ) : (
-                /* View mode — compact card rows */
-                <div className="px-5 pb-4 space-y-2">
-                  {vehicle.tyres.map((tyre) => {
-                    const cond = CONDITION_COLORS[tyre.condition] || CONDITION_COLORS.GOOD;
-                    const borderColor = tyre.condition === "GOOD" ? "border-l-emerald-500" : tyre.condition === "AVERAGE" ? "border-l-amber-500" : "border-l-red-500";
-                    return (
-                      <div key={tyre.id} className={`flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-800 border-l-[3px] ${borderColor} bg-gray-50/30 dark:bg-gray-800/20`}>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{TYRE_POSITION_LABELS[tyre.position] || tyre.position}</span>
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${cond.bg} ${cond.text}`}>{cond.label}</span>
-                          </div>
-                          <div className="flex items-baseline gap-2 mt-0.5">
-                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{tyre.brand || "—"}</span>
-                            {tyre.size && <span className="text-[10px] font-mono text-gray-400">{tyre.size}</span>}
-                          </div>
+              </div>
+            ) : (
+              <div className="px-5 pb-4 space-y-2">
+                {vehicle.tyres.map((tyre) => {
+                  const cond = CONDITION_COLORS[tyre.condition] || CONDITION_COLORS.GOOD;
+                  const borderColor = tyre.condition === "GOOD" ? "border-l-emerald-500" : tyre.condition === "AVERAGE" ? "border-l-amber-500" : "border-l-red-500";
+                  return (
+                    <div key={tyre.id} className={`flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-800 border-l-[3px] ${borderColor} bg-gray-50/30 dark:bg-gray-800/20`}>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{TYRE_POSITION_LABELS[tyre.position] || tyre.position}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${cond.bg} ${cond.text}`}>{cond.label}</span>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          {tyre.installedAt && <p className="text-[10px] text-gray-400">{new Date(tyre.installedAt).toLocaleDateString("en-IN", { month: "short", year: "2-digit" })}</p>}
-                          {tyre.kmAtInstall != null && <p className="text-[10px] font-semibold text-gray-500">{tyre.kmAtInstall.toLocaleString()} km</p>}
+                        <div className="flex items-baseline gap-2 mt-0.5">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">{tyre.brand || "—"}</span>
+                          {tyre.size && <span className="text-[10px] font-mono text-gray-400">{tyre.size}</span>}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )
-            ) : (
-              /* Edit mode — compact stacked cards */
-              <div className="px-5 pb-4 space-y-2">
-                {tyreForm.map((tyre, idx) => (
-                  <div key={tyre.position} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/30 dark:bg-gray-800/20">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider">{TYRE_POSITION_LABELS[tyre.position] || tyre.position}</span>
-                      <select value={tyre.condition} onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], condition: e.target.value }; setTyreForm(n); }}
-                        className="text-[10px] font-semibold rounded-md border border-gray-200 bg-white px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:border-brand-400">
-                        <option value="GOOD">Good</option><option value="AVERAGE">Average</option><option value="REPLACE">Replace</option>
-                      </select>
+                      <div className="text-right flex-shrink-0">
+                        {tyre.installedAt && <p className="text-[10px] text-gray-400">{new Date(tyre.installedAt).toLocaleDateString("en-IN", { month: "short", year: "2-digit" })}</p>}
+                        {tyre.kmAtInstall != null && <p className="text-[10px] font-semibold text-gray-500">{tyre.kmAtInstall.toLocaleString()} km</p>}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <input type="text" placeholder="Brand" value={tyre.brand} onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], brand: e.target.value }; setTyreForm(n); }}
-                        className="h-7 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                      <input type="text" placeholder="Size" value={tyre.size} onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], size: e.target.value }; setTyreForm(n); }}
-                        className="h-7 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                      <input type="date" value={tyre.installedAt} onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], installedAt: e.target.value }; setTyreForm(n); }}
-                        className="h-7 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                      <input type="number" placeholder="KM" value={tyre.kmAtInstall} onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], kmAtInstall: e.target.value }; setTyreForm(n); }}
-                        className="h-7 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1397,7 +1421,7 @@ export default function VehicleDetailPage() {
                               </div>
                             ) : part.proofUrl ? (
                               <div className="flex items-center gap-2 text-[10px]">
-                                <a href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"}${part.proofUrl}`} target="_blank" rel="noreferrer" className="text-emerald-600 hover:underline font-medium">View proof</a>
+                                <a href={(resolveImageUrl(part.proofUrl) ?? "")} target="_blank" rel="noreferrer" className="text-emerald-600 hover:underline font-medium">View proof</a>
                                 <label className="text-brand-500 font-semibold cursor-pointer">Replace<input type="file" accept=".jpg,.jpeg,.png,.pdf" className="hidden" onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], proofFile: e.target.files?.[0] || null, proofUrl: "" }; setSvcParts(n); e.target.value = ""; }} /></label>
                               </div>
                             ) : (
@@ -1668,7 +1692,7 @@ export default function VehicleDetailPage() {
                     Proof Image
                   </p>
                   <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-                    <img src={viewChallan.proofImageUrl.startsWith("http") ? viewChallan.proofImageUrl : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${viewChallan.proofImageUrl}`} alt="Challan Proof" className="w-full h-48 object-cover" />
+                    <img src={viewChallan.proofImageUrl.startsWith("http") ? viewChallan.proofImageUrl : (resolveImageUrl(viewChallan.proofImageUrl) ?? "")} alt="Challan Proof" className="w-full h-48 object-cover" />
                   </div>
                 </div>
               ) : (
@@ -1700,6 +1724,110 @@ export default function VehicleDetailPage() {
           <img src={hoverPhoto.url} alt="Vehicle" className="w-52 h-52 rounded-2xl object-cover shadow-2xl ring-4 ring-white dark:ring-gray-900" />
         </div>
       )}
+
+      {/* Tyre Profile Editor Modal */}
+      <Modal
+        isOpen={editingTyres}
+        onClose={savingTyres ? () => undefined : () => setEditingTyres(false)}
+        showCloseButton={!savingTyres}
+        className="w-[92%] max-w-[640px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col max-h-[85vh]">
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center">
+            <GiCarWheel className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">
+              {vehicle && vehicle.tyres.length > 0 ? "Edit Tyre Profile" : "Set Up Tyre Profile"}
+            </h3>
+            <p className="text-[11px] text-gray-400">
+              {tyreForm.length} position{tyreForm.length !== 1 ? "s" : ""} — fill the ones you have data for
+            </p>
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-3">
+          {tyreForm.map((tyre, idx) => (
+            <div key={tyre.position} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/30 dark:bg-gray-800/20">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider">
+                  {TYRE_POSITION_LABELS[tyre.position] || tyre.position}
+                </span>
+                <select
+                  value={tyre.condition}
+                  onChange={(e) => {
+                    const n = [...tyreForm];
+                    n[idx] = { ...n[idx], condition: e.target.value };
+                    setTyreForm(n);
+                  }}
+                  className="text-[11px] font-semibold rounded-md border border-gray-200 bg-white px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:border-brand-400"
+                >
+                  <option value="GOOD">Good</option>
+                  <option value="AVERAGE">Average</option>
+                  <option value="REPLACE">Replace</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="text" placeholder="Brand" value={tyre.brand}
+                  onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], brand: e.target.value }; setTyreForm(n); }}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                <input type="text" placeholder="Size (e.g. 215/60 R16)" value={tyre.size}
+                  onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], size: e.target.value }; setTyreForm(n); }}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                <input type="date" value={tyre.installedAt}
+                  onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], installedAt: e.target.value }; setTyreForm(n); }}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                <input type="number" placeholder="Odometer (km)" value={tyre.kmAtInstall}
+                  onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], kmAtInstall: e.target.value }; setTyreForm(n); }}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setEditingTyres(false)}
+            disabled={savingTyres}
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveTyres}
+            disabled={savingTyres}
+            className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 shadow-sm transition-colors disabled:opacity-60"
+          >
+            {savingTyres ? "Saving…" : "Save Tyres"}
+          </button>
+        </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={!!imageToDelete}
+        title="Delete this photo?"
+        message="This photo will be removed from the vehicle. If it's the current profile image, the next photo in the list becomes the new profile."
+        confirmLabel="Delete photo"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={deletingImage}
+        onConfirm={handleConfirmDeleteImage}
+        onCancel={() => (deletingImage ? undefined : setImageToDelete(null))}
+        preview={
+          imageToDelete ? (
+            <img
+              src={resolveImageUrl(imageToDelete) ?? ""}
+              alt=""
+              className="w-full h-40 object-cover"
+              onError={(e) => (e.currentTarget.style.display = "none")}
+            />
+          ) : undefined
+        }
+      />
     </div>
   );
 }

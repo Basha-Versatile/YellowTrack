@@ -5,8 +5,9 @@ import Link from "next/link";
 import { ChallansSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/context/ToastContext";
 import Pagination, { useClientPagination } from "@/components/ui/Pagination";
-import { AlertTriangle, Clock, Check, Banknote, Search, Calendar, X, ChevronRight, RefreshCw, List, LayoutGrid } from "lucide-react";
+import { AlertTriangle, Clock, Check, Banknote, Calendar, X, ChevronRight, RefreshCw, List, LayoutGrid } from "lucide-react";
 import { VehicleThumb, resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 interface Challan {
   id: string;
@@ -25,8 +26,6 @@ interface Vehicle {
   challans: Challan[];
   pendingChallanAmount: number;
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5001";
 
 export default function ChallansPage() {
   const toast = useToast();
@@ -205,11 +204,12 @@ export default function ChallansPage() {
 
       {/* Search + Date Range + Status Filter + View Toggle — single row */}
       <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-        <div className="relative flex-shrink-0">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search registration no..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-52 h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500" />
-        </div>
+        <SearchInput
+          className="w-52 flex-shrink-0"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search registration no..."
+        />
         <div className="flex items-center gap-2 flex-shrink-0">
           <Calendar className="w-4 h-4 text-gray-400" />
           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">From</span>

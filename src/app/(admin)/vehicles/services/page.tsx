@@ -7,11 +7,10 @@ import { ServicesPageSkeleton } from "@/components/ui/Skeleton";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import { Plus, List, Calendar, Wrench, Car, ChevronRight, X, Upload, LayoutGrid, CheckCircle2, Clock, AlertTriangle, Banknote, Search } from "lucide-react";
+import { Plus, List, Calendar, Wrench, Car, ChevronRight, X, Upload, LayoutGrid, CheckCircle2, Clock, AlertTriangle, Banknote } from "lucide-react";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5001";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 interface VehicleBasic {
   id: string;
@@ -231,11 +230,13 @@ export default function VehicleServicesPage() {
               ))}
             </div>
             <div className="flex items-center gap-2 ml-auto">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input type="text" placeholder="Search reg. no..." value={svcSearch} onChange={(e) => setSvcSearch(e.target.value)}
-                  className="h-9 w-44 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-              </div>
+              <SearchInput
+                className="w-44"
+                size="sm"
+                value={svcSearch}
+                onChange={setSvcSearch}
+                placeholder="Search reg. no..."
+              />
               <div className="flex gap-0.5 p-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg h-9">
                 <button onClick={() => setSvcView("list")} className={`px-2.5 rounded-md transition-all ${svcView === "list" ? "bg-white shadow-sm dark:bg-gray-700" : ""}`}>
                   <List className={`w-4 h-4 ${svcView === "list" ? "text-gray-900 dark:text-white" : "text-gray-400"}`} />

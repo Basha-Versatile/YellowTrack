@@ -6,9 +6,10 @@ import Badge from "@/components/ui/badge/Badge";
 import { useToast } from "@/context/ToastContext";
 import Pagination from "@/components/ui/Pagination";
 import { FASTagSkeleton } from "@/components/ui/Skeleton";
-import { Plus, Search, CreditCard, List, LayoutGrid, Truck, RefreshCw } from "lucide-react";
+import { Plus, CreditCard, List, LayoutGrid, Truck, RefreshCw } from "lucide-react";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 interface Fastag {
   id: string;
@@ -24,8 +25,6 @@ interface Fastag {
 }
 
 interface Vehicle { id: string; registrationNumber: string; make: string; model: string; }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:5001";
 
 export default function FASTagPage() {
   const toast = useToast();
@@ -69,6 +68,15 @@ export default function FASTagPage() {
   };
 
   useEffect(() => { fetchData(); }, []); // eslint-disable-line
+
+  // Debounced live search
+  const [didMountSearch, setDidMountSearch] = useState(false);
+  useEffect(() => {
+    if (!didMountSearch) { setDidMountSearch(true); return; }
+    const timer = setTimeout(() => fetchData(1), 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const handleCreate = async () => {
     if (!createForm.vehicleId || !createForm.tagId) return;
@@ -158,11 +166,12 @@ export default function FASTagPage() {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <form onSubmit={(e) => { e.preventDefault(); fetchData(1); }} className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search by tag ID or vehicle..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-        </form>
+        <SearchInput
+          className="flex-1"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by tag ID or vehicle..."
+        />
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
           {["ALL", "ACTIVE", "INACTIVE", "EXPIRED"].map((s) => (
             <button key={s} onClick={() => { setStatusFilter(s); setTimeout(() => fetchData(1), 0); }}

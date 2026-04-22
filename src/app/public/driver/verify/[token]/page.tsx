@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { publicAPI } from "@/lib/api";
 import PhotoCapture from "@/components/public/PhotoCapture";
 import AddressMapPicker from "@/components/public/AddressMapPicker";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface DriverData {
   id: string;
@@ -517,7 +518,7 @@ export default function DriverVerifyPage() {
                 <div className="flex gap-2 flex-wrap mb-3">
                   {currentAddrPhotos.map((url, i) => (
                     <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group">
-                      <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${url}`} alt="Address" className="w-full h-full object-cover" />
+                      <img src={(resolveImageUrl(url) ?? "")} alt="Address" className="w-full h-full object-cover" />
                       <button type="button" onClick={() => handleRemoveAddressPhoto("current", url)}
                         className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
                     </div>
@@ -582,7 +583,7 @@ export default function DriverVerifyPage() {
                   <div className="flex gap-2 flex-wrap mb-3">
                     {permanentAddrPhotos.map((url, i) => (
                       <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group">
-                        <img src={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${url}`} alt="Address" className="w-full h-full object-cover" />
+                        <img src={(resolveImageUrl(url) ?? "")} alt="Address" className="w-full h-full object-cover" />
                         <button type="button" onClick={() => handleRemoveAddressPhoto("permanent", url)}
                           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
                       </div>
