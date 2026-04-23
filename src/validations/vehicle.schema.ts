@@ -7,6 +7,7 @@ export const onboardVehicleSchema = z.object({
     .max(15, "Registration number must be at most 15 characters")
     .transform((val) => val.toUpperCase().replace(/\s/g, "")),
   groupId: z.string().min(1, "Vehicle group is required"),
+  vehicleUsage: z.enum(["PRIVATE", "COMMERCIAL"]).optional().nullable(),
 });
 
 export const getVehiclesQuerySchema = z.object({
@@ -33,6 +34,7 @@ export const manualOnboardSchema = z
     gvw: z.coerce.number().int().optional().nullable(),
     seatingCapacity: z.coerce.number().int().optional().nullable(),
     permitType: z.string().optional().nullable(),
+    vehicleUsage: z.enum(["PRIVATE", "COMMERCIAL"]).optional().nullable(),
     groupId: z.string().min(1, "Vehicle group is required"),
   })
   .passthrough(); // allow dynamic doc-expiry fields (e.g. rcExpiry, route_permitExpiry)

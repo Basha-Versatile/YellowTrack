@@ -94,6 +94,7 @@ export async function onboardVehicle(
   images: string[] = [],
   groupId: string | null,
   origin?: string,
+  vehicleUsage?: "PRIVATE" | "COMMERCIAL" | null,
 ) {
   if (!groupId) throw new BadRequestError("Vehicle group is required for onboarding");
 
@@ -150,6 +151,7 @@ export async function onboardVehicle(
     images,
     profileImage: images[0] ?? null,
     groupId,
+    vehicleUsage: vehicleUsage ?? null,
   });
   const vehicleId = String(createdDoc._id);
 
@@ -272,6 +274,7 @@ export async function manualOnboard(
     gvw,
     seatingCapacity,
     permitType,
+    vehicleUsage,
     groupId,
   } = data as Record<string, string | number | undefined>;
 
@@ -304,6 +307,10 @@ export async function manualOnboard(
     gvw: gvw ?? null,
     seatingCapacity: seatingCapacity ?? null,
     permitType: permitType ?? null,
+    vehicleUsage:
+      vehicleUsage === "PRIVATE" || vehicleUsage === "COMMERCIAL"
+        ? vehicleUsage
+        : null,
     images,
     profileImage: images[0] ?? null,
     groupId,

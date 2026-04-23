@@ -1,6 +1,6 @@
 {
-  "name": "tailadmin-next-typescript-pro",
-  "version": "2.2.0",
+  "name": "yellotracknextjs",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",

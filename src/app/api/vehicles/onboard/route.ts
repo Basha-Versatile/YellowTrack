@@ -13,6 +13,7 @@ export const POST = withRoute(
     const input = onboardVehicleSchema.parse({
       registrationNumber: firstString(fields, "registrationNumber"),
       groupId: firstString(fields, "groupId"),
+      vehicleUsage: firstString(fields, "vehicleUsage"),
     });
 
     const images = manyFiles(files, "vehicleImages").map((f) => f.url);
@@ -21,6 +22,7 @@ export const POST = withRoute(
       images,
       input.groupId,
       getRequestOrigin(req),
+      input.vehicleUsage ?? null,
     );
     return created(vehicle, "Vehicle onboarded successfully");
   },

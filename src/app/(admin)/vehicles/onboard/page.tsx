@@ -52,6 +52,7 @@ export default function OnboardVehiclePage() {
   const toast = useToast();
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [registrationNumber, setRegistrationNumber] = useState("");
+  const [vehicleUsage, setVehicleUsage] = useState<"PRIVATE" | "COMMERCIAL">("PRIVATE");
   const [loading, setLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(-1);
   const [error, setError] = useState("");
@@ -104,6 +105,7 @@ export default function OnboardVehiclePage() {
       const payload: Record<string, string | File | undefined> = {
         ...mf,
         groupId: selectedGroupId,
+        vehicleUsage,
         gvw: mf.gvw || undefined,
         seatingCapacity: mf.seatingCapacity || undefined,
       };
@@ -148,7 +150,7 @@ export default function OnboardVehiclePage() {
     }
 
     try {
-      const res = await vehicleAPI.onboard(trimmed, vehicleImages.length > 0 ? vehicleImages : undefined, selectedGroupId);
+      const res = await vehicleAPI.onboard(trimmed, vehicleImages.length > 0 ? vehicleImages : undefined, selectedGroupId, vehicleUsage);
       const vehicle = res.data.data;
       const warnings: string[] = Array.isArray(vehicle?.warnings) ? vehicle.warnings : [];
       setActiveStep(STEPS.length); // all done
@@ -281,6 +283,34 @@ export default function OnboardVehiclePage() {
                     <Info className="w-3 h-3" />
                     Enter exactly as shown on the number plate
                   </p>
+                </div>
+
+                {/* Vehicle Usage */}
+                <div>
+                  <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <ShieldCheck className="w-4 h-4 text-yellow-500" />
+                    Vehicle Usage
+                  </label>
+                  <div className="relative inline-flex w-80 p-1 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                    <span
+                      aria-hidden
+                      className={`absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-yellow-400 shadow-sm transition-transform duration-300 ease-out ${vehicleUsage === "COMMERCIAL" ? "translate-x-full" : "translate-x-0"}`}
+                    />
+                    {[
+                      { val: "PRIVATE" as const, label: "Private", Icon: ShieldCheck },
+                      { val: "COMMERCIAL" as const, label: "Commercial", Icon: Package },
+                    ].map((u) => (
+                      <button
+                        key={u.val}
+                        type="button"
+                        onClick={() => setVehicleUsage(u.val)}
+                        className={`relative z-10 flex-1 flex items-center justify-center gap-1 h-8 rounded-full text-xs font-semibold transition-colors ${vehicleUsage === u.val ? "text-gray-900" : "text-gray-500 dark:text-gray-400 hover:text-gray-700"}`}
+                      >
+                        <u.Icon className="w-3.5 h-3.5" />
+                        {u.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Error / Success */}
@@ -505,6 +535,31 @@ export default function OnboardVehiclePage() {
                         className={`flex flex-col items-center gap-1.5 py-3.5 rounded-xl border-2 transition-all ${mf.fuelType === f.val ? "border-yellow-400 bg-yellow-50 shadow-sm dark:bg-yellow-500/10 dark:border-yellow-500" : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-gray-600"}`}>
                         <f.Icon className={`w-5 h-5 ${mf.fuelType === f.val ? "text-yellow-600 dark:text-yellow-400" : "text-gray-400"}`} />
                         <span className={`text-xs font-semibold ${mf.fuelType === f.val ? "text-yellow-700 dark:text-yellow-400" : "text-gray-600 dark:text-gray-400"}`}>{f.val}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Vehicle Usage */}
+                <div className="mt-5">
+                  <label className="mb-2.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vehicle Usage</label>
+                  <div className="relative inline-flex w-80 p-1 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                    <span
+                      aria-hidden
+                      className={`absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-yellow-400 shadow-sm transition-transform duration-300 ease-out ${vehicleUsage === "COMMERCIAL" ? "translate-x-full" : "translate-x-0"}`}
+                    />
+                    {[
+                      { val: "PRIVATE" as const, label: "Private", Icon: ShieldCheck },
+                      { val: "COMMERCIAL" as const, label: "Commercial", Icon: Package },
+                    ].map((u) => (
+                      <button
+                        key={u.val}
+                        type="button"
+                        onClick={() => setVehicleUsage(u.val)}
+                        className={`relative z-10 flex-1 flex items-center justify-center gap-1 h-8 rounded-full text-xs font-semibold transition-colors ${vehicleUsage === u.val ? "text-gray-900" : "text-gray-500 dark:text-gray-400 hover:text-gray-700"}`}
+                      >
+                        <u.Icon className="w-3.5 h-3.5" />
+                        {u.label}
                       </button>
                     ))}
                   </div>

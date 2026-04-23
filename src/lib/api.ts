@@ -158,10 +158,16 @@ export const vehicleAPI = {
   getById: (id: string) => api.get(`/vehicles/${id}`),
   updateGroup: (vehicleId: string, groupId: string | null) =>
     api.patch(`/vehicles/${vehicleId}/group`, { groupId }),
-  onboard: (registrationNumber: string, images?: File[], groupId?: string) => {
+  onboard: (
+    registrationNumber: string,
+    images?: File[],
+    groupId?: string,
+    vehicleUsage?: "PRIVATE" | "COMMERCIAL",
+  ) => {
     const formData = new FormData();
     formData.append("registrationNumber", registrationNumber);
     if (groupId) formData.append("groupId", groupId);
+    if (vehicleUsage) formData.append("vehicleUsage", vehicleUsage);
     if (images) images.forEach((f) => formData.append("vehicleImages", f));
     return api.post("/vehicles/onboard", formData, {
       headers: { "Content-Type": "multipart/form-data" },

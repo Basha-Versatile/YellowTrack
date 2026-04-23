@@ -13,6 +13,7 @@ const vehicleSchema = new Schema(
     gvw: { type: Number },
     seatingCapacity: { type: Number },
     permitType: { type: String },
+    vehicleUsage: { type: String, enum: ["PRIVATE", "COMMERCIAL"] },
     registrationDate: { type: Date },
     qrCodeUrl: { type: String },
     invoiceUrl: { type: String },
