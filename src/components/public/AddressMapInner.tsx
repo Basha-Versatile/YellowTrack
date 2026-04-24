@@ -54,14 +54,27 @@ function MapController({
   // container with ResizeObserver + `invalidateSize()` fixes the map-goes-blank bug.
   useEffect(() => {
     if (!containerEl) return;
-    const ro = new ResizeObserver(() => {
-      // rAF avoids redundant invalidations during a burst of resize events
-      requestAnimationFrame(() => map.invalidateSize());
-    });
+    let disposed = false;
+    let rafId = 0;
+    const safeInvalidate = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (disposed) return;
+        try {
+          map.invalidateSize();
+        } catch {
+          // container may have been detached between rAF schedule and fire
+        }
+      });
+    };
+    const ro = new ResizeObserver(safeInvalidate);
     ro.observe(containerEl);
-    // also invalidate once on mount for initial layout
-    requestAnimationFrame(() => map.invalidateSize());
-    return () => ro.disconnect();
+    safeInvalidate();
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, [map, containerEl]);
 
   // Fly to new coordinates when props change (e.g. "Detect my location")

@@ -97,13 +97,20 @@ export async function fetchDrivingLicense(
       const upstreamMsg =
         res.data?.message || res.data?.message_code || `HTTP ${status}`;
 
+      console.error("[SurepassDL] Upstream error", {
+        status,
+        url: `${env.SUREPASS_DL_BASE_URL}/driving-license/driving-license`,
+        licenseNumber,
+        message: upstreamMsg,
+        body: res.data,
+      });
+
       if (status === 404 || status === 422) {
         throw new BadRequestError(
           `Driving license ${licenseNumber} not found or DOB mismatch`,
         );
       }
       if (status === 401 || status === 403) {
-        console.error("[SurepassDL] Auth failure:", upstreamMsg);
         throw new AppError(
           "DL lookup authentication failed — contact admin",
           500,
@@ -117,13 +124,18 @@ export async function fetchDrivingLicense(
       }
       if (status >= 500) {
         throw new AppError(
-          "DL lookup service is temporarily unavailable",
+          `DL lookup upstream ${status}: ${upstreamMsg}`,
           502,
         );
       }
       throw new AppError(`DL lookup failed: ${upstreamMsg}`, 502);
     }
 
+    console.error("[SurepassDL] Network error (no response)", {
+      code: axiosErr.code,
+      message: axiosErr.message,
+      url: `${env.SUREPASS_DL_BASE_URL}/driving-license/driving-license`,
+    });
     throw new AppError("Could not reach DL lookup service", 502);
   }
 }

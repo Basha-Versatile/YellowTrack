@@ -289,7 +289,7 @@ export default function OnboardVehiclePage() {
                 <div>
                   <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     <ShieldCheck className="w-4 h-4 text-yellow-500" />
-                    Vehicle Usage
+                    Vehicle Type
                   </label>
                   <div className="relative inline-flex w-80 p-1 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                     <span

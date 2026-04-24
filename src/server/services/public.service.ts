@@ -1,6 +1,7 @@
 import "server-only";
 import { AppError, BadRequestError, NotFoundError } from "@/lib/errors";
 import * as driverRepo from "../repositories/driver.repository";
+import * as driverChangeRepo from "../repositories/driverChange.repository";
 import * as vehicleRepo from "../repositories/vehicle.repository";
 import {
   calculateComplianceStatus,
@@ -8,6 +9,22 @@ import {
 } from "./compliance.service";
 import { create as createNotification } from "./notification.service";
 import * as complianceRepo from "../repositories/compliance.repository";
+
+const PUBLIC_SIMPLE_FIELDS = [
+  "phone",
+  "aadhaarLast4",
+  "bloodGroup",
+  "fatherName",
+  "motherName",
+];
+const PUBLIC_ADDRESS_FIELDS = [
+  "currentAddress",
+  "currentAddressLat",
+  "currentAddressLng",
+  "permanentAddress",
+  "permanentAddressLat",
+  "permanentAddressLng",
+];
 
 export async function getVehiclePublic(vehicleId: string) {
   const vehicle = await vehicleRepo.findById(vehicleId);
@@ -103,6 +120,41 @@ export async function updateDriverByToken(
   const updateData = { ...validated, selfVerifiedAt: new Date() };
   const updated = await driverRepo.update(String(d._id), updateData);
 
+  // Audit: diff each field group and log with actor = "Driver (self-verify)"
+  const before = d;
+  const after = updated as Record<string, unknown>;
+  const actor: driverChangeRepo.Actor = {
+    name: `${d.name ?? "Driver"} (self-verify)`,
+    role: "DRIVER",
+  };
+  const profileDiffs = driverChangeRepo.diffFields(before, after, PUBLIC_SIMPLE_FIELDS);
+  if (profileDiffs.length > 0) {
+    await driverChangeRepo.logDriverChange({
+      driverId: String(d._id),
+      changeType: "PROFILE_UPDATED",
+      fields: profileDiffs,
+      actor,
+    });
+  }
+  const addressDiffs = driverChangeRepo.diffFields(before, after, PUBLIC_ADDRESS_FIELDS);
+  if (addressDiffs.length > 0) {
+    await driverChangeRepo.logDriverChange({
+      driverId: String(d._id),
+      changeType: "ADDRESS_UPDATED",
+      fields: addressDiffs,
+      actor,
+    });
+  }
+  const ecDiffs = driverChangeRepo.diffFields(before, after, ["emergencyContacts"]);
+  if (ecDiffs.length > 0) {
+    await driverChangeRepo.logDriverChange({
+      driverId: String(d._id),
+      changeType: "EMERGENCY_CONTACTS_UPDATED",
+      fields: ecDiffs,
+      actor,
+    });
+  }
+
   try {
     await createNotification({
       type: "DRIVER_SELF_VERIFIED",
@@ -123,8 +175,14 @@ export async function updateDriverByToken(
 export async function uploadDriverPhoto(token: string, photoUrl: string) {
   const driver = await driverRepo.findByVerificationToken(token);
   if (!driver) throw new NotFoundError("Invalid verification link");
-  await driverRepo.update(String((driver as { _id: unknown })._id), {
-    profilePhoto: photoUrl,
+  const d = driver as Record<string, unknown>;
+  const prev = d.profilePhoto ?? null;
+  await driverRepo.update(String(d._id), { profilePhoto: photoUrl });
+  await driverChangeRepo.logDriverChange({
+    driverId: String(d._id),
+    changeType: "PROFILE_PHOTO_UPDATED",
+    fields: [{ field: "profilePhoto", before: prev, after: photoUrl }],
+    actor: { name: `${d.name ?? "Driver"} (self-verify)`, role: "DRIVER" },
   });
   return { profilePhoto: photoUrl };
 }
@@ -149,6 +207,13 @@ export async function uploadAddressPhoto(
   }
   const updated = [...existing, photoUrl];
   await driverRepo.update(String(d._id), { [field]: updated });
+  await driverChangeRepo.logDriverChange({
+    driverId: String(d._id),
+    changeType: "ADDRESS_PHOTO_ADDED",
+    fields: [{ field, before: null, after: photoUrl }],
+    note: `Added ${type} address photo`,
+    actor: { name: `${d.name ?? "Driver"} (self-verify)`, role: "DRIVER" },
+  });
   return { url: photoUrl, photos: updated };
 }
 
@@ -169,5 +234,12 @@ export async function deleteAddressPhoto(
   const existing = (d[field] as string[] | undefined) ?? [];
   const updated = existing.filter((p) => p !== url);
   await driverRepo.update(String(d._id), { [field]: updated });
+  await driverChangeRepo.logDriverChange({
+    driverId: String(d._id),
+    changeType: "ADDRESS_PHOTO_REMOVED",
+    fields: [{ field, before: url, after: null }],
+    note: `Removed ${type} address photo`,
+    actor: { name: `${d.name ?? "Driver"} (self-verify)`, role: "DRIVER" },
+  });
   return { photos: updated };
 }

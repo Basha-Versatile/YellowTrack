@@ -9,11 +9,12 @@ import { useAuth } from "@/context/AuthContext";
 import {
   ChevronDownIcon,
   HorizontaLDots,
-  TaskIcon,
+  // TaskIcon,
   UserCircleIcon,
 } from "../icons/index";
 import { BsFillCarFrontFill } from "react-icons/bs";
 import { MdSpaceDashboard } from "react-icons/md";
+import { Lightbulb } from "lucide-react";
 
 type NavItem = {
   name: string;
@@ -53,10 +54,16 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    icon: <TaskIcon />,
-    name: "Buy Insurance",
-    path: "/buy-insurance",
+    icon: <Lightbulb className="h-5 w-5" />,
+    name: "Feedback",
+    path: "/suggest-feature",
+    new: true,
   },
+  // {
+  //   icon: <TaskIcon />,
+  //   name: "Buy Insurance",
+  //   path: "/buy-insurance",
+  // },
 ];
 
 const othersItems: NavItem[] = [];
@@ -272,7 +279,7 @@ const AppSidebar: React.FC = () => {
   return (
     <aside
       className={`fixed flex flex-col top-0 left-0 h-full transition-all duration-300 ease-in-out z-50
-        bg-gradient-to-t from-yellow-300 via-yellow-200 to-amber-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-r border-yellow-200/50 dark:border-gray-800/50
+        bg-gradient-to-b from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-r border-gray-200 dark:border-gray-800/50
         ${
           expanded
             ? "w-[280px]"
@@ -285,7 +292,7 @@ const AppSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div
-        className={`px-5 pt-7 pb-4 flex bg-white/70 dark:bg-white/5 ${
+        className={`px-5 pt-7 pb-4 flex bg-gray-100/70 dark:bg-white/5 ${
           !expanded ? "justify-center" : "justify-start"
         }`}
       >
@@ -302,7 +309,7 @@ const AppSidebar: React.FC = () => {
 
       {/* Divider */}
       <div className="mx-5 mb-4">
-        <div className="h-px bg-gradient-to-r from-transparent via-yellow-300/50 to-transparent dark:via-gray-700/50" />
+        <div className="h-px bg-gradient-to-r from-transparent via-gray-300/60 to-transparent dark:via-gray-700/50" />
       </div>
 
       {/* Navigation */}
@@ -351,9 +358,9 @@ const AppSidebar: React.FC = () => {
 
       {/* Bottom user card */}
       <div className="mt-auto px-4 pb-5">
-        <div className="h-px bg-gradient-to-r from-transparent via-yellow-300/50 to-transparent dark:via-gray-700/50 mb-4" />
+        <div className="h-px bg-gradient-to-r from-transparent via-gray-300/60 to-transparent dark:via-gray-700/50 mb-4" />
         {expanded ? (
-          <div className="flex items-center gap-3 rounded-xl bg-white/60 dark:bg-white/5 p-3">
+          <div className="flex items-center gap-3 rounded-xl bg-gray-100/70 dark:bg-white/5 p-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-yellow-500/20 flex-shrink-0">
               {initials}
             </div>

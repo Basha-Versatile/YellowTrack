@@ -12,7 +12,7 @@ export const DRIVER_DOC_TYPES = [
 const driverDocumentSchema = new Schema(
   {
     driverId: { type: Schema.Types.ObjectId, ref: "Driver", required: true },
-    type: { type: String, enum: DRIVER_DOC_TYPES, required: true },
+    type: { type: String, required: true, trim: true, maxlength: 80 },
     expiryDate: { type: Date },
     documentUrl: { type: String },
     status: { type: String, enum: ["GREEN", "YELLOW", "RED"], default: "GREEN" },

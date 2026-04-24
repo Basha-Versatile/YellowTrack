@@ -88,7 +88,7 @@ export async function runComplianceCheck() {
     if (days <= 30) {
       const key = `driver-license-${String(d._id)}`;
       if (!alreadySent(key)) {
-        const status = days <= 0 ? "RED" : "YELLOW";
+        const status = days <= 0 ? "RED" : days <= 4 ? "ORANGE" : "YELLOW";
         await triggerDriverAlert(
           d.name as string,
           d.licenseNumber as string,
@@ -110,7 +110,8 @@ export async function runComplianceCheck() {
       if (docDays <= 30) {
         const key = `driver-doc-${String(d._id)}-${doc.type as string}`;
         if (!alreadySent(key)) {
-          const docStatus = docDays <= 0 ? "RED" : "YELLOW";
+          const docStatus =
+            docDays <= 0 ? "RED" : docDays <= 4 ? "ORANGE" : "YELLOW";
           await triggerDriverDocAlert(
             d.name as string,
             doc.type as string,

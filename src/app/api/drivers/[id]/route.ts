@@ -17,9 +17,12 @@ export const GET = withRoute<{ id: string }>(
 );
 
 export const PUT = withRoute<{ id: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
     const input = await parseJson(req, updateDriverSchema);
-    const driver = await updateDriver(params.id, input);
+    const driver = await updateDriver(params.id, input, {
+      name: session?.email ?? "system",
+      role: "ADMIN",
+    });
     return success(driver, "Driver updated successfully");
   },
   { auth: true },

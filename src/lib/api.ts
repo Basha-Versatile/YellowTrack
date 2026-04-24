@@ -278,6 +278,7 @@ export const driverAPI = {
   },
   getDocHistory: (driverId: string, type: string) =>
     api.get(`/drivers/${driverId}/documents/history/${type}`),
+  getChangeLog: (driverId: string) => api.get(`/drivers/${driverId}/changes`),
   renewDocument: (driverId: string, docId: string, data: { expiryDate?: string; type: string; lifetime?: boolean }, file?: File) => {
     const formData = new FormData();
     if (data.expiryDate) formData.append("expiryDate", data.expiryDate);
@@ -285,6 +286,28 @@ export const driverAPI = {
     if (data.lifetime) formData.append("lifetime", "true");
     if (file) formData.append("document", file);
     return api.post(`/drivers/${driverId}/documents/${docId}/renew`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  uploadProfilePhoto: (driverId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("photo", file);
+    return api.post(`/drivers/${driverId}/profile-image`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  uploadAddressPhoto: (driverId: string, type: "current" | "permanent", file: File) => {
+    const formData = new FormData();
+    formData.append("photo", file);
+    return api.post(`/drivers/${driverId}/address-photo/${type}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  deleteAddressPhoto: (driverId: string, type: "current" | "permanent", url: string) => {
+    const formData = new FormData();
+    formData.append("url", url);
+    return api.delete(`/drivers/${driverId}/address-photo/${type}`, {
+      data: formData,
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
@@ -380,6 +403,17 @@ export const paymentAPI = {
   getAll: (params?: { page?: number; limit?: number }) =>
     api.get("/payments", { params }),
   getById: (id: string) => api.get(`/payments/${id}`),
+};
+
+// ── Feature Suggestions ─────────────────────────────────────
+export const featureSuggestionAPI = {
+  create: (data: {
+    title: string;
+    description: string;
+    category?: string;
+    priority?: string;
+  }) => api.post("/feature-suggestions", data),
+  getMine: () => api.get("/feature-suggestions"),
 };
 
 // ── Notifications ───────────────────────────────────────────

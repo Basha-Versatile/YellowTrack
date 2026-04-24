@@ -55,7 +55,22 @@ export default function AddressMapPicker({
 }: AddressMapPickerProps) {
   const [detecting, setDetecting] = useState(false);
   const [detectError, setDetectError] = useState<string | null>(null);
+  const [captureMessage, setCaptureMessage] = useState<string | null>(null);
   const autoDetectedRef = useRef(false);
+  const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashCapture = useCallback((msg: string) => {
+    setDetectError(null);
+    setCaptureMessage(msg);
+    if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
+    captureTimerRef.current = setTimeout(() => setCaptureMessage(null), 3500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
+    };
+  }, []);
 
   const detectLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -70,10 +85,14 @@ export default function AddressMapPicker({
         const lng = pos.coords.longitude;
         // Drop the pin immediately — don't wait for the reverse-geocode request.
         onChange({ address: value.address || "", lat, lng });
+        flashCapture("Location captured — fetching address…");
         // Fetch the human-readable address in the background.
         reverseGeocode(lat, lng).then((addr) => {
           if (addr) onChange({ address: addr, lat, lng });
           setDetecting(false);
+          flashCapture(
+            addr ? "Location captured successfully" : "Pin placed — address not found, please type it",
+          );
         });
       },
       (err) => {
@@ -89,7 +108,7 @@ export default function AddressMapPicker({
       { enableHighAccuracy: true, timeout: 12_000, maximumAge: 0 },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onChange]);
+  }, [onChange, flashCapture]);
 
   // Auto-detect on first mount when requested and no coords yet
   useEffect(() => {
@@ -154,13 +173,24 @@ export default function AddressMapPicker({
         disabled={Boolean(disabled)}
         onChange={async (lat, lng) => {
           onChange({ ...value, lat, lng });
+          flashCapture("Pin dropped — fetching address…");
           const addr = await reverseGeocode(lat, lng);
           if (addr) onChange({ address: addr, lat, lng });
+          flashCapture(
+            addr ? "Location captured successfully" : "Pin placed — address not found, please type it",
+          );
         }}
       />
 
       {detectError ? (
         <p className="mt-2 text-[11px] text-red-500">{detectError}</p>
+      ) : captureMessage ? (
+        <p className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          {captureMessage}
+        </p>
       ) : !disabled ? (
         <p className="mt-1 text-[10px] text-gray-400">
           Tap on the map or drag the pin to set your exact location.

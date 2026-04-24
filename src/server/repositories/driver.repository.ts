@@ -6,6 +6,7 @@ import {
   Vehicle,
   VehicleDriverMapping,
 } from "@/models";
+import { logChange } from "./driverDocumentChange.repository";
 
 type DriverEnriched = Record<string, unknown> & {
   _id: unknown;
@@ -120,30 +121,69 @@ export async function assignToVehicle(driverId: string, vehicleId: string) {
 }
 
 export async function createDocument(data: Record<string, unknown>) {
-  return DriverDocument.create(data);
+  const doc = await DriverDocument.create(data);
+  await logChange({
+    documentId: String(doc._id),
+    driverId: String(doc.driverId),
+    type: String(doc.type),
+    changeType: "CREATED",
+    fields: [
+      { field: "expiryDate", before: null, after: doc.expiryDate ?? null },
+      { field: "documentUrl", before: null, after: doc.documentUrl ?? null },
+    ],
+  });
+  return doc;
 }
 
 export async function updateDocumentExpiry(
   docId: string,
   expiryDate: Date | string | null,
 ) {
+  const prev = await DriverDocument.findById(docId).lean();
+  if (!prev) return null;
+
+  const beforeExpiry = prev.expiryDate ?? null;
+  let updated;
+
   if (!expiryDate) {
-    return DriverDocument.findByIdAndUpdate(
+    updated = await DriverDocument.findByIdAndUpdate(
       docId,
       { expiryDate: null, status: "GREEN" },
       { new: true },
     );
+  } else {
+    const days = Math.ceil(
+      (new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+    );
+    const status =
+      days <= 0 ? "RED" : days <= 7 ? "ORANGE" : days <= 30 ? "YELLOW" : "GREEN";
+    updated = await DriverDocument.findByIdAndUpdate(
+      docId,
+      { expiryDate: new Date(expiryDate), status },
+      { new: true },
+    );
   }
-  const days = Math.ceil(
-    (new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-  );
-  const status =
-    days <= 0 ? "RED" : days <= 7 ? "ORANGE" : days <= 30 ? "YELLOW" : "GREEN";
-  return DriverDocument.findByIdAndUpdate(
-    docId,
-    { expiryDate: new Date(expiryDate), status },
-    { new: true },
-  );
+
+  const afterExpiry = updated?.expiryDate ?? null;
+  const same =
+    (beforeExpiry && afterExpiry && new Date(beforeExpiry).getTime() === new Date(afterExpiry).getTime()) ||
+    (!beforeExpiry && !afterExpiry);
+  if (!same) {
+    const changeType =
+      beforeExpiry && !afterExpiry
+        ? "LIFETIME_SET"
+        : !beforeExpiry && afterExpiry
+          ? "LIFETIME_REMOVED"
+          : "EXPIRY_UPDATED";
+    await logChange({
+      documentId: docId,
+      driverId: String(prev.driverId),
+      type: String(prev.type),
+      changeType,
+      fields: [{ field: "expiryDate", before: beforeExpiry, after: afterExpiry }],
+    });
+  }
+  return updated;
 }
 
 export async function findActiveByDriverAndType(driverId: string, type: string) {
@@ -158,11 +198,59 @@ export async function renewDocument(
   oldDocId: string,
   newData: Record<string, unknown>,
 ) {
+  const oldDoc = await DriverDocument.findById(oldDocId).lean();
+
   await DriverDocument.findByIdAndUpdate(oldDocId, {
     isActive: false,
     archivedAt: new Date(),
   });
-  return DriverDocument.create(newData);
+  if (oldDoc) {
+    await logChange({
+      documentId: oldDocId,
+      driverId: String(oldDoc.driverId),
+      type: String(oldDoc.type),
+      changeType: "ARCHIVED",
+      fields: [{ field: "isActive", before: true, after: false }],
+      note: "Superseded by a new document",
+    });
+  }
+
+  const newDoc = await DriverDocument.create(newData);
+
+  if (oldDoc) {
+    const fileChanged = (oldDoc.documentUrl ?? null) !== (newData.documentUrl ?? null);
+    const oldExpiry = oldDoc.expiryDate ? new Date(oldDoc.expiryDate).getTime() : null;
+    const newExpiry = newData.expiryDate
+      ? new Date(newData.expiryDate as Date | string).getTime()
+      : null;
+    const expiryChanged = oldExpiry !== newExpiry;
+
+    const fields: Array<{ field: string; before: unknown; after: unknown }> = [];
+    if (fileChanged) {
+      fields.push({
+        field: "documentUrl",
+        before: oldDoc.documentUrl ?? null,
+        after: newData.documentUrl ?? null,
+      });
+    }
+    if (expiryChanged) {
+      fields.push({
+        field: "expiryDate",
+        before: oldDoc.expiryDate ?? null,
+        after: newData.expiryDate ?? null,
+      });
+    }
+
+    await logChange({
+      documentId: String(newDoc._id),
+      driverId: String(newDoc.driverId),
+      type: String(newDoc.type),
+      changeType: fileChanged ? "FILE_REPLACED" : "EXPIRY_UPDATED",
+      fields,
+    });
+  }
+
+  return newDoc;
 }
 
 export async function getDocHistory(driverId: string, type: string) {

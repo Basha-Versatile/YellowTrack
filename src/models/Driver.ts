@@ -17,6 +17,8 @@ const driverSchema = new Schema(
     aadhaarLast4: { type: String, maxlength: 4 },
     licenseNumber: { type: String, required: true, unique: true, uppercase: true, trim: true, index: true },
     licenseExpiry: { type: Date, required: true },
+    dob: { type: Date },
+    dateOfIssue: { type: Date },
     vehicleClass: { type: String, required: true },
     riskScore: { type: Number, default: 0 },
     bloodGroup: { type: String },

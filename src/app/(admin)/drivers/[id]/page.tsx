@@ -8,8 +8,165 @@ import Link from "next/link";
 import { DriverDetailSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
 import VerificationLinkShare from "@/components/ui/VerificationLinkShare";
-import { ChevronLeft, ChevronRight, Pencil, Upload, FileText, Plus, ExternalLink, RefreshCw, Clock, MapPin, Check, User, Users, Bell, CreditCard, Calendar, Car, Navigation } from "lucide-react";
+import AddressMapPicker from "@/components/public/AddressMapPicker";
+import { ChevronLeft, ChevronRight, Pencil, Upload, FileText, Plus, ExternalLink, RefreshCw, Clock, MapPin, Check, User, Users, Bell, CreditCard, Calendar, Car, Navigation, Camera, Phone, X, Trash2 } from "lucide-react";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+
+type AddressValue = { address: string; lat: number | null; lng: number | null };
+type EditableEC = { name: string; relation: string; phone: string };
+type DocChangeField = { field: string; before: unknown; after: unknown };
+type DocHistoryEntry = {
+  id: string;
+  createdAt: string;
+  changeType: "CREATED" | "FILE_REPLACED" | "EXPIRY_UPDATED" | "LIFETIME_SET" | "LIFETIME_REMOVED" | "TYPE_RENAMED" | "ARCHIVED";
+  fields: DocChangeField[];
+  note: string | null;
+  changedBy: string | null;
+  documentId: string;
+  documentUrl: string | null;
+  isActive: boolean;
+};
+
+const CHANGE_TYPE_LABELS: Record<DocHistoryEntry["changeType"], string> = {
+  CREATED: "Document created",
+  FILE_REPLACED: "File replaced",
+  EXPIRY_UPDATED: "Expiry date updated",
+  LIFETIME_SET: "Set to lifetime",
+  LIFETIME_REMOVED: "Expiry date added",
+  TYPE_RENAMED: "Document renamed",
+  ARCHIVED: "Document archived",
+};
+
+const CHANGE_TYPE_COLORS: Record<DocHistoryEntry["changeType"], string> = {
+  CREATED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+  FILE_REPLACED: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+  EXPIRY_UPDATED: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+  LIFETIME_SET: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400",
+  LIFETIME_REMOVED: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+  TYPE_RENAMED: "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400",
+  ARCHIVED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+};
+
+function formatDocFieldValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    }
+  }
+  if (value instanceof Date) {
+    return value.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  }
+  const str = String(value);
+  if (str.startsWith("http")) return "file";
+  return str;
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  expiryDate: "Expiry",
+  documentUrl: "File",
+  isActive: "Active",
+  type: "Type",
+  phone: "Phone",
+  aadhaarLast4: "Aadhaar",
+  bloodGroup: "Blood Group",
+  fatherName: "Father's Name",
+  motherName: "Mother's Name",
+  currentAddress: "Current Address",
+  currentAddressLat: "Current Lat",
+  currentAddressLng: "Current Lng",
+  permanentAddress: "Permanent Address",
+  permanentAddressLat: "Permanent Lat",
+  permanentAddressLng: "Permanent Lng",
+  emergencyContacts: "Emergency Contacts",
+  profilePhoto: "Profile Photo",
+  currentAddressPhotos: "Current Address Photo",
+  permanentAddressPhotos: "Permanent Address Photo",
+};
+
+type DriverChangeEntry = {
+  id: string;
+  createdAt: string;
+  changeType: "PROFILE_UPDATED" | "ADDRESS_UPDATED" | "EMERGENCY_CONTACTS_UPDATED" | "PROFILE_PHOTO_UPDATED" | "ADDRESS_PHOTO_ADDED" | "ADDRESS_PHOTO_REMOVED";
+  fields: DocChangeField[];
+  note: string | null;
+  actor: string;
+  actorRole: "ADMIN" | "DRIVER";
+};
+
+const DRIVER_CHANGE_LABELS: Record<DriverChangeEntry["changeType"], string> = {
+  PROFILE_UPDATED: "Profile updated",
+  ADDRESS_UPDATED: "Address updated",
+  EMERGENCY_CONTACTS_UPDATED: "Emergency contacts updated",
+  PROFILE_PHOTO_UPDATED: "Profile photo changed",
+  ADDRESS_PHOTO_ADDED: "Address photo added",
+  ADDRESS_PHOTO_REMOVED: "Address photo removed",
+};
+
+const DRIVER_CHANGE_COLORS: Record<DriverChangeEntry["changeType"], string> = {
+  PROFILE_UPDATED: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
+  ADDRESS_UPDATED: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+  EMERGENCY_CONTACTS_UPDATED: "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400",
+  PROFILE_PHOTO_UPDATED: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400",
+  ADDRESS_PHOTO_ADDED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+  ADDRESS_PHOTO_REMOVED: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+};
+
+function formatChangeValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "empty";
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  if (typeof value === "object") return "updated";
+  const str = String(value);
+  if (str.startsWith("http")) return "file";
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const d = new Date(str);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    }
+  }
+  return str.length > 40 ? str.slice(0, 40) + "…" : str;
+}
+
+const PHOTO_FIELDS = new Set([
+  "profilePhoto",
+  "currentAddressPhotos",
+  "permanentAddressPhotos",
+  "documentUrl",
+]);
+const ADDRESS_TEXT_FIELDS = new Set(["currentAddress", "permanentAddress"]);
+
+function getViewUrl(field: string, value: unknown): string | null {
+  if (!PHOTO_FIELDS.has(field)) return null;
+  if (typeof value !== "string" || !value) return null;
+  if (!value.startsWith("http") && !value.startsWith("/")) return null;
+  return resolveImageUrl(value) ?? value;
+}
+
+function getRouteUrl(
+  field: string,
+  value: unknown,
+  side: "before" | "after",
+  allFields: DocChangeField[],
+): string | null {
+  if (!ADDRESS_TEXT_FIELDS.has(field)) return null;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const prefix = field; // currentAddress | permanentAddress
+  const latEntry = allFields.find((f) => f.field === `${prefix}Lat`);
+  const lngEntry = allFields.find((f) => f.field === `${prefix}Lng`);
+  const lat = latEntry ? (latEntry[side] as number | null) : null;
+  const lng = lngEntry ? (lngEntry[side] as number | null) : null;
+  const dest =
+    lat != null && lng != null
+      ? `${lat},${lng}`
+      : encodeURIComponent(value);
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+}
 
 interface DriverDoc {
   id: string;
@@ -29,6 +186,8 @@ interface Driver {
   aadhaarLast4: string | null;
   licenseNumber: string;
   licenseExpiry: string;
+  dob: string | null;
+  dateOfIssue: string | null;
   vehicleClass: string;
   riskScore: number;
   licenseStatus: string;
@@ -63,6 +222,15 @@ const DOC_TYPES = [
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
 
+function formatDocType(type: string): string {
+  const predefined = DOC_TYPES.find((d) => d.value === type);
+  if (predefined) return predefined.label;
+  return type
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function DriverDetailPage() {
   const { id } = useParams<{ id: string }>();
   const toast = useToast();
@@ -75,6 +243,7 @@ export default function DriverDetailPage() {
   // Upload form
   const [showUpload, setShowUpload] = useState(false);
   const [uploadType, setUploadType] = useState("DL");
+  const [uploadCustomLabel, setUploadCustomLabel] = useState("");
   const [uploadExpiry, setUploadExpiry] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -94,15 +263,36 @@ export default function DriverDetailPage() {
 
   // Document history
   const [historyDocType, setHistoryDocType] = useState<string | null>(null);
-  const [historyData, setHistoryData] = useState<DriverDoc[]>([]);
+  const [historyData, setHistoryData] = useState<DocHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Driver change log
+  const [changeLog, setChangeLog] = useState<DriverChangeEntry[]>([]);
+  const [changeLogLoading, setChangeLogLoading] = useState(false);
+  const fetchChangeLog = useCallback(async () => {
+    setChangeLogLoading(true);
+    try {
+      const res = await driverAPI.getChangeLog(id);
+      setChangeLog(res.data.data || []);
+    } catch { /* ignore */ }
+    finally { setChangeLogLoading(false); }
+  }, [id]);
+  useEffect(() => { fetchChangeLog(); }, [fetchChangeLog]);
 
   // Edit profile modal
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editForm, setEditForm] = useState({
     phone: "", aadhaarLast4: "", bloodGroup: "", fatherName: "", motherName: "",
-    currentAddress: "", permanentAddress: "",
   });
+  const [currentAddr, setCurrentAddr] = useState<AddressValue>({ address: "", lat: null, lng: null });
+  const [permanentAddr, setPermanentAddr] = useState<AddressValue>({ address: "", lat: null, lng: null });
+  const [sameAsCurrent, setSameAsCurrent] = useState(false);
+  const [emergencyContacts, setEmergencyContacts] = useState<EditableEC[]>([]);
+  const [editProfilePhoto, setEditProfilePhoto] = useState<string | null>(null);
+  const [currentAddrPhotos, setCurrentAddrPhotos] = useState<string[]>([]);
+  const [permanentAddrPhotos, setPermanentAddrPhotos] = useState<string[]>([]);
+  const [uploadingProfilePhoto, setUploadingProfilePhoto] = useState(false);
+  const [uploadingAddrPhoto, setUploadingAddrPhoto] = useState<"current" | "permanent" | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
 
   const fetchDriver = useCallback(async () => {
@@ -126,19 +316,107 @@ export default function DriverDetailPage() {
       bloodGroup: driver.bloodGroup || "",
       fatherName: driver.fatherName || "",
       motherName: driver.motherName || "",
-      currentAddress: driver.currentAddress || "",
-      permanentAddress: driver.permanentAddress || "",
     });
+    setCurrentAddr({
+      address: driver.currentAddress || "",
+      lat: driver.currentAddressLat ?? null,
+      lng: driver.currentAddressLng ?? null,
+    });
+    setPermanentAddr({
+      address: driver.permanentAddress || "",
+      lat: driver.permanentAddressLat ?? null,
+      lng: driver.permanentAddressLng ?? null,
+    });
+    setSameAsCurrent(false);
+    setEmergencyContacts(
+      driver.emergencyContacts && driver.emergencyContacts.length > 0
+        ? driver.emergencyContacts.map((ec) => ({ name: ec.name, relation: ec.relation, phone: ec.phone }))
+        : [{ name: "", relation: "", phone: "" }],
+    );
+    setEditProfilePhoto(driver.profilePhoto || null);
+    setCurrentAddrPhotos(driver.currentAddressPhotos || []);
+    setPermanentAddrPhotos(driver.permanentAddressPhotos || []);
     setShowEditProfile(true);
   };
 
+  const updateEC = (index: number, field: keyof EditableEC, value: string) => {
+    setEmergencyContacts((prev) => prev.map((ec, i) => (i === index ? { ...ec, [field]: value } : ec)));
+  };
+  const addEC = () => {
+    if (emergencyContacts.length >= 10) return;
+    setEmergencyContacts([...emergencyContacts, { name: "", relation: "", phone: "" }]);
+  };
+  const removeEC = (index: number) => {
+    setEmergencyContacts(emergencyContacts.filter((_, i) => i !== index));
+  };
+
+  const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingProfilePhoto(true);
+    try {
+      const res = await driverAPI.uploadProfilePhoto(id, file);
+      setEditProfilePhoto(res.data.data.profilePhoto);
+      toast.success("Photo uploaded");
+    } catch {
+      toast.error("Upload failed");
+    } finally {
+      setUploadingProfilePhoto(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleAddrPhotoUpload = async (type: "current" | "permanent", e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAddrPhoto(type);
+    try {
+      const res = await driverAPI.uploadAddressPhoto(id, type, file);
+      if (type === "current") setCurrentAddrPhotos(res.data.data.photos);
+      else setPermanentAddrPhotos(res.data.data.photos);
+      toast.success("Photo uploaded");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error("Upload failed", msg);
+    } finally {
+      setUploadingAddrPhoto(null);
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveAddrPhoto = async (type: "current" | "permanent", url: string) => {
+    try {
+      const res = await driverAPI.deleteAddressPhoto(id, type, url);
+      if (type === "current") setCurrentAddrPhotos(res.data.data.photos);
+      else setPermanentAddrPhotos(res.data.data.photos);
+    } catch {
+      toast.error("Remove failed");
+    }
+  };
+
   const handleSaveProfile = async () => {
+    const finalPermanent = sameAsCurrent ? currentAddr : permanentAddr;
+    const cleanECs = emergencyContacts
+      .filter((ec) => ec.name.trim() && ec.relation.trim() && ec.phone.trim())
+      .map((ec) => ({ name: ec.name.trim(), relation: ec.relation.trim(), phone: ec.phone.trim() }));
+
     setSavingProfile(true);
     try {
-      await driverAPI.update(id, editForm);
+      await driverAPI.update(id, {
+        ...editForm,
+        currentAddress: currentAddr.address || null,
+        currentAddressLat: currentAddr.lat,
+        currentAddressLng: currentAddr.lng,
+        permanentAddress: finalPermanent.address || null,
+        permanentAddressLat: finalPermanent.lat,
+        permanentAddressLng: finalPermanent.lng,
+        emergencyContacts: cleanECs.length > 0 ? cleanECs : null,
+        profilePhoto: editProfilePhoto,
+      });
       setShowEditProfile(false);
       toast.success("Profile Updated", "Driver details saved successfully");
       fetchDriver();
+      fetchChangeLog();
     } catch (err) {
       console.error(err);
       toast.error("Update Failed", "Could not save driver details");
@@ -151,10 +429,12 @@ export default function DriverDetailPage() {
     e.preventDefault();
     if (!uploadFile) { setUploadError("File is required"); return; }
     if (!uploadLifetime && !uploadExpiry) { setUploadError("Expiry date is required (or select Lifetime)"); return; }
+    const finalType = uploadType === "OTHER" ? uploadCustomLabel.trim() : uploadType;
+    if (!finalType) { setUploadError("Please enter a document name"); return; }
     setUploading(true); setUploadError("");
     try {
-      await driverAPI.uploadDocument(id, uploadFile, uploadType, uploadLifetime ? undefined : uploadExpiry, uploadLifetime);
-      setShowUpload(false); setUploadFile(null); setUploadExpiry(""); setUploadLifetime(false);
+      await driverAPI.uploadDocument(id, uploadFile, finalType, uploadLifetime ? undefined : uploadExpiry, uploadLifetime);
+      setShowUpload(false); setUploadFile(null); setUploadExpiry(""); setUploadLifetime(false); setUploadCustomLabel("");
       toast.success("Document Uploaded", "Driver document uploaded successfully");
       fetchDriver();
     } catch (err: unknown) {
@@ -350,12 +630,17 @@ export default function DriverDetailPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1">
                 <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Document Type</label>
-                <select value={uploadType} onChange={(e) => setUploadType(e.target.value)} className={inputClass}>
+                <select value={uploadType} onChange={(e) => { setUploadType(e.target.value); if (e.target.value !== "OTHER") setUploadCustomLabel(""); }} className={inputClass}>
                   {DOC_TYPES.map((dt) => {
                     const exists = driver.documents.some((d) => d.type === dt.value);
                     return <option key={dt.value} value={dt.value}>{dt.label}{exists ? " (replace)" : ""}</option>;
                   })}
+                  <option value="OTHER">Other / Custom…</option>
                 </select>
+                {uploadType === "OTHER" && (
+                  <input type="text" placeholder="e.g. Trade License, NOC" value={uploadCustomLabel} onChange={(e) => setUploadCustomLabel(e.target.value)} maxLength={60}
+                    className={`${inputClass} mt-2`} />
+                )}
               </div>
               {!uploadLifetime && (
                 <div className="flex-1">
@@ -411,6 +696,8 @@ export default function DriverDetailPage() {
               <InfoRow icon="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" label="Blood Group" value={driver.bloodGroup || "Not provided"} highlight={!!driver.bloodGroup} />
               <InfoRow icon="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5H4.5a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" label="License" value={driver.licenseNumber} />
               <InfoRow icon="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0H6.375" label="Vehicle Class" value={driver.vehicleClass} />
+              <InfoRow icon="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" label="Date of Birth" value={driver.dob ? new Date(driver.dob).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Not available"} />
+              <InfoRow icon="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25" label="Date of Initial Issue" value={driver.dateOfIssue ? new Date(driver.dateOfIssue).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Not available"} />
             </div>
           </div>
 
@@ -487,7 +774,7 @@ export default function DriverDetailPage() {
                   {driver.documents.map((doc) => {
                     const docExpDays = doc.expiryDate ? Math.ceil((new Date(doc.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
                     const docStatus = docExpDays === null ? "GREEN" : docExpDays > 30 ? "GREEN" : docExpDays > 7 ? "YELLOW" : docExpDays > 0 ? "ORANGE" : "RED";
-                    const docLabel = DOC_TYPES.find((d) => d.value === doc.type)?.label || doc.type;
+                    const docLabel = formatDocType(doc.type);
                     const statusBg = docStatus === "GREEN" ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/20 dark:bg-emerald-500/5"
                       : docStatus === "YELLOW" ? "border-yellow-200 bg-yellow-50/50 dark:border-yellow-500/20 dark:bg-yellow-500/5"
                       : docStatus === "ORANGE" ? "border-orange-200 bg-orange-50/50 dark:border-orange-500/20 dark:bg-orange-500/5"
@@ -564,7 +851,7 @@ export default function DriverDetailPage() {
                 <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                      {DOC_TYPES.find((d) => d.value === historyDocType)?.label || historyDocType} History
+                      {formatDocType(historyDocType)} History
                     </h4>
                     <button onClick={() => setHistoryDocType(null)} className="text-xs text-gray-400 hover:text-gray-600">&times; Close</button>
                   </div>
@@ -573,27 +860,48 @@ export default function DriverDetailPage() {
                   ) : historyData.length === 0 ? (
                     <div className="py-4 text-center text-xs text-gray-400">No history found</div>
                   ) : (
-                    <div className="space-y-2">
+                    <ol className="relative border-l border-gray-200 dark:border-gray-700 ml-2 space-y-4">
                       {historyData.map((h) => (
-                        <div key={h.id} className={`flex items-center justify-between p-3 rounded-xl text-xs ${h.isActive ? "bg-emerald-50 border border-emerald-200 dark:bg-emerald-500/5 dark:border-emerald-500/20" : "bg-gray-50 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700"}`}>
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-2 h-2 rounded-full ${h.isActive ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`} />
-                            <div>
-                              <span className="font-semibold text-gray-800 dark:text-gray-200">
-                                {h.expiryDate ? new Date(h.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Lifetime"}
-                              </span>
-                              {h.isActive && <span className="ml-1.5 text-[8px] font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-400 px-1.5 py-0.5 rounded-md">CURRENT</span>}
-                              <p className="text-gray-400 mt-0.5">Created {new Date(h.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>
-                              {h.archivedAt && <p className="text-gray-400">Archived {new Date(h.archivedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p>}
+                        <li key={h.id} className="ml-5">
+                          <span className={`absolute -left-[5px] w-2.5 h-2.5 rounded-full mt-1.5 ${h.isActive ? "bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-500/30" : "bg-gray-300 dark:bg-gray-600"}`} />
+                          <div className="rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700 p-3">
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${CHANGE_TYPE_COLORS[h.changeType]}`}>
+                                  {CHANGE_TYPE_LABELS[h.changeType]}
+                                </span>
+                                {h.isActive && h.changeType !== "ARCHIVED" && (
+                                  <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400 px-1.5 py-0.5 rounded-md border border-emerald-100 dark:border-emerald-500/20">CURRENT</span>
+                                )}
+                              </div>
+                              <time className="text-[10px] text-gray-400 whitespace-nowrap">
+                                {new Date(h.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </time>
                             </div>
+                            {h.fields.length > 0 && (
+                              <ul className="space-y-0.5 text-[11px] text-gray-600 dark:text-gray-400">
+                                {h.fields.map((f, i) => (
+                                  <li key={i} className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-gray-700 dark:text-gray-300">{FIELD_LABELS[f.field] ?? f.field}:</span>
+                                    <span className="line-through text-gray-400">{formatDocFieldValue(f.before)}</span>
+                                    <ChevronRight className="w-3 h-3 text-gray-300" />
+                                    <span className="text-gray-800 dark:text-gray-200">{formatDocFieldValue(f.after)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {h.note && <p className="mt-1 text-[11px] italic text-gray-500 dark:text-gray-400">{h.note}</p>}
+                            {h.changedBy && <p className="text-[10px] text-gray-400 mt-1">by {h.changedBy}</p>}
+                            {h.documentUrl && (
+                              <a href={resolveImageUrl(h.documentUrl) ?? ""} target="_blank" rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 mt-1.5 text-[11px] text-yellow-600 hover:text-yellow-700 dark:text-yellow-400 font-medium">
+                                <ExternalLink className="w-3 h-3" /> View file
+                              </a>
+                            )}
                           </div>
-                          {h.documentUrl && (
-                            <a href={(resolveImageUrl(h.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
-                              className="text-yellow-600 hover:text-yellow-700 dark:text-yellow-400 font-medium">View</a>
-                          )}
-                        </div>
+                        </li>
                       ))}
-                    </div>
+                    </ol>
                   )}
                 </div>
               </div>
@@ -662,6 +970,93 @@ export default function DriverDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Activity Log */}
+          <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Clock className="w-4 h-4 text-yellow-500" />
+                Activity Log
+              </h3>
+              {changeLog.length > 0 && (
+                <span className="text-[11px] text-gray-400">{changeLog.length} {changeLog.length === 1 ? "entry" : "entries"}</span>
+              )}
+            </div>
+            <div className="p-6">
+              {changeLogLoading ? (
+                <p className="text-xs text-gray-400 text-center py-4">Loading…</p>
+              ) : changeLog.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No edits recorded yet. Changes to profile, addresses, photos, and emergency contacts will appear here.</p>
+              ) : (
+                <ol className="relative border-l border-gray-200 dark:border-gray-700 ml-2 space-y-4">
+                  {changeLog.map((entry) => (
+                    <li key={entry.id} className="ml-5">
+                      <span className={`absolute -left-[5px] w-2.5 h-2.5 rounded-full mt-1.5 ${entry.actorRole === "ADMIN" ? "bg-yellow-400 ring-2 ring-yellow-100 dark:ring-yellow-500/30" : "bg-blue-400 ring-2 ring-blue-100 dark:ring-blue-500/30"}`} />
+                      <div className="rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700 p-3">
+                        <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${DRIVER_CHANGE_COLORS[entry.changeType]}`}>
+                              {DRIVER_CHANGE_LABELS[entry.changeType]}
+                            </span>
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${entry.actorRole === "ADMIN" ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400" : "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"}`}>
+                              {entry.actorRole === "ADMIN" ? "Admin" : "Driver"}
+                            </span>
+                            <span className="text-[11px] text-gray-600 dark:text-gray-400">{entry.actor}</span>
+                          </div>
+                          <time className="text-[10px] text-gray-400 whitespace-nowrap">
+                            {new Date(entry.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </time>
+                        </div>
+                        {entry.fields.length > 0 && (
+                          <ul className="space-y-0.5 text-[11px] text-gray-600 dark:text-gray-400">
+                            {entry.fields.map((f, i) => {
+                              const beforeView = getViewUrl(f.field, f.before);
+                              const afterView = getViewUrl(f.field, f.after);
+                              const beforeRoute = getRouteUrl(f.field, f.before, "before", entry.fields);
+                              const afterRoute = getRouteUrl(f.field, f.after, "after", entry.fields);
+                              return (
+                                <li key={i} className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-gray-700 dark:text-gray-300">{FIELD_LABELS[f.field] ?? f.field}:</span>
+                                  <span className="line-through text-gray-400">{formatChangeValue(f.before)}</span>
+                                  {beforeView && (
+                                    <a href={beforeView} target="_blank" rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-0.5 text-yellow-600 dark:text-yellow-400 hover:underline font-medium">
+                                      <ExternalLink className="w-3 h-3" />View
+                                    </a>
+                                  )}
+                                  {beforeRoute && (
+                                    <a href={beforeRoute} target="_blank" rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                                      <Navigation className="w-3 h-3" />Route
+                                    </a>
+                                  )}
+                                  <ChevronRight className="w-3 h-3 text-gray-300" />
+                                  <span className="text-gray-800 dark:text-gray-200">{formatChangeValue(f.after)}</span>
+                                  {afterView && (
+                                    <a href={afterView} target="_blank" rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-0.5 text-yellow-600 dark:text-yellow-400 hover:underline font-medium">
+                                      <ExternalLink className="w-3 h-3" />View
+                                    </a>
+                                  )}
+                                  {afterRoute && (
+                                    <a href={afterRoute} target="_blank" rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                                      <Navigation className="w-3 h-3" />Route
+                                    </a>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                        {entry.note && <p className="mt-1 text-[11px] italic text-gray-500 dark:text-gray-400">{entry.note}</p>}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -723,21 +1118,151 @@ export default function DriverDetailPage() {
 
               <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent dark:via-gray-700" />
 
-              {/* Address */}
+              {/* Profile Photo */}
+              <div>
+                <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-yellow-100 dark:bg-yellow-500/20 flex items-center justify-center"><Camera className="w-3 h-3 text-yellow-600" /></span>
+                  Profile Photo
+                </h4>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-xl overflow-hidden border-2 border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+                    {editProfilePhoto ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={resolveImageUrl(editProfilePhoto) ?? undefined} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-8 h-8 text-gray-300" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <label className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition-all">
+                      <Upload className="w-3.5 h-3.5" />
+                      {uploadingProfilePhoto ? "Uploading…" : editProfilePhoto ? "Replace Photo" : "Upload Photo"}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleProfilePhotoUpload} disabled={uploadingProfilePhoto} />
+                    </label>
+                    {editProfilePhoto && (
+                      <button type="button" onClick={() => setEditProfilePhoto(null)}
+                        className="ml-2 inline-flex items-center gap-1 h-10 px-3 rounded-xl text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all">
+                        <Trash2 className="w-3.5 h-3.5" /> Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent dark:via-gray-700" />
+
+              {/* Current Address */}
               <div>
                 <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-md bg-yellow-100 dark:bg-yellow-500/20 flex items-center justify-center"><MapPin className="w-3 h-3 text-yellow-600" /></span>
-                  Address
+                  Current Address
                 </h4>
-                <div className="space-y-4">
-                  <div>
-                    <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Address</label>
-                    <textarea placeholder="Door No, Street, Area, City, State - Pin Code" rows={2} value={editForm.currentAddress} onChange={(e) => setEditForm({ ...editForm, currentAddress: e.target.value })} className={`${inputClass} h-auto py-2.5`} />
+                <AddressMapPicker label="" value={currentAddr} onChange={setCurrentAddr} />
+                {/* Current address photos */}
+                <div className="mt-3">
+                  <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Proof Photos ({currentAddrPhotos.length}/5)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {currentAddrPhotos.map((url) => (
+                      <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={resolveImageUrl(url) ?? undefined} alt="Address proof" className="w-full h-full object-cover" />
+                        <button type="button" onClick={() => handleRemoveAddrPhoto("current", url)}
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {currentAddrPhotos.length < 5 && (
+                      <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 hover:border-yellow-400 hover:text-yellow-500 cursor-pointer transition-all">
+                        {uploadingAddrPhoto === "current" ? (
+                          <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                        ) : (
+                          <><Camera className="w-5 h-5" /><span className="text-[9px] mt-0.5 font-medium">Add</span></>
+                        )}
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleAddrPhotoUpload("current", e)} disabled={uploadingAddrPhoto !== null} />
+                      </label>
+                    )}
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Permanent Address</label>
-                    <textarea placeholder="Door No, Street, Area, City, State - Pin Code" rows={2} value={editForm.permanentAddress} onChange={(e) => setEditForm({ ...editForm, permanentAddress: e.target.value })} className={`${inputClass} h-auto py-2.5`} />
+                </div>
+              </div>
+
+              {/* Permanent Address */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-yellow-100 dark:bg-yellow-500/20 flex items-center justify-center"><MapPin className="w-3 h-3 text-yellow-600" /></span>
+                    Permanent Address
+                  </h4>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={sameAsCurrent} onChange={(e) => setSameAsCurrent(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-yellow-500 focus:ring-yellow-400" />
+                    <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Same as current</span>
+                  </label>
+                </div>
+                <AddressMapPicker
+                  label=""
+                  value={sameAsCurrent ? currentAddr : permanentAddr}
+                  onChange={setPermanentAddr}
+                  disabled={sameAsCurrent}
+                />
+                {!sameAsCurrent && (
+                  <div className="mt-3">
+                    <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Proof Photos ({permanentAddrPhotos.length}/5)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {permanentAddrPhotos.map((url) => (
+                        <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={resolveImageUrl(url) ?? undefined} alt="Address proof" className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => handleRemoveAddrPhoto("permanent", url)}
+                            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {permanentAddrPhotos.length < 5 && (
+                        <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 hover:border-yellow-400 hover:text-yellow-500 cursor-pointer transition-all">
+                          {uploadingAddrPhoto === "permanent" ? (
+                            <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                          ) : (
+                            <><Camera className="w-5 h-5" /><span className="text-[9px] mt-0.5 font-medium">Add</span></>
+                          )}
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleAddrPhotoUpload("permanent", e)} disabled={uploadingAddrPhoto !== null} />
+                        </label>
+                      )}
+                    </div>
                   </div>
+                )}
+              </div>
+
+              <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent dark:via-gray-700" />
+
+              {/* Emergency Contacts */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-yellow-100 dark:bg-yellow-500/20 flex items-center justify-center"><Phone className="w-3 h-3 text-yellow-600" /></span>
+                    Emergency Contacts
+                  </h4>
+                  <button type="button" onClick={addEC} disabled={emergencyContacts.length >= 10}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-yellow-600 hover:text-yellow-700 disabled:opacity-40">
+                    <Plus className="w-3 h-3" /> Add
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {emergencyContacts.map((ec, i) => (
+                    <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+                      <input type="text" placeholder="Name" value={ec.name} onChange={(e) => updateEC(i, "name", e.target.value)}
+                        className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/10 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                      <input type="text" placeholder="Relation" value={ec.relation} onChange={(e) => updateEC(i, "relation", e.target.value)}
+                        className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/10 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                      <input type="tel" placeholder="Phone" maxLength={10} value={ec.phone} onChange={(e) => updateEC(i, "phone", e.target.value.replace(/\D/g, ""))}
+                        className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/10 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                      <button type="button" onClick={() => removeEC(i)}
+                        className="w-10 h-10 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center justify-center transition-all">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -762,7 +1287,7 @@ export default function DriverDetailPage() {
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
             <div className="bg-gradient-to-r from-yellow-500 to-yellow-400 px-6 py-5">
               <h3 className="text-lg font-bold text-white">Edit Expiry Date</h3>
-              <p className="text-white/70 text-sm mt-0.5">{DOC_TYPES.find((d) => d.value === driver.documents.find((doc) => doc.id === editingDocExpiry)?.type)?.label || "Document"}</p>
+              <p className="text-white/70 text-sm mt-0.5">{(() => { const t = driver.documents.find((doc) => doc.id === editingDocExpiry)?.type; return t ? formatDocType(t) : "Document"; })()}</p>
             </div>
             <div className="p-6 space-y-5">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -796,7 +1321,7 @@ export default function DriverDetailPage() {
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-500 to-green-500 px-6 py-5">
               <h3 className="text-lg font-bold text-white">Renew Document</h3>
-              <p className="text-white/70 text-sm mt-0.5">{DOC_TYPES.find((d) => d.value === driver.documents.find((doc) => doc.id === renewingDriverDoc)?.type)?.label || "Document"}</p>
+              <p className="text-white/70 text-sm mt-0.5">{(() => { const t = driver.documents.find((doc) => doc.id === renewingDriverDoc)?.type; return t ? formatDocType(t) : "Document"; })()}</p>
             </div>
             <div className="p-6 space-y-5">
               <label className="flex items-center gap-2 cursor-pointer">

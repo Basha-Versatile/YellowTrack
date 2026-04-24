@@ -1,5 +1,27 @@
 import "server-only";
 import { create as createNotification } from "./notification.service";
+import { sendWhatsApp } from "@/lib/whatsapp";
+import * as driverRepo from "../repositories/driver.repository";
+
+async function dispatchWhatsAppToDriver(
+  driverId: string | undefined,
+  body: string,
+): Promise<void> {
+  if (!driverId) return;
+  try {
+    const driver = await driverRepo.findById(driverId);
+    const phone = (driver as Record<string, unknown> | null)?.phone as string | undefined;
+    if (!phone) return;
+    const normalized = phone.startsWith("+") ? phone : `+91${phone}`;
+    await sendWhatsApp({ to: normalized, bodyPreview: body });
+  } catch (err) {
+    // Never let WhatsApp dispatch fail the primary alert
+    console.error(
+      "[alert] WhatsApp dispatch failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
 
 /**
  * Alert triggers — write Notification records + console log.
@@ -53,13 +75,24 @@ export async function triggerDriverAlert(
     : 0;
   const expiryText =
     days <= 0 ? `expired ${Math.abs(days)} days ago` : `expires in ${days} days`;
-  const severity = status === "RED" ? "CRITICAL" : "WARNING";
 
-  const title =
-    status === "RED"
-      ? `License Expired — ${driverName}`
-      : `License Expiring — ${driverName}`;
-  const message = `Driving license (${licenseNumber}) for ${driverName} ${expiryText}.`;
+  let severity: "CRITICAL" | "URGENT" | "WARNING";
+  let title: string;
+  if (status === "RED") {
+    severity = "CRITICAL";
+    title = `License Expired — ${driverName}`;
+  } else if (status === "ORANGE") {
+    severity = "URGENT";
+    title = `⚠ URGENT: License Expiring Soon — ${driverName}`;
+  } else {
+    severity = "WARNING";
+    title = `License Expiring — ${driverName}`;
+  }
+
+  const message =
+    severity === "URGENT"
+      ? `Driving license (${licenseNumber}) for ${driverName} ${expiryText}. Renew immediately — only ${days} day${days === 1 ? "" : "s"} left.`
+      : `Driving license (${licenseNumber}) for ${driverName} ${expiryText}.`;
 
   console.log(`🚨 [${severity}] ${title}`);
 
@@ -69,6 +102,11 @@ export async function triggerDriverAlert(
     message,
     entityId: driverId,
   });
+
+  // Urgent / critical license expiries also fan out to WhatsApp (stubbed until a provider is set up)
+  if (severity !== "WARNING") {
+    await dispatchWhatsAppToDriver(driverId, message);
+  }
 }
 
 export async function triggerDriverDocAlert(
@@ -86,11 +124,25 @@ export async function triggerDriverDocAlert(
   const expiryText =
     days <= 0 ? `expired ${Math.abs(days)} days ago` : `expires in ${days} days`;
 
-  const title =
-    status === "RED"
-      ? `${docType} Expired — ${driverName}`
-      : `${docType} Expiring — ${driverName}`;
-  const message = `${docType} for driver ${driverName} ${expiryText}.`;
+  let severity: "CRITICAL" | "URGENT" | "WARNING";
+  let title: string;
+  if (status === "RED") {
+    severity = "CRITICAL";
+    title = `${docType} Expired — ${driverName}`;
+  } else if (status === "ORANGE") {
+    severity = "URGENT";
+    title = `⚠ URGENT: ${docType} Expiring Soon — ${driverName}`;
+  } else {
+    severity = "WARNING";
+    title = `${docType} Expiring — ${driverName}`;
+  }
+
+  const message =
+    severity === "URGENT"
+      ? `${docType} for driver ${driverName} ${expiryText}. Action required — only ${days} day${days === 1 ? "" : "s"} left before expiry.`
+      : `${docType} for driver ${driverName} ${expiryText}.`;
+
+  console.log(`🚨 [${severity}] ${title}`);
 
   await createNotification({
     type: "DRIVER_DOC_EXPIRY",
@@ -98,6 +150,11 @@ export async function triggerDriverDocAlert(
     message,
     entityId: driverId,
   });
+
+  // Urgent / critical doc expiries also fan out to WhatsApp (stubbed until a provider is set up)
+  if (severity !== "WARNING") {
+    await dispatchWhatsAppToDriver(driverId, message);
+  }
 }
 
 export async function triggerFastagAlert(

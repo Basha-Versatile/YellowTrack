@@ -194,20 +194,36 @@ export default function DriverCompliancePage() {
                 </div>
                 {/* Doc dots */}
                 <div className="hidden sm:flex items-center gap-3">
-                  {/* License */}
-                  <div className="text-center">
-                    <p className={`text-[9px] font-bold ${driver.licenseStatus === "GREEN" ? "text-emerald-600" : driver.licenseStatus === "YELLOW" ? "text-amber-600" : driver.licenseStatus === "ORANGE" ? "text-orange-600" : "text-red-600"}`}>DL</p>
-                    <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${driver.licenseStatus === "GREEN" ? "bg-emerald-500" : driver.licenseStatus === "YELLOW" ? "bg-amber-500" : driver.licenseStatus === "ORANGE" ? "bg-orange-500" : "bg-red-500"}`} />
-                  </div>
-                  {driver.documents.map((doc) => {
-                    const ds = getDocStatus(doc.expiryDate);
+                  {/* License — render either the uploaded DL doc OR the implicit one from driver.licenseExpiry, never both */}
+                  {(() => {
+                    const uploadedDl = driver.documents.find((d) => d.type === "DL");
+                    if (uploadedDl) {
+                      const ds = getDocStatus(uploadedDl.expiryDate);
+                      return (
+                        <div className="text-center">
+                          <p className={`text-[9px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-orange-600" : "text-red-600"}`}>DL</p>
+                          <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${ds.status === "GREEN" ? "bg-emerald-500" : ds.status === "YELLOW" ? "bg-amber-500" : ds.status === "ORANGE" ? "bg-orange-500" : "bg-red-500"}`} />
+                        </div>
+                      );
+                    }
                     return (
-                      <div key={`${doc.type}-${doc.expiryDate}`} className="text-center">
-                        <p className={`text-[9px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-orange-600" : "text-red-600"}`}>{DOC_LABELS[doc.type] || doc.type.slice(0, 3)}</p>
-                        <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${ds.status === "GREEN" ? "bg-emerald-500" : ds.status === "YELLOW" ? "bg-amber-500" : ds.status === "ORANGE" ? "bg-orange-500" : "bg-red-500"}`} />
+                      <div className="text-center">
+                        <p className={`text-[9px] font-bold ${driver.licenseStatus === "GREEN" ? "text-emerald-600" : driver.licenseStatus === "YELLOW" ? "text-amber-600" : driver.licenseStatus === "ORANGE" ? "text-orange-600" : "text-red-600"}`}>DL</p>
+                        <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${driver.licenseStatus === "GREEN" ? "bg-emerald-500" : driver.licenseStatus === "YELLOW" ? "bg-amber-500" : driver.licenseStatus === "ORANGE" ? "bg-orange-500" : "bg-red-500"}`} />
                       </div>
                     );
-                  })}
+                  })()}
+                  {driver.documents
+                    .filter((doc) => doc.type !== "DL")
+                    .map((doc) => {
+                      const ds = getDocStatus(doc.expiryDate);
+                      return (
+                        <div key={`${doc.type}-${doc.expiryDate}`} className="text-center">
+                          <p className={`text-[9px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-orange-600" : "text-red-600"}`}>{DOC_LABELS[doc.type] || doc.type.slice(0, 3)}</p>
+                          <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${ds.status === "GREEN" ? "bg-emerald-500" : ds.status === "YELLOW" ? "bg-amber-500" : ds.status === "ORANGE" ? "bg-orange-500" : "bg-red-500"}`} />
+                        </div>
+                      );
+                    })}
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
               </Link>
@@ -219,8 +235,11 @@ export default function DriverCompliancePage() {
           {paginatedItems.map((driver) => {
             const grad = driver.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : driver.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : driver.overallStatus === "ORANGE" ? "from-orange-500 to-orange-600" : "from-red-500 to-rose-600";
             const licenseDays = Math.ceil((new Date(driver.licenseExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+            const hasUploadedDl = driver.documents.some((d) => d.type === "DL");
             const allItems = [
-              { type: "DL", status: driver.licenseStatus, days: licenseDays },
+              ...(hasUploadedDl
+                ? []
+                : [{ type: "DL", status: driver.licenseStatus, days: licenseDays }]),
               ...driver.documents.map((d) => ({ type: d.type, ...getDocStatus(d.expiryDate) })),
             ];
             const greenCount = allItems.filter((i) => i.status === "GREEN").length;

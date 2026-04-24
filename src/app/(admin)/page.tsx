@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { vehicleAPI, driverAPI, notificationAPI } from "@/lib/api";
 import Link from "next/link";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
-import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, ShieldCheck, CreditCard, Bell, FileText, type LucideIcon } from "lucide-react";
+import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, type LucideIcon } from "lucide-react";
 
 interface DashboardStats {
   totalVehicles: number;
@@ -24,7 +24,7 @@ interface DriverStats {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
-  const [unreadNotifs, setUnreadNotifs] = useState(0);
+  // const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,7 +33,8 @@ export default function DashboardPage() {
       driverAPI.getStats().then((r) => r.data.data).catch(() => null),
       notificationAPI.getUnreadCount().then((r) => r.data.data.count).catch(() => 0),
     ])
-      .then(([s, ds, n]) => { setStats(s); setDriverStats(ds); setUnreadNotifs(n); })
+      .then(([s, ds]) => { setStats(s); setDriverStats(ds); // setUnreadNotifs(n);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -46,9 +47,15 @@ export default function DashboardPage() {
 
   const dl = driverStats?.license || { green: 0, yellow: 0, orange: 0, red: 0 };
   const dd = driverStats?.documents || { green: 0, yellow: 0, orange: 0, red: 0 };
-  const totalLic = dl.green + dl.yellow + dl.orange + dl.red;
-  const totalDDocs = dd.green + dd.yellow + dd.orange + dd.red;
-  const dlPct = totalLic > 0 ? Math.round((dl.green / totalLic) * 100) : 0;
+  // Treat license as just another driver document — merge for the dashboard view.
+  const dAll = {
+    green: dl.green + dd.green,
+    yellow: dl.yellow + dd.yellow,
+    orange: dl.orange + dd.orange,
+    red: dl.red + dd.red,
+  };
+  const totalDAll = dAll.green + dAll.yellow + dAll.orange + dAll.red;
+  const dlPct = totalDAll > 0 ? Math.round((dAll.green / totalDAll) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -115,25 +122,12 @@ export default function DashboardPage() {
           </div>
 
           <div className="p-6">
-            {/* Stacked bar */}
-            <div className="h-3 rounded-full bg-gray-100 dark:bg-gray-800 flex overflow-hidden mb-6">
-              {totalVDocs > 0 && (
-                <>
-                  {vc.green > 0 && <div className="bg-emerald-500 transition-all duration-700" style={{ width: `${(vc.green / totalVDocs) * 100}%` }} />}
-                  {vc.yellow > 0 && <div className="bg-amber-400 transition-all duration-700" style={{ width: `${(vc.yellow / totalVDocs) * 100}%` }} />}
-                  {vc.orange > 0 && <div className="bg-orange-500 transition-all duration-700" style={{ width: `${(vc.orange / totalVDocs) * 100}%` }} />}
-                  {vc.red > 0 && <div className="bg-red-500 transition-all duration-700" style={{ width: `${(vc.red / totalVDocs) * 100}%` }} />}
-                </>
-              )}
-            </div>
-
-            {/* Status grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <StatusTile label="Valid" sublabel="> 30 days" count={vc.green} dotColor="bg-emerald-500" bgColor="bg-emerald-50 dark:bg-emerald-500/10" textColor="text-emerald-700 dark:text-emerald-400" />
-              <StatusTile label="Expiring" sublabel="≤ 30 days" count={vc.yellow} dotColor="bg-amber-400" bgColor="bg-amber-50 dark:bg-amber-500/10" textColor="text-amber-700 dark:text-amber-400" />
-              <StatusTile label="Critical" sublabel="≤ 7 days" count={vc.orange} dotColor="bg-orange-500" bgColor="bg-orange-50 dark:bg-orange-500/10" textColor="text-orange-700 dark:text-orange-400" />
-              <StatusTile label="Expired" sublabel="≤ 0 days" count={vc.red} dotColor="bg-red-500" bgColor="bg-red-50 dark:bg-red-500/10" textColor="text-red-700 dark:text-red-400" />
-            </div>
+            <ComplianceSection
+              icon={<FileText className="w-3.5 h-3.5" />}
+              title="Document Status"
+              counts={vc}
+              total={totalVDocs}
+            />
 
             <Link href="/compliance" className="mt-5 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
               View Vehicle Compliance
@@ -144,74 +138,35 @@ export default function DashboardPage() {
 
         {/* Driver Compliance */}
         <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-          <div className="relative bg-gradient-to-r from-gray-900 via-gray-800 to-gray-950 px-6 py-5 overflow-hidden">
-            <div className="absolute top-3 right-6 w-24 h-24 rounded-full border border-yellow-500/10" />
-            <div className="absolute -bottom-4 right-20 w-20 h-20 rounded-full border border-yellow-500/5" />
+          <div className="relative bg-gradient-to-r from-yellow-500 via-yellow-400 to-amber-400 px-6 py-5 overflow-hidden">
+            <div className="absolute top-3 right-6 w-24 h-24 rounded-full border border-white/10" />
+            <div className="absolute -bottom-4 right-20 w-20 h-20 rounded-full border border-white/5" />
             <div className="relative z-10 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-yellow-500/20 backdrop-blur-sm flex items-center justify-center border border-yellow-500/20">
-                  <Users className="w-5.5 h-5.5 text-yellow-400" />
+                <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
+                  <Users className="w-5.5 h-5.5 text-white" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white">Driver Compliance</h3>
-                  <p className="text-white/50 text-xs">{totalLic} licenses &middot; {totalDDocs} documents</p>
+                  <p className="text-white/70 text-xs">{totalDAll} documents across {driverStats?.totalDrivers || 0} drivers</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-black text-yellow-400">{dlPct}%</p>
-                <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium">License OK</p>
+                <p className="text-3xl font-black text-white">{dlPct}%</p>
+                <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium">Compliant</p>
               </div>
             </div>
           </div>
 
           <div className="p-6">
-            {/* License Section */}
-            <div className="mb-6">
-              <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <CreditCard className="w-3.5 h-3.5" />
-                License Status
-              </h4>
-              <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 flex overflow-hidden mb-4">
-                {totalLic > 0 && (
-                  <>
-                    {dl.green > 0 && <div className="bg-emerald-500 transition-all duration-700" style={{ width: `${(dl.green / totalLic) * 100}%` }} />}
-                    {dl.yellow > 0 && <div className="bg-amber-400 transition-all duration-700" style={{ width: `${(dl.yellow / totalLic) * 100}%` }} />}
-                    {dl.orange > 0 && <div className="bg-orange-500 transition-all duration-700" style={{ width: `${(dl.orange / totalLic) * 100}%` }} />}
-                    {dl.red > 0 && <div className="bg-red-500 transition-all duration-700" style={{ width: `${(dl.red / totalLic) * 100}%` }} />}
-                  </>
-                )}
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                <MiniStat count={dl.green} label="Valid" dotColor="bg-emerald-500" />
-                <MiniStat count={dl.yellow} label="Expiring" dotColor="bg-amber-400" />
-                <MiniStat count={dl.orange} label="Critical" dotColor="bg-orange-500" />
-                <MiniStat count={dl.red} label="Expired" dotColor="bg-red-500" />
-              </div>
-            </div>
+            <ComplianceSection
+              icon={<FileText className="w-3.5 h-3.5" />}
+              title="Document Status"
+              counts={dAll}
+              total={totalDAll}
+            />
 
-            {/* Document Section */}
-            {totalDDocs > 0 && (
-              <div className="pt-5 border-t border-gray-100 dark:border-gray-800 mb-5">
-                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <FileText className="w-3.5 h-3.5" />
-                  Document Status
-                </h4>
-                <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 flex overflow-hidden mb-4">
-                  {dd.green > 0 && <div className="bg-emerald-500 transition-all duration-700" style={{ width: `${(dd.green / totalDDocs) * 100}%` }} />}
-                  {dd.yellow > 0 && <div className="bg-amber-400 transition-all duration-700" style={{ width: `${(dd.yellow / totalDDocs) * 100}%` }} />}
-                  {dd.orange > 0 && <div className="bg-orange-500 transition-all duration-700" style={{ width: `${(dd.orange / totalDDocs) * 100}%` }} />}
-                  {dd.red > 0 && <div className="bg-red-500 transition-all duration-700" style={{ width: `${(dd.red / totalDDocs) * 100}%` }} />}
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  <MiniStat count={dd.green} label="Valid" dotColor="bg-emerald-500" />
-                  <MiniStat count={dd.yellow} label="Expiring" dotColor="bg-amber-400" />
-                  <MiniStat count={dd.orange} label="Critical" dotColor="bg-orange-500" />
-                  <MiniStat count={dd.red} label="Expired" dotColor="bg-red-500" />
-                </div>
-              </div>
-            )}
-
-            <Link href="/drivers/compliance" className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
+            <Link href="/drivers/compliance" className="mt-5 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
               View Driver Compliance
               <ChevronRight className="w-4 h-4" />
             </Link>
@@ -220,7 +175,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── QUICK ACTIONS ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/*<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {([
           { href: "/vehicles", Icon: Truck, label: "All Vehicles", color: "from-yellow-400 to-yellow-500", shadow: "shadow-yellow-500/20" },
           { href: "/drivers", Icon: Users, label: "All Drivers", color: "from-blue-400 to-blue-500", shadow: "shadow-blue-500/20" },
@@ -240,7 +195,7 @@ export default function DashboardPage() {
             )}
           </Link>
         ))}
-      </div>
+      </div>*/}
     </div>
   );
 }
@@ -302,14 +257,41 @@ function StatusTile({ label, sublabel, count, dotColor, bgColor, textColor }: { 
   );
 }
 
-function MiniStat({ count, label, dotColor }: { count: number; label: string; dotColor: string }) {
+type ComplianceCounts = { green: number; yellow: number; orange: number; red: number };
+
+function ComplianceSection({
+  icon,
+  title,
+  counts,
+  total,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  counts: ComplianceCounts;
+  total: number;
+}) {
   return (
-    <div className="text-center py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-      <div className="flex items-center justify-center gap-1 mb-1">
-        <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-        <span className="text-[10px] text-gray-400 font-medium">{label}</span>
+    <div>
+      <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+        {icon}
+        {title}
+      </h4>
+      <div className="h-3 rounded-full bg-gray-100 dark:bg-gray-800 flex overflow-hidden mb-6">
+        {total > 0 && (
+          <>
+            {counts.green > 0 && <div className="bg-emerald-500 transition-all duration-700" style={{ width: `${(counts.green / total) * 100}%` }} />}
+            {counts.yellow > 0 && <div className="bg-amber-400 transition-all duration-700" style={{ width: `${(counts.yellow / total) * 100}%` }} />}
+            {counts.orange > 0 && <div className="bg-orange-500 transition-all duration-700" style={{ width: `${(counts.orange / total) * 100}%` }} />}
+            {counts.red > 0 && <div className="bg-red-500 transition-all duration-700" style={{ width: `${(counts.red / total) * 100}%` }} />}
+          </>
+        )}
       </div>
-      <p className="text-lg font-black text-gray-800 dark:text-gray-200">{count}</p>
+      <div className="grid grid-cols-2 gap-3">
+        <StatusTile label="Valid" sublabel="> 30 days" count={counts.green} dotColor="bg-emerald-500" bgColor="bg-emerald-50 dark:bg-emerald-500/10" textColor="text-emerald-700 dark:text-emerald-400" />
+        <StatusTile label="Expiring" sublabel="≤ 30 days" count={counts.yellow} dotColor="bg-amber-400" bgColor="bg-amber-50 dark:bg-amber-500/10" textColor="text-amber-700 dark:text-amber-400" />
+        <StatusTile label="Critical" sublabel="≤ 7 days" count={counts.orange} dotColor="bg-orange-500" bgColor="bg-orange-50 dark:bg-orange-500/10" textColor="text-orange-700 dark:text-orange-400" />
+        <StatusTile label="Expired" sublabel="≤ 0 days" count={counts.red} dotColor="bg-red-500" bgColor="bg-red-50 dark:bg-red-500/10" textColor="text-red-700 dark:text-red-400" />
+      </div>
     </div>
   );
 }
