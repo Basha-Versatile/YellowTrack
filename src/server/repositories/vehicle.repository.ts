@@ -15,6 +15,7 @@ export type VehicleListQuery = {
   search?: string;
   status?: string;
   groupId?: string;
+  vehicleUsage?: "PRIVATE" | "COMMERCIAL";
 };
 
 type Paginated<T> = {
@@ -36,6 +37,7 @@ export async function findAll({
   search,
   status,
   groupId,
+  vehicleUsage,
 }: VehicleListQuery): Promise<Paginated<EnrichedVehicle>> {
   const skip = (page - 1) * limit;
   const filter: Record<string, unknown> = {};
@@ -48,6 +50,7 @@ export async function findAll({
     ];
   }
   if (groupId) filter.groupId = groupId;
+  if (vehicleUsage) filter.vehicleUsage = vehicleUsage;
 
   if (status) {
     const vehicleIdsWithStatus = await ComplianceDocument.find({

@@ -1,7 +1,21 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { vehicleAPI, vehicleGroupAPI, complianceAPI, fastagAPI } from "@/lib/api";
+
+// Three.js touches `window` on import — load client-only and skip SSR.
+const TyreDiagram3D = dynamic(
+  () => import("@/components/vehicles/TyreDiagram3D"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/40 flex items-center justify-center text-xs text-gray-400" style={{ height: 320 }}>
+        Loading 3D viewer…
+      </div>
+    ),
+  },
+);
 import { useToast } from "@/context/ToastContext";
 import Badge from "@/components/ui/badge/Badge";
 import { VehicleDetailSkeleton } from "@/components/ui/Skeleton";
@@ -13,6 +27,7 @@ import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/modal";
+import { pickValidatedFile, pickValidatedFiles } from "@/lib/file-validation";
 
 interface ComplianceDoc {
   id: string;
@@ -73,23 +88,21 @@ interface Vehicle {
   gvw: number;
   seatingCapacity: number;
   permitType: string;
+  vehicleUsage: "PRIVATE" | "COMMERCIAL" | null;
   qrCodeUrl: string | null;
   invoiceUrl: string | null;
   images: string[];
   profileImage: string | null;
   overallStatus: string;
   pendingChallanAmount: number;
-  group?: { id: string; name: string; icon: string; color?: string; tyreCount?: number } | null;
+  tyreCount?: number | null;
+  group?: { id: string; name: string; icon: string; color?: string } | null;
   complianceDocuments: ComplianceDoc[];
   challans: Challan[];
   tyres: Array<{
     id: string;
     position: string;
-    brand: string | null;
     size: string | null;
-    installedAt: string | null;
-    kmAtInstall: number | null;
-    condition: string;
   }>;
   activeDriver: { id: string; name: string; licenseNumber: string } | null;
   driverMappings: Array<{
@@ -139,12 +152,6 @@ const TYRE_POSITION_LABELS: Record<string, string> = {
   SPARE: "Spare",
 };
 
-const CONDITION_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  GOOD: { bg: "bg-emerald-100 dark:bg-emerald-500/20", text: "text-emerald-700 dark:text-emerald-400", label: "Good" },
-  AVERAGE: { bg: "bg-amber-100 dark:bg-amber-500/20", text: "text-amber-700 dark:text-amber-400", label: "Average" },
-  REPLACE: { bg: "bg-red-100 dark:bg-red-500/20", text: "text-red-700 dark:text-red-400", label: "Replace" },
-};
-
 const getTyrePositions = (tyreCount: number): string[] => {
   const base = TYRE_POSITIONS[tyreCount] || Array.from({ length: tyreCount }, (_, i) => `T${i + 1}`);
   return [...base, "SPARE"];
@@ -164,22 +171,40 @@ export default function VehicleDetailPage() {
 
   const [hoverPhoto, setHoverPhoto] = useState<{ url: string; x: number; y: number } | null>(null);
 
-  // Tyre profile
+  // Tyre profile (size-only; one tyre selected at a time via the SVG diagram)
   const [editingTyres, setEditingTyres] = useState(false);
-  const [tyreForm, setTyreForm] = useState<Array<{ position: string; brand: string; size: string; installedAt: string; kmAtInstall: string; condition: string }>>([]);
+  const [editTyreCount, setEditTyreCount] = useState(4);
+  const [tyreForm, setTyreForm] = useState<Array<{ position: string; size: string }>>([]);
+  const [selectedTyrePosition, setSelectedTyrePosition] = useState<string | null>(null);
   const [savingTyres, setSavingTyres] = useState(false);
+
+  // Regenerate position list when count changes inside the editor — preserves
+  // sizes that were already entered for positions that still exist.
+  const applyTyreCount = (newCount: number) => {
+    const positions = getTyrePositions(newCount);
+    setEditTyreCount(newCount);
+    setTyreForm((prev) =>
+      positions.map((pos) => {
+        const existingForm = prev.find((t) => t.position === pos);
+        if (existingForm) return existingForm;
+        const existingDoc = vehicle?.tyres.find((t) => t.position === pos);
+        return { position: pos, size: existingDoc?.size || "" };
+      }),
+    );
+    setSelectedTyrePosition((prev) =>
+      prev && positions.includes(prev) ? prev : positions[0] ?? null,
+    );
+  };
 
   // Service records
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [savingService, setSavingService] = useState(false);
-  const [svcForm, setSvcForm] = useState({ title: "", description: "", serviceDate: "", odometerKm: "", totalCost: "", nextDueDate: "", nextDueKm: "", status: "COMPLETED" });
-  const [svcParts, setSvcParts] = useState<Array<{ name: string; quantity: string; unitCost: string; proofUrl: string; proofFile: File | null }>>([]);
+  const [svcForm, setSvcForm] = useState({ title: "", description: "", serviceDate: "", odometerKm: "", totalCost: "", status: "COMPLETED" });
   const [svcReceipts, setSvcReceipts] = useState<File[]>([]);
   const [svcExistingReceipts, setSvcExistingReceipts] = useState<string[]>([]);
   const [svcRemovedReceipts, setSvcRemovedReceipts] = useState<string[]>([]);
-  const [svcStep, setSvcStep] = useState(1);
 
   // FASTag
   const [fastagData, setFastagData] = useState<{ id: string; tagId: string; provider: string | null; balance: number; status: string; enrolledAt: string; expiryDate: string; transactions?: Array<{ id: string; type: string; amount: number; balance: number; description: string | null; createdAt: string }> } | null>(null);
@@ -210,6 +235,31 @@ export default function VehicleDetailPage() {
   const [renewLifetime, setRenewLifetime] = useState(false);
   const [editLifetime, setEditLifetime] = useState(false);
 
+  // Public access log (who viewed/downloaded vehicle docs)
+  type AccessLogEntry = {
+    id: string;
+    createdAt: string;
+    target: string;
+    action: "VIEW" | "DOWNLOAD";
+    documentUrl: string | null;
+    accessorName: string | null;
+    accessorPhone: string | null;
+    ip: string | null;
+    userAgent: string | null;
+  };
+  const [accessLog, setAccessLog] = useState<AccessLogEntry[]>([]);
+  const [accessLogLoading, setAccessLogLoading] = useState(false);
+
+  // Add new compliance document
+  const [addingCompliance, setAddingCompliance] = useState(false);
+  const [addType, setAddType] = useState<string>("RC");
+  const [addCustomLabel, setAddCustomLabel] = useState("");
+  const [addExpiry, setAddExpiry] = useState("");
+  const [addLifetime, setAddLifetime] = useState(false);
+  const [addFile, setAddFile] = useState<File | null>(null);
+  const [addingLoading, setAddingLoading] = useState(false);
+  const [deletingCompliance, setDeletingCompliance] = useState<string | null>(null);
+
   // History
   const [historyDoc, setHistoryDoc] = useState<string | null>(null); // doc type
   const [historyData, setHistoryData] = useState<Array<{ id: string; expiryDate: string | null; documentUrl: string | null; isActive: boolean; createdAt: string; archivedAt: string | null }>>([]);
@@ -227,19 +277,27 @@ export default function VehicleDetailPage() {
     }
   };
 
+  const fetchAccessLog = () => {
+    if (!params.id) return;
+    setAccessLogLoading(true);
+    vehicleAPI.getAccessLog(params.id as string)
+      .then((res) => setAccessLog(res.data.data || []))
+      .catch(() => setAccessLog([]))
+      .finally(() => setAccessLogLoading(false));
+  };
+
+  useEffect(() => { fetchAccessLog(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [params.id]);
+
   const openEditService = (svc: ServiceRecord) => {
     setEditingService(svc);
     setSvcForm({
       title: svc.title, description: svc.description || "", serviceDate: svc.serviceDate.split("T")[0],
       odometerKm: svc.odometerKm?.toString() || "", totalCost: svc.totalCost.toString(),
-      nextDueDate: svc.nextDueDate ? svc.nextDueDate.split("T")[0] : "", nextDueKm: svc.nextDueKm?.toString() || "",
       status: svc.status,
     });
-    setSvcParts(svc.parts.length > 0 ? svc.parts.map((p) => ({ name: p.name, quantity: p.quantity.toString(), unitCost: p.unitCost.toString(), proofUrl: p.proofUrl || "", proofFile: null })) : [{ name: "", quantity: "1", unitCost: "", proofUrl: "", proofFile: null }]);
     setSvcReceipts([]);
     setSvcExistingReceipts(svc.receiptUrls || []);
     setSvcRemovedReceipts([]);
-    setSvcStep(1);
     setShowServiceModal(true);
   };
 
@@ -252,18 +310,8 @@ export default function VehicleDetailPage() {
       if (svcForm.description) formData.append("description", svcForm.description);
       formData.append("serviceDate", svcForm.serviceDate);
       if (svcForm.odometerKm) formData.append("odometerKm", svcForm.odometerKm);
-      // Auto-calc total from parts + manual override
-      const partsTotal = svcParts.filter((p) => p.name).reduce((sum, p) => sum + (parseFloat(p.unitCost) || 0) * (parseInt(p.quantity) || 1), 0);
-      formData.append("totalCost", svcForm.totalCost || partsTotal.toString());
-      if (svcForm.nextDueDate) formData.append("nextDueDate", svcForm.nextDueDate);
-      if (svcForm.nextDueKm) formData.append("nextDueKm", svcForm.nextDueKm);
+      formData.append("totalCost", svcForm.totalCost || "0");
       formData.append("status", svcForm.status);
-      const validParts = svcParts.filter((p) => p.name.trim());
-      if (validParts.length > 0) {
-        formData.append("parts", JSON.stringify(validParts.map((p) => ({ name: p.name, quantity: p.quantity, unitCost: p.unitCost, proofUrl: p.proofUrl || null }))));
-        // Append per-part proof files
-        validParts.forEach((p, i) => { if (p.proofFile) formData.append(`partProof_${i}`, p.proofFile); });
-      }
       svcReceipts.forEach((f) => formData.append("receipts", f));
       if (svcRemovedReceipts.length > 0) formData.append("removedReceipts", JSON.stringify(svcRemovedReceipts));
 
@@ -295,6 +343,57 @@ export default function VehicleDetailPage() {
     finally { setSavingExpiry(false); }
   };
 
+  const openAddCompliance = () => {
+    // Pick the first standard type that doesn't already exist on the vehicle
+    const usedTypes = new Set((vehicle?.complianceDocuments || []).map((d) => d.type));
+    const firstAvailable = (Object.keys(DOC_LABELS) as string[]).find((t) => !usedTypes.has(t));
+    setAddType(firstAvailable ?? "OTHER");
+    setAddCustomLabel("");
+    setAddExpiry("");
+    setAddLifetime(false);
+    setAddFile(null);
+    setAddingCompliance(true);
+  };
+
+  const handleAddCompliance = async () => {
+    if (!vehicle) return;
+    const finalType = addType === "OTHER" ? addCustomLabel.trim() : addType;
+    if (!finalType) { toast.error("Type required", "Please enter a document name"); return; }
+    if (!addLifetime && !addExpiry && !addFile) {
+      toast.error("Nothing to save", "Provide at least an expiry date, lifetime flag, or file");
+      return;
+    }
+    setAddingLoading(true);
+    try {
+      await complianceAPI.createDocument(
+        vehicle.id,
+        { type: finalType, expiryDate: addLifetime ? undefined : addExpiry, lifetime: addLifetime },
+        addFile || undefined,
+      );
+      toast.success("Document Added", `${finalType.replace(/_/g, " ")} added`);
+      setAddingCompliance(false);
+      fetchVehicle();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error("Add Failed", e.response?.data?.message || "Could not add document");
+    } finally {
+      setAddingLoading(false);
+    }
+  };
+
+  const handleDeleteCompliance = async (docId: string) => {
+    setDeletingCompliance(docId);
+    try {
+      await complianceAPI.removeDocument(docId);
+      toast.success("Document Removed", "The compliance document has been deleted");
+      fetchVehicle();
+    } catch {
+      toast.error("Delete Failed", "Could not remove document");
+    } finally {
+      setDeletingCompliance(null);
+    }
+  };
+
   const handleRenew = async (docId: string, docType: string) => {
     if (!renewLifetime && !renewExpiry) return;
     setRenewLoading(true);
@@ -320,21 +419,16 @@ export default function VehicleDetailPage() {
 
   const openTyreEditor = () => {
     if (!vehicle) return;
-    const tyreCount = vehicle.group?.tyreCount || 4;
+    const tyreCount = vehicle.tyreCount || 4;
     const positions = getTyrePositions(tyreCount);
+    setEditTyreCount(tyreCount);
     setTyreForm(
       positions.map((pos) => {
         const existing = vehicle.tyres.find((t) => t.position === pos);
-        return {
-          position: pos,
-          brand: existing?.brand || "",
-          size: existing?.size || "",
-          installedAt: existing?.installedAt ? existing.installedAt.split("T")[0] : "",
-          kmAtInstall: existing?.kmAtInstall?.toString() || "",
-          condition: existing?.condition || "GOOD",
-        };
+        return { position: pos, size: existing?.size || "" };
       }),
     );
+    setSelectedTyrePosition(positions[0] ?? null);
     setEditingTyres(true);
   };
 
@@ -343,16 +437,9 @@ export default function VehicleDetailPage() {
     setSavingTyres(true);
     try {
       const tyresData = tyreForm
-        .filter((t) => t.brand || t.size || t.installedAt || t.kmAtInstall)
-        .map((t) => ({
-          position: t.position,
-          brand: t.brand || undefined,
-          size: t.size || undefined,
-          installedAt: t.installedAt || undefined,
-          kmAtInstall: t.kmAtInstall ? parseInt(t.kmAtInstall) : undefined,
-          condition: t.condition,
-        }));
-      await vehicleAPI.upsertTyres(vehicle.id, tyresData);
+        .filter((t) => t.size.trim())
+        .map((t) => ({ position: t.position, size: t.size.trim() }));
+      await vehicleAPI.upsertTyres(vehicle.id, tyresData, editTyreCount);
       const res = await vehicleAPI.getById(vehicle.id);
       setVehicle(res.data.data);
       setEditingTyres(false);
@@ -478,6 +565,11 @@ export default function VehicleDetailPage() {
                   </div>
                   <p className="text-white/70 text-sm flex items-center gap-1.5 flex-wrap">
                     <span>{vehicle.make} {vehicle.model} &bull; {vehicle.fuelType} &bull; {vehicle.permitType}</span>
+                    {vehicle.vehicleUsage && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold backdrop-blur-sm ${vehicle.vehicleUsage === "COMMERCIAL" ? "bg-amber-400/30 text-amber-50" : "bg-emerald-400/30 text-emerald-50"}`}>
+                        {vehicle.vehicleUsage === "COMMERCIAL" ? "Commercial" : "Private"}
+                      </span>
+                    )}
                     {vehicle.group && (() => { const GIcon = getVehicleTypeIcon(vehicle.group.icon); return (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/20 text-white text-xs font-semibold backdrop-blur-sm">
                         <GIcon className="w-3.5 h-3.5" />
@@ -559,6 +651,7 @@ export default function VehicleDetailPage() {
                 { label: "Seating", value: vehicle.seatingCapacity?.toString() || "—" },
                 { label: "Fuel Type", value: vehicle.fuelType },
                 { label: "Permit", value: vehicle.permitType || "—" },
+                { label: "Usage", value: vehicle.vehicleUsage === "COMMERCIAL" ? "Commercial" : vehicle.vehicleUsage === "PRIVATE" ? "Private" : "—" },
               ].map((item) => (
                 <div key={item.label} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
                   <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{item.label}</p>
@@ -581,7 +674,7 @@ export default function VehicleDetailPage() {
                 ) : (
                   <><Plus className="w-3 h-3" strokeWidth={2} />Add Photos</>
                 )}
-                <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" disabled={uploadingImages} onChange={(e) => handleImageUpload(e.target.files)} />
+                <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" disabled={uploadingImages} onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
               </label>
             </div>
 
@@ -632,27 +725,41 @@ export default function VehicleDetailPage() {
                 <ImageIcon className="w-10 h-10 text-gray-300 dark:text-gray-600 group-hover:text-yellow-500 transition-colors" strokeWidth={1.5} />
                 <span className="text-sm text-gray-400 group-hover:text-yellow-600 font-medium mt-2">Click to upload vehicle photos</span>
                 <span className="text-[10px] text-gray-300 dark:text-gray-600 mt-0.5">JPG, PNG — up to 10 photos</span>
-                <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => handleImageUpload(e.target.files)} />
+                <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
               </label>
             )}
           </div>
 
           {/* Compliance Documents */}
           <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-brand-500" strokeWidth={2} />
-                Compliance ({greenDocs}/{totalDocs} valid)
+                Compliance {totalDocs > 0 && <span className="text-gray-400 normal-case font-medium">({greenDocs}/{totalDocs} valid)</span>}
               </h3>
-              {/* Progress mini */}
-              <div className="flex items-center gap-2">
-                <div className="w-20 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full bg-gradient-to-r ${theme.gradient}`} style={{ width: `${complianceScore}%` }} />
-                </div>
-                <span className={`text-xs font-bold ${theme.text}`}>{complianceScore}%</span>
+              <div className="flex items-center gap-3">
+                {totalDocs > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-20 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full bg-gradient-to-r ${theme.gradient}`} style={{ width: `${complianceScore}%` }} />
+                    </div>
+                    <span className={`text-xs font-bold ${theme.text}`}>{complianceScore}%</span>
+                  </div>
+                )}
+                <button onClick={openAddCompliance}
+                  className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-colors">
+                  <Plus className="w-3.5 h-3.5" /> Add Document
+                </button>
               </div>
             </div>
 
+            {vehicle.complianceDocuments.length === 0 ? (
+              <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-8 text-center">
+                <ShieldCheck className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No compliance documents yet</p>
+                <p className="text-xs text-gray-400 mt-1">Click <span className="font-semibold">Add Document</span> to upload RC, insurance, fitness, or any custom document.</p>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {vehicle.complianceDocuments.map((doc) => {
                 const dt = STATUS_THEME[doc.status] || STATUS_THEME.GREEN;
@@ -734,12 +841,20 @@ export default function VehicleDetailPage() {
                           <Upload className="w-3 h-3" strokeWidth={2} />
                           Upload Document
                           <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => {
-                            if (e.target.files?.[0]) {
-                              complianceAPI.uploadDocument(doc.id, e.target.files[0]).then(() => fetchVehicle()).catch(console.error);
+                            const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
+                            if (f) {
+                              complianceAPI.uploadDocument(doc.id, f).then(() => fetchVehicle()).catch(console.error);
                             }
                           }} />
                         </label>
                       )}
+                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      <button onClick={() => { if (confirm(`Remove this ${DOC_LABELS[doc.type] || doc.type.replace(/_/g, " ")} document? This cannot be undone.`)) handleDeleteCompliance(doc.id); }}
+                        disabled={deletingCompliance === doc.id}
+                        className="text-[11px] font-medium text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors disabled:opacity-50">
+                        <Trash2 className="w-3 h-3" strokeWidth={2} />
+                        {deletingCompliance === doc.id ? "Removing…" : "Delete"}
+                      </button>
                     </div>
 
 
@@ -747,6 +862,58 @@ export default function VehicleDetailPage() {
                 );
               })}
             </div>
+            )}
+          </div>
+
+          {/* Public Access Log */}
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Clock className="w-4 h-4 text-brand-500" strokeWidth={2} />
+                Public Access Log
+                {accessLog.length > 0 && <span className="text-gray-400 normal-case font-medium">({accessLog.length})</span>}
+              </h3>
+              <button onClick={fetchAccessLog} disabled={accessLogLoading}
+                className="text-[11px] font-semibold text-brand-500 hover:text-brand-600 disabled:opacity-50">
+                {accessLogLoading ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
+            {accessLogLoading && accessLog.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-6">Loading…</p>
+            ) : accessLog.length === 0 ? (
+              <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-6 text-center">
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No public accesses yet</p>
+                <p className="text-xs text-gray-400 mt-1">Anyone who scans the QR and views or downloads a document will appear here.</p>
+              </div>
+            ) : (
+              <ol className="relative border-l border-gray-200 dark:border-gray-700 ml-2 space-y-3 max-h-96 overflow-y-auto pr-1">
+                {accessLog.map((entry) => (
+                  <li key={entry.id} className="ml-5">
+                    <span className={`absolute -left-[5px] w-2.5 h-2.5 rounded-full mt-1.5 ${entry.action === "DOWNLOAD" ? "bg-emerald-400 ring-2 ring-emerald-100 dark:ring-emerald-500/30" : "bg-blue-400 ring-2 ring-blue-100 dark:ring-blue-500/30"}`} />
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700 p-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${entry.action === "DOWNLOAD" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" : "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400"}`}>
+                            {entry.action === "DOWNLOAD" ? "Downloaded" : "Viewed"}
+                          </span>
+                          <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                            {DOC_LABELS[entry.target] || entry.target.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                        <time className="text-[10px] text-gray-400 whitespace-nowrap">
+                          {new Date(entry.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </time>
+                      </div>
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400">
+                        <span className="font-semibold">{entry.accessorName ?? "Anonymous"}</span>
+                        {entry.accessorPhone && <> · {entry.accessorPhone}</>}
+                        {entry.ip && <span className="text-gray-400"> · IP {entry.ip}</span>}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
 
           {/* Challans */}
@@ -1012,8 +1179,9 @@ export default function VehicleDetailPage() {
                 <span className="text-xs text-gray-400 group-hover:text-yellow-600 font-medium mt-1.5">Upload Vehicle Invoice</span>
                 <span className="text-[10px] text-gray-300 dark:text-gray-600 mt-0.5">PDF, JPG, PNG</span>
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => {
-                  if (e.target.files?.[0] && params.id) {
-                    vehicleAPI.uploadInvoice(params.id as string, e.target.files[0]).then(() => fetchVehicle()).catch(console.error);
+                  const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
+                  if (f && params.id) {
+                    vehicleAPI.uploadInvoice(params.id as string, f).then(() => fetchVehicle()).catch(console.error);
                   }
                 }} />
               </label>
@@ -1169,29 +1337,17 @@ export default function VehicleDetailPage() {
                 </div>
               </div>
             ) : (
-              <div className="px-5 pb-4 space-y-2">
-                {vehicle.tyres.map((tyre) => {
-                  const cond = CONDITION_COLORS[tyre.condition] || CONDITION_COLORS.GOOD;
-                  const borderColor = tyre.condition === "GOOD" ? "border-l-emerald-500" : tyre.condition === "AVERAGE" ? "border-l-amber-500" : "border-l-red-500";
-                  return (
-                    <div key={tyre.id} className={`flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-800 border-l-[3px] ${borderColor} bg-gray-50/30 dark:bg-gray-800/20`}>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{TYRE_POSITION_LABELS[tyre.position] || tyre.position}</span>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${cond.bg} ${cond.text}`}>{cond.label}</span>
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-0.5">
-                          <span className="text-sm font-semibold text-gray-900 dark:text-white">{tyre.brand || "—"}</span>
-                          {tyre.size && <span className="text-[10px] font-mono text-gray-400">{tyre.size}</span>}
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        {tyre.installedAt && <p className="text-[10px] text-gray-400">{new Date(tyre.installedAt).toLocaleDateString("en-IN", { month: "short", year: "2-digit" })}</p>}
-                        {tyre.kmAtInstall != null && <p className="text-[10px] font-semibold text-gray-500">{tyre.kmAtInstall.toLocaleString()} km</p>}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="px-5 pb-4 grid grid-cols-2 gap-2">
+                {vehicle.tyres.map((tyre) => (
+                  <div key={tyre.id} className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20">
+                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-12 flex-shrink-0">
+                      {tyre.position}
+                    </span>
+                    <span className="text-xs font-mono text-gray-800 dark:text-gray-200 truncate">
+                      {tyre.size || "—"}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1252,7 +1408,6 @@ export default function VehicleDetailPage() {
                               {new Date(svc.serviceDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                             </span>
                             {svc.odometerKm && <span>{svc.odometerKm.toLocaleString()} km</span>}
-                            {svc.parts.length > 0 && <span>{svc.parts.length} part{svc.parts.length > 1 ? "s" : ""}</span>}
                           </div>
                         </div>
                         <div className="flex items-center gap-3 ml-3 flex-shrink-0">
@@ -1263,30 +1418,6 @@ export default function VehicleDetailPage() {
                         </div>
                       </div>
 
-                      {/* Parts chips */}
-                      {svc.parts.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {svc.parts.map((p, i) => (
-                            <span key={i} className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                              {p.name} {p.quantity > 1 && <span className="text-gray-400">x{p.quantity}</span>}
-                              <span className="text-gray-400">&#8377;{(p.unitCost * p.quantity).toLocaleString("en-IN")}</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Next due info */}
-                      {(svc.nextDueDate || svc.nextDueKm) && (
-                        <div className="flex items-center gap-3 mt-2.5 text-[10px] text-gray-400">
-                          {svc.nextDueDate && (
-                            <span className={`flex items-center gap-1 ${isOverdue ? "text-red-500 font-semibold" : ""}`}>
-                              <Clock className="w-3 h-3" strokeWidth={2} />
-                              Next: {new Date(svc.nextDueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                            </span>
-                          )}
-                          {svc.nextDueKm && <span>Next at {svc.nextDueKm.toLocaleString()} km</span>}
-                        </div>
-                      )}
                     </Link>
                   );
                 })}
@@ -1301,178 +1432,139 @@ export default function VehicleDetailPage() {
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowServiceModal(false)} />
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden max-h-[90vh] flex flex-col">
-            {/* Header with steps */}
+            {/* Header */}
             <div className={`px-6 py-4 flex-shrink-0 ${svcForm.status === "UPCOMING" ? "bg-gradient-to-r from-blue-600 to-blue-500" : "bg-gradient-to-r from-brand-500 to-brand-400"}`}>
               <h3 className="text-lg font-bold text-white">
                 {editingService ? "Edit Service" : svcForm.status === "UPCOMING" ? "Schedule Service" : "Log Service"}
               </h3>
-              <div className="flex items-center gap-3 mt-3">
-                {[{ n: 1, label: "Service Info" }, { n: 2, label: "Parts & Proof" }].map((s) => (
-                  <div key={s.n} className="flex items-center gap-2">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${svcStep >= s.n ? "bg-white text-brand-600" : "bg-white/20 text-white/60"}`}>{s.n}</div>
-                    <span className={`text-xs font-medium ${svcStep >= s.n ? "text-white" : "text-white/40"}`}>{s.label}</span>
-                    {s.n === 1 && <div className={`w-8 h-0.5 rounded ${svcStep >= 2 ? "bg-white" : "bg-white/20"}`} />}
-                  </div>
-                ))}
-              </div>
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto">
-              {/* ── STEP 1: Service Info ── */}
-              {svcStep === 1 && (
-                <>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="col-span-2">
-                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Service Title *</label>
-                      <input type="text" placeholder="e.g. Full Service, Oil Change" value={svcForm.title} onChange={(e) => setSvcForm({ ...svcForm, title: e.target.value })}
-                        className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Status</label>
-                      <select value={svcForm.status} onChange={(e) => setSvcForm({ ...svcForm, status: e.target.value })}
-                        className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                        <option value="COMPLETED">Completed</option>
-                        <option value="UPCOMING">Upcoming</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{svcForm.status === "UPCOMING" ? "Scheduled Date *" : "Service Date *"}</label>
-                      <input type="date" value={svcForm.serviceDate} onChange={(e) => { const val = e.target.value; setSvcForm((prev) => ({ ...prev, serviceDate: val, ...(prev.status === "UPCOMING" ? { nextDueDate: val } : {}) })); }}
-                        className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Odometer (km)</label>
-                      <input type="number" placeholder="e.g. 45000" value={svcForm.odometerKm} onChange={(e) => setSvcForm({ ...svcForm, odometerKm: e.target.value })}
-                        className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Total Cost (&#8377;)</label>
-                      <input type="number" placeholder="Auto from parts" value={svcForm.totalCost} onChange={(e) => setSvcForm({ ...svcForm, totalCost: e.target.value })}
-                        className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Next Due Date</label>
-                      <input type="date" value={svcForm.nextDueDate} onChange={(e) => setSvcForm({ ...svcForm, nextDueDate: e.target.value })}
-                        className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Next Due KM</label>
-                      <input type="number" placeholder="50000" value={svcForm.nextDueKm} onChange={(e) => setSvcForm({ ...svcForm, nextDueKm: e.target.value })}
-                        className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Notes</label>
-                    <input type="text" placeholder="Optional notes..." value={svcForm.description} onChange={(e) => setSvcForm({ ...svcForm, description: e.target.value })}
-                      className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                  </div>
-                  <div className="flex gap-3 pt-2">
-                    <button onClick={() => setSvcStep(2)} disabled={!svcForm.title || !svcForm.serviceDate}
-                      className="flex-1 h-11 rounded-xl bg-gradient-to-r from-brand-500 to-brand-400 text-white font-semibold text-sm shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                      Next: Parts & Proof
-                      <ChevronRight className="w-4 h-4" strokeWidth={2} />
-                    </button>
-                    <button onClick={() => setShowServiceModal(false)} className="h-11 px-6 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 transition-all">Cancel</button>
-                  </div>
-                </>
-              )}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Service Title *</label>
+                  <input type="text" placeholder="e.g. Full Service, Oil Change" value={svcForm.title} onChange={(e) => setSvcForm({ ...svcForm, title: e.target.value })}
+                    className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Status</label>
+                  <select value={svcForm.status} onChange={(e) => setSvcForm({ ...svcForm, status: e.target.value })}
+                    className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                    <option value="COMPLETED">Completed</option>
+                    <option value="UPCOMING">Upcoming</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{svcForm.status === "UPCOMING" ? "Scheduled Date *" : "Service Date *"}</label>
+                  <DatePicker value={svcForm.serviceDate} onChange={(v) => setSvcForm({ ...svcForm, serviceDate: v })} placeholder="Select date" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Odometer (km)</label>
+                  <input type="number" placeholder="e.g. 45000" value={svcForm.odometerKm} onChange={(e) => setSvcForm({ ...svcForm, odometerKm: e.target.value })}
+                    className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Total Cost (&#8377;)</label>
+                  <input type="number" placeholder="0" value={svcForm.totalCost} onChange={(e) => setSvcForm({ ...svcForm, totalCost: e.target.value })}
+                    className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Notes</label>
+                <input type="text" placeholder="Optional notes..." value={svcForm.description} onChange={(e) => setSvcForm({ ...svcForm, description: e.target.value })}
+                  className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+              </div>
 
-              {/* ── STEP 2: Parts & Proof ── */}
-              {svcStep === 2 && (
-                <>
-                  {/* Parts */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{svcForm.status === "UPCOMING" ? "Parts to be Changed" : "Parts Changed"}</label>
-                      <button type="button" onClick={() => setSvcParts([...svcParts, { name: "", quantity: "1", unitCost: "", proofUrl: "", proofFile: null }])}
-                        className="text-[10px] font-semibold text-brand-500 hover:text-brand-600 flex items-center gap-0.5">
-                        <Plus className="w-3 h-3" strokeWidth={2} />
-                        Add Part
-                      </button>
-                    </div>
-                    <div className="space-y-2.5">
-                      {svcParts.map((part, idx) => (
-                        <div key={idx} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/50 dark:bg-gray-800/30">
-                          <div className="flex items-center gap-2">
-                            <input type="text" placeholder="Part name" value={part.name} onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], name: e.target.value }; setSvcParts(n); }}
-                              className="flex-1 h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                            <input type="number" placeholder="Qty" value={part.quantity} onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], quantity: e.target.value }; setSvcParts(n); }}
-                              className="w-14 h-9 rounded-lg border border-gray-200 bg-white px-2 text-xs text-center text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">&#8377;</span>
-                              <input type="number" placeholder="Cost" value={part.unitCost} onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], unitCost: e.target.value }; setSvcParts(n); }}
-                                className="w-22 h-9 rounded-lg border border-gray-200 bg-white pl-5 pr-2 text-xs text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                            </div>
-                            {svcParts.length > 1 && (
-                              <button type="button" onClick={() => setSvcParts(svcParts.filter((_, i) => i !== idx))} className="w-7 h-9 rounded-lg text-gray-400 hover:text-red-500 flex items-center justify-center">
-                                <X className="w-3.5 h-3.5" strokeWidth={2} />
-                              </button>
-                            )}
-                          </div>
-                          <div className="mt-1.5">
-                            {part.proofFile ? (
-                              <div className="flex items-center gap-1.5 text-[10px]">
-                                <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 font-medium truncate max-w-[160px]">{part.proofFile.name}</span>
-                                <button type="button" onClick={() => { const n = [...svcParts]; n[idx] = { ...n[idx], proofFile: null }; setSvcParts(n); }} className="text-red-400 text-[9px]">X</button>
-                              </div>
-                            ) : part.proofUrl ? (
-                              <div className="flex items-center gap-2 text-[10px]">
-                                <a href={(resolveImageUrl(part.proofUrl) ?? "")} target="_blank" rel="noreferrer" className="text-emerald-600 hover:underline font-medium">View proof</a>
-                                <label className="text-brand-500 font-semibold cursor-pointer">Replace<input type="file" accept=".jpg,.jpeg,.png,.pdf" className="hidden" onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], proofFile: e.target.files?.[0] || null, proofUrl: "" }; setSvcParts(n); e.target.value = ""; }} /></label>
-                              </div>
-                            ) : (
-                              <label className="inline-flex items-center gap-1 text-[10px] text-gray-400 hover:text-brand-500 cursor-pointer">
-                                <ImageIcon className="w-3 h-3" strokeWidth={2} />
-                                Upload proof
-                                <input type="file" accept=".jpg,.jpeg,.png,.pdf" className="hidden" onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], proofFile: e.target.files?.[0] || null }; setSvcParts(n); e.target.value = ""; }} />
-                              </label>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {svcParts.some((p) => p.unitCost) && (
-                      <p className="text-[10px] text-gray-400 mt-1.5 text-right">Parts total: &#8377;{svcParts.filter((p) => p.name).reduce((sum, p) => sum + (parseFloat(p.unitCost) || 0) * (parseInt(p.quantity) || 1), 0).toLocaleString("en-IN")}</p>
-                    )}
+              {/* Receipts */}
+              <div>
+                <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Service Receipts</label>
+                {(svcExistingReceipts.filter((u) => !svcRemovedReceipts.includes(u)).length > 0 || svcReceipts.length > 0) && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {svcExistingReceipts.filter((u) => !svcRemovedReceipts.includes(u)).map((url, i) => (
+                      <span key={`e${i}`} className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-400">Receipt {i + 1} <button type="button" onClick={() => setSvcRemovedReceipts([...svcRemovedReceipts, url])} className="text-red-400">&times;</button></span>
+                    ))}
+                    {svcReceipts.map((f, i) => (
+                      <span key={`n${i}`} className="flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-50 dark:bg-yellow-500/10 text-[10px] text-yellow-700 dark:text-yellow-400 truncate max-w-[140px]">{f.name} <button type="button" onClick={() => setSvcReceipts(svcReceipts.filter((_, j) => j !== i))} className="text-red-400">&times;</button></span>
+                    ))}
                   </div>
+                )}
+                <label className="flex items-center gap-2 p-2.5 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-brand-400 cursor-pointer transition-colors group">
+                  <Upload className="w-4 h-4 text-gray-300 group-hover:text-brand-500" strokeWidth={1.5} />
+                  <span className="text-xs text-gray-400 group-hover:text-brand-600">Upload receipts</span>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) setSvcReceipts([...svcReceipts, ...fs]); }} />
+                </label>
+              </div>
 
-                  {/* Receipts */}
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Service Receipts</label>
-                    {(svcExistingReceipts.filter((u) => !svcRemovedReceipts.includes(u)).length > 0 || svcReceipts.length > 0) && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {svcExistingReceipts.filter((u) => !svcRemovedReceipts.includes(u)).map((url, i) => (
-                          <span key={`e${i}`} className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-400">Receipt {i + 1} <button type="button" onClick={() => setSvcRemovedReceipts([...svcRemovedReceipts, url])} className="text-red-400">&times;</button></span>
-                        ))}
-                        {svcReceipts.map((f, i) => (
-                          <span key={`n${i}`} className="flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-50 dark:bg-yellow-500/10 text-[10px] text-yellow-700 dark:text-yellow-400 truncate max-w-[140px]">{f.name} <button type="button" onClick={() => setSvcReceipts(svcReceipts.filter((_, j) => j !== i))} className="text-red-400">&times;</button></span>
-                        ))}
-                      </div>
-                    )}
-                    <label className="flex items-center gap-2 p-2.5 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-brand-400 cursor-pointer transition-colors group">
-                      <Upload className="w-4 h-4 text-gray-300 group-hover:text-brand-500" strokeWidth={1.5} />
-                      <span className="text-xs text-gray-400 group-hover:text-brand-600">Upload receipts</span>
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { setSvcReceipts([...svcReceipts, ...Array.from(e.target.files || [])]); e.target.value = ""; }} />
-                    </label>
-                  </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={handleSaveService} disabled={savingService || !svcForm.title || !svcForm.serviceDate}
+                  className="flex-1 h-11 rounded-xl bg-gradient-to-r from-brand-500 to-brand-400 text-white font-semibold text-sm shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  {savingService ? "Saving..." : editingService ? "Update Service" : svcForm.status === "UPCOMING" ? "Schedule Service" : "Add Service"}
+                </button>
+                <button onClick={() => setShowServiceModal(false)} className="h-11 px-6 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 transition-all">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-                  {/* Actions */}
-                  <div className="flex gap-3 pt-2">
-                    <button onClick={() => setSvcStep(1)} className="h-11 px-5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 transition-all flex items-center gap-1.5">
-                      <ChevronLeft className="w-4 h-4" strokeWidth={2} />
-                      Back
-                    </button>
-                    <button onClick={handleSaveService} disabled={savingService || !svcForm.title || !svcForm.serviceDate}
-                      className="flex-1 h-11 rounded-xl bg-gradient-to-r from-brand-500 to-brand-400 text-white font-semibold text-sm shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                      {savingService ? "Saving..." : editingService ? "Update Service" : svcForm.status === "UPCOMING" ? "Schedule Service" : "Add Service"}
-                    </button>
-                  </div>
-                </>
-              )}
+      {/* Add Compliance Document Modal */}
+      {addingCompliance && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !addingLoading && setAddingCompliance(false)} />
+          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-gradient-to-r from-brand-500 to-brand-400 px-6 py-5">
+              <h3 className="text-lg font-bold text-white">Add Compliance Document</h3>
+              <p className="text-white/80 text-xs mt-0.5">Pick a document type and attach the file (optional). You can change the expiry later.</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Document Type</label>
+                <select value={addType} onChange={(e) => { setAddType(e.target.value); if (e.target.value !== "OTHER") setAddCustomLabel(""); }}
+                  className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-800 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                  {(Object.keys(DOC_LABELS) as string[]).map((t) => {
+                    const exists = vehicle?.complianceDocuments.some((d) => d.type === t);
+                    return <option key={t} value={t} disabled={exists}>{DOC_LABELS[t]}{exists ? " (already added)" : ""}</option>;
+                  })}
+                  <option value="OTHER">Other / Custom…</option>
+                </select>
+                {addType === "OTHER" && (
+                  <input type="text" placeholder="e.g. Route Permit, NOC" value={addCustomLabel} onChange={(e) => setAddCustomLabel(e.target.value)} maxLength={60}
+                    className="mt-2 w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-800 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                )}
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input type="checkbox" checked={addLifetime} onChange={(e) => { setAddLifetime(e.target.checked); if (e.target.checked) setAddExpiry(""); }}
+                    className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400" />
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Lifetime validity (no expiry)</span>
+                </label>
+                {!addLifetime && (
+                  <DatePicker value={addExpiry} onChange={setAddExpiry} placeholder="Select expiry date" />
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">File (optional)</label>
+                <label className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-brand-400 cursor-pointer transition-colors">
+                  <Upload className="w-4 h-4 text-gray-400" />
+                  <span className="text-xs text-gray-500 truncate flex-1">{addFile?.name ?? "Select PDF, JPG, or PNG"}</span>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m)); if (f) setAddFile(f); }} />
+                </label>
+                {addFile && (
+                  <button type="button" onClick={() => setAddFile(null)} className="mt-1 text-[10px] text-red-500 hover:text-red-600">Remove file</button>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+              <button onClick={handleAddCompliance} disabled={addingLoading}
+                className="flex-1 h-11 rounded-xl bg-gradient-to-r from-brand-500 to-brand-400 text-white font-semibold text-sm shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
+                {addingLoading ? "Adding…" : "Add Document"}
+              </button>
+              <button onClick={() => setAddingCompliance(false)} disabled={addingLoading}
+                className="h-11 px-5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">Cancel</button>
             </div>
           </div>
         </div>
@@ -1554,7 +1646,7 @@ export default function VehicleDetailPage() {
                       <span className="text-xs text-gray-400 mt-1">Click to upload (PDF, JPG, PNG)</span>
                     </>
                   )}
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => setRenewFile(e.target.files?.[0] || null)} />
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m)); if (f) setRenewFile(f); }} />
                 </label>
               </div>
               <div className="flex gap-3">
@@ -1748,42 +1840,73 @@ export default function VehicleDetailPage() {
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-3">
-          {tyreForm.map((tyre, idx) => (
-            <div key={tyre.position} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/30 dark:bg-gray-800/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider">
-                  {TYRE_POSITION_LABELS[tyre.position] || tyre.position}
-                </span>
-                <select
-                  value={tyre.condition}
-                  onChange={(e) => {
-                    const n = [...tyreForm];
-                    n[idx] = { ...n[idx], condition: e.target.value };
-                    setTyreForm(n);
-                  }}
-                  className="text-[11px] font-semibold rounded-md border border-gray-200 bg-white px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:border-brand-400"
-                >
-                  <option value="GOOD">Good</option>
-                  <option value="AVERAGE">Average</option>
-                  <option value="REPLACE">Replace</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input type="text" placeholder="Brand" value={tyre.brand}
-                  onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], brand: e.target.value }; setTyreForm(n); }}
-                  className="h-9 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                <input type="text" placeholder="Size (e.g. 215/60 R16)" value={tyre.size}
-                  onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], size: e.target.value }; setTyreForm(n); }}
-                  className="h-9 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                <input type="date" value={tyre.installedAt}
-                  onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], installedAt: e.target.value }; setTyreForm(n); }}
-                  className="h-9 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                <input type="number" placeholder="Odometer (km)" value={tyre.kmAtInstall}
-                  onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], kmAtInstall: e.target.value }; setTyreForm(n); }}
-                  className="h-9 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-              </div>
+          {/* Tyre count selector */}
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-yellow-50/30 dark:bg-yellow-500/5">
+            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Number of Tyres</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {[4, 6, 8, 10].map((n) => (
+                <button key={n} type="button" onClick={() => applyTyreCount(n)}
+                  className={`w-11 h-9 rounded-lg border-2 text-xs font-bold transition-all ${editTyreCount === n ? "border-yellow-400 bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:border-yellow-500 dark:text-yellow-400" : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>
+                  {n}
+                </button>
+              ))}
+              <span className="text-[10px] text-gray-400">or custom</span>
+              <input type="number" min={2} max={20} value={editTyreCount} onChange={(e) => { const v = Math.max(2, Math.min(20, parseInt(e.target.value) || 2)); applyTyreCount(v); }}
+                className="w-16 h-9 rounded-lg border border-gray-200 bg-white px-2 text-xs text-center font-semibold text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
             </div>
-          ))}
+            <p className="text-[10px] text-gray-400 mt-1.5">4 = Car/SUV · 6 = LCV · 8 = Mini Truck · 10 = Truck/Bus. Spare auto-included.</p>
+          </div>
+          {/* 3D vehicle diagram — click any tyre to enter its size */}
+          <TyreDiagram3D
+            positions={tyreForm.map((t) => t.position)}
+            sizes={Object.fromEntries(tyreForm.map((t) => [t.position, t.size]))}
+            selected={selectedTyrePosition}
+            onSelect={setSelectedTyrePosition}
+          />
+
+          {/* Selected-tyre input */}
+          {(() => {
+            const selectedIdx = tyreForm.findIndex((t) => t.position === selectedTyrePosition);
+            const selected = selectedIdx >= 0 ? tyreForm[selectedIdx] : null;
+            if (!selected) {
+              return (
+                <p className="text-xs text-gray-400 text-center py-4">Click any tyre on the diagram to enter its size.</p>
+              );
+            }
+            const goNext = () => {
+              const next = tyreForm[(selectedIdx + 1) % tyreForm.length];
+              setSelectedTyrePosition(next.position);
+            };
+            return (
+              <div className="rounded-lg border border-yellow-200 dark:border-yellow-500/30 bg-yellow-50/50 dark:bg-yellow-500/5 p-4">
+                <label className="block mb-2">
+                  <span className="text-[11px] font-bold text-yellow-700 dark:text-yellow-400 uppercase tracking-wider">
+                    {TYRE_POSITION_LABELS[selected.position] || selected.position} <span className="text-gray-400 font-mono">· {selected.position}</span>
+                  </span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Tyre size (e.g. 215/60 R16)"
+                    value={selected.size}
+                    onChange={(e) => {
+                      const n = [...tyreForm];
+                      n[selectedIdx] = { ...n[selectedIdx], size: e.target.value };
+                      setTyreForm(n);
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); goNext(); } }}
+                    className="flex-1 h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                  <button type="button" onClick={goNext}
+                    className="h-10 px-3 rounded-md bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold flex items-center gap-1">
+                    Next <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5">Press Enter or click Next to move to the next tyre.</p>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">

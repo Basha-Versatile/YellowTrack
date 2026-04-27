@@ -3,7 +3,6 @@ import "server-only";
 export { User, type UserAttrs, type UserDoc } from "./User";
 export { RefreshToken, type RefreshTokenAttrs } from "./RefreshToken";
 export { DocumentType, type DocumentTypeAttrs } from "./DocumentType";
-export { GroupDocumentType, type GroupDocumentTypeAttrs } from "./GroupDocumentType";
 export { VehicleGroup, type VehicleGroupAttrs } from "./VehicleGroup";
 export { Vehicle, type VehicleAttrs } from "./Vehicle";
 export { ServiceRecord, type ServiceRecordAttrs } from "./ServiceRecord";

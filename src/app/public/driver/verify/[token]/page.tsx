@@ -5,6 +5,7 @@ import { publicAPI } from "@/lib/api";
 import PhotoCapture from "@/components/public/PhotoCapture";
 import AddressMapPicker from "@/components/public/AddressMapPicker";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { validateUploadFile } from "@/lib/file-validation";
 
 interface DriverData {
   id: string;
@@ -171,6 +172,12 @@ export default function DriverVerifyPage() {
   };
 
   const handleAddressPhoto = async (type: "current" | "permanent", file: File) => {
+    const validation = validateUploadFile(file);
+    if (!validation.ok) {
+      setError(validation.message);
+      return;
+    }
+    setError(null);
     setUploadingAddrPhoto(type);
     try {
       const res = await publicAPI.uploadAddressPhoto(token, type, file);
@@ -189,6 +196,12 @@ export default function DriverVerifyPage() {
   };
 
   const handlePhotoUpload = async (file: File): Promise<string | null> => {
+    const validation = validateUploadFile(file);
+    if (!validation.ok) {
+      setError(validation.message);
+      return null;
+    }
+    setError(null);
     try {
       const res = await publicAPI.uploadDriverPhoto(token, file);
       const url = res.data.data.profilePhoto;

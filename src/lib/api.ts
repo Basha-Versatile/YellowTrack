@@ -154,6 +154,7 @@ export const vehicleAPI = {
     search?: string;
     status?: string;
     groupId?: string;
+    vehicleUsage?: "PRIVATE" | "COMMERCIAL";
   }) => api.get("/vehicles", { params }),
   getById: (id: string) => api.get(`/vehicles/${id}`),
   updateGroup: (vehicleId: string, groupId: string | null) =>
@@ -207,8 +208,9 @@ export const vehicleAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  upsertTyres: (vehicleId: string, tyres: Array<{ position: string; brand?: string; size?: string; installedAt?: string; kmAtInstall?: number; condition?: string }>) =>
-    api.put(`/vehicles/${vehicleId}/tyres`, { tyres }),
+  upsertTyres: (vehicleId: string, tyres: Array<{ position: string; size?: string }>, tyreCount?: number) =>
+    api.put(`/vehicles/${vehicleId}/tyres`, { tyres, tyreCount }),
+  getAccessLog: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/access-log`),
   // Services
   getAllServices: (params?: { status?: string; vehicleId?: string }) => api.get("/vehicles/services/all", { params }),
   getServices: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/services`),
@@ -235,9 +237,9 @@ export const vehicleAPI = {
 export const vehicleGroupAPI = {
   getAll: () => api.get("/vehicle-groups"),
   getById: (id: string) => api.get(`/vehicle-groups/${id}`),
-  create: (data: { name: string; icon: string; color?: string; order?: number; tyreCount?: number; requiredDocTypeIds?: string[] }) =>
+  create: (data: { name: string; icon: string; color?: string; order?: number; requiredDocTypeIds?: string[] }) =>
     api.post("/vehicle-groups", data),
-  update: (id: string, data: { name?: string; icon?: string; color?: string; order?: number; tyreCount?: number; requiredDocTypeIds?: string[] }) =>
+  update: (id: string, data: { name?: string; icon?: string; color?: string; order?: number; requiredDocTypeIds?: string[] }) =>
     api.put(`/vehicle-groups/${id}`, data),
   remove: (id: string) => api.delete(`/vehicle-groups/${id}`),
 };
@@ -246,7 +248,6 @@ export const vehicleGroupAPI = {
 export const documentTypeAPI = {
   getAll: () => api.get("/document-types"),
   getById: (id: string) => api.get(`/document-types/${id}`),
-  getByGroupId: (groupId: string) => api.get(`/document-types/by-group/${groupId}`),
   create: (data: { code: string; name: string; description?: string; hasExpiry?: boolean }) =>
     api.post("/document-types", data),
   update: (id: string, data: { name?: string; description?: string; hasExpiry?: boolean }) =>
@@ -336,6 +337,17 @@ export const complianceAPI = {
   },
   getHistory: (vehicleId: string, type: string) =>
     api.get(`/compliance/history/${vehicleId}/${type}`),
+  createDocument: (vehicleId: string, data: { type: string; expiryDate?: string; lifetime?: boolean }, file?: File) => {
+    const formData = new FormData();
+    formData.append("type", data.type);
+    if (data.expiryDate) formData.append("expiryDate", data.expiryDate);
+    if (data.lifetime) formData.append("lifetime", "true");
+    if (file) formData.append("document", file);
+    return api.post(`/vehicles/${vehicleId}/compliance`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  removeDocument: (docId: string) => api.delete(`/compliance/${docId}`),
 };
 
 // ── Insurance ──────────────────────────────────────────────
@@ -428,6 +440,8 @@ export const notificationAPI = {
 // ── Public (no auth) ────────────────────────────────────────
 export const publicAPI = {
   getVehicle: (id: string) => api.get(`/public/vehicles/${id}`),
+  logVehicleAccess: (id: string, data: { target: string; action: "VIEW" | "DOWNLOAD"; documentUrl?: string | null; accessorName?: string | null; accessorPhone?: string | null }) =>
+    api.post(`/public/vehicles/${id}/access`, data),
   getDriverVerification: (token: string) => api.get(`/public/driver/verify/${token}`),
   updateDriverVerification: (token: string, data: Record<string, unknown>) =>
     api.put(`/public/driver/verify/${token}`, data),

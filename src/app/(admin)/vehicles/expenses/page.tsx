@@ -6,9 +6,11 @@ import { useToast } from "@/context/ToastContext";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { ExpensesDashboardSkeleton } from "@/components/ui/Skeleton";
+import DatePicker from "@/components/ui/DatePicker";
+import { pickValidatedFile } from "@/lib/file-validation";
 import {
-  Plus, Download, AlertTriangle, Wrench, Box, ShieldCheck, Car, CheckCircle2,
-  Flame, Settings, MoreHorizontal, BarChart3, PieChart, FileText,
+  Plus, Download, AlertTriangle, Wrench, Car, CheckCircle2,
+  MoreHorizontal, BarChart3, PieChart, FileText,
   ImageIcon, Upload
 } from "lucide-react";
 import { VehicleAutocomplete } from "@/components/vehicles/VehicleAutocomplete";
@@ -25,30 +27,31 @@ interface ReportData {
 }
 
 const CATEGORY_ICONS: Record<string, React.FC<{ className?: string }>> = {
-  challans: AlertTriangle, services: Wrench, parts: Box, insurance: ShieldCheck,
-  tolls: Car, compliance: CheckCircle2, fuel: Flame, maintenance: Settings, misc: MoreHorizontal,
+  challans: AlertTriangle,
+  services: Wrench,
+  fastag: Car,
+  compliance: CheckCircle2,
 };
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string; gradient: string }> = {
   challans: { bg: "bg-red-500/10", text: "text-red-400", dot: "#ef4444", gradient: "from-red-500 to-rose-600" },
   services: { bg: "bg-blue-500/10", text: "text-blue-400", dot: "#3b82f6", gradient: "from-blue-500 to-blue-600" },
-  parts: { bg: "bg-indigo-500/10", text: "text-indigo-400", dot: "#6366f1", gradient: "from-indigo-500 to-indigo-600" },
-  insurance: { bg: "bg-purple-500/10", text: "text-purple-400", dot: "#8b5cf6", gradient: "from-purple-500 to-purple-600" },
-  tolls: { bg: "bg-amber-500/10", text: "text-amber-400", dot: "#f59e0b", gradient: "from-amber-500 to-amber-600" },
+  fastag: { bg: "bg-amber-500/10", text: "text-amber-400", dot: "#f59e0b", gradient: "from-amber-500 to-amber-600" },
   compliance: { bg: "bg-emerald-500/10", text: "text-emerald-400", dot: "#10b981", gradient: "from-emerald-500 to-emerald-600" },
-  fuel: { bg: "bg-orange-500/10", text: "text-orange-400", dot: "#f97316", gradient: "from-orange-500 to-orange-600" },
-  maintenance: { bg: "bg-cyan-500/10", text: "text-cyan-400", dot: "#06b6d4", gradient: "from-cyan-500 to-cyan-600" },
-  misc: { bg: "bg-gray-500/10", text: "text-gray-400", dot: "#6b7280", gradient: "from-gray-500 to-gray-600" },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  challans: "Challans", services: "Services", parts: "Parts", insurance: "Insurance",
-  tolls: "FASTag / Tolls", compliance: "Compliance", fuel: "Fuel", maintenance: "Maintenance", misc: "Miscellaneous",
+  challans: "Challans",
+  services: "Services",
+  fastag: "FASTag",
+  compliance: "Compliance",
 };
 
 const CATEGORY_COLORS_HEX: Record<string, string> = {
-  challans: "#ef4444", services: "#3b82f6", parts: "#6366f1", insurance: "#8b5cf6",
-  tolls: "#f59e0b", compliance: "#10b981", fuel: "#f97316", maintenance: "#06b6d4", misc: "#6b7280",
+  challans: "#ef4444",
+  services: "#3b82f6",
+  fastag: "#f59e0b",
+  compliance: "#10b981",
 };
 
 export default function VehicleExpensesPage() {
@@ -408,20 +411,27 @@ function VehicleExpensesContent() {
           {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <div className="flex gap-1 p-0.5 bg-gray-100/80 dark:bg-gray-800/80 backdrop-blur rounded-lg">
-          {[{ key: "this_month", label: "This Month" }, { key: "last_month", label: "Last Month" }, { key: "this_quarter", label: "Quarter" }, { key: "this_year", label: "Year" }, { key: "custom", label: "Custom" }].map((p) => (
-            <button key={p.key} onClick={() => setPeriod(p.key)}
+          {[{ key: "this_month", label: "This Month" }, { key: "last_month", label: "Last Month" }, { key: "this_quarter", label: "Quarter" }, { key: "this_year", label: "Year" }].map((p) => (
+            <button key={p.key} onClick={() => { setPeriod(p.key); setCustomFrom(""); setCustomTo(""); }}
               className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${period === p.key ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
               {p.label}
             </button>
           ))}
         </div>
-        {period === "custom" && (
-          <div className="flex items-center gap-2">
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-9 rounded-lg border border-gray-200/80 bg-white/80 backdrop-blur px-3 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800/80 dark:text-white" />
-            <span className="text-xs text-gray-400">to</span>
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-9 rounded-lg border border-gray-200/80 bg-white/80 backdrop-blur px-3 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800/80 dark:text-white" />
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <DatePicker
+            value={customFrom}
+            onChange={(v) => { setCustomFrom(v); if (v) setPeriod("custom"); }}
+            placeholder="From"
+          />
+          <span className="text-xs text-gray-400">to</span>
+          <DatePicker
+            value={customTo}
+            onChange={(v) => { setCustomTo(v); if (v) setPeriod("custom"); }}
+            placeholder="To"
+            minDate={customFrom}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -608,7 +618,10 @@ function VehicleExpensesContent() {
                 <div>
                   <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Category *</label>
                   <select value={expForm.category} onChange={(e) => setExpForm({ ...expForm, category: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <option value="COMPLIANCE">Compliance</option><option value="FUEL">Fuel</option><option value="TYRE">Tyre</option><option value="MAINTENANCE">Maintenance</option><option value="PARKING">Parking</option><option value="TOLL">Toll</option><option value="MISC">Miscellaneous</option>
+                    <option value="COMPLIANCE">Compliance</option>
+                    <option value="SERVICE">Services</option>
+                    <option value="FASTAG">FASTag</option>
+                    <option value="CHALLAN">Challans</option>
                   </select>
                 </div>
               </div>
@@ -627,7 +640,7 @@ function VehicleExpensesContent() {
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Date *</label>
-                  <input type="date" value={expForm.expenseDate} onChange={(e) => setExpForm({ ...expForm, expenseDate: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                  <DatePicker value={expForm.expenseDate} onChange={(v) => setExpForm({ ...expForm, expenseDate: v })} placeholder="Select date" />
                 </div>
                 <div>
                   <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Proof</label>
@@ -640,7 +653,7 @@ function VehicleExpensesContent() {
                     <label className="flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 cursor-pointer transition-colors group">
                       <Upload className="w-3.5 h-3.5 text-gray-300 group-hover:text-yellow-500" />
                       <span className="text-[10px] text-gray-400 group-hover:text-yellow-600">Upload receipt</span>
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { setExpProof(e.target.files?.[0] || null); e.target.value = ""; }} />
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m)); if (f) setExpProof(f); }} />
                     </label>
                   )}
                 </div>

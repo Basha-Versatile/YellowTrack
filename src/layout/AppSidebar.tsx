@@ -40,7 +40,7 @@ const navItems: NavItem[] = [
       { name: "Compliance", path: "/compliance" },
       { name: "Challans", path: "/challans" },
       { name: "FASTag", path: "/fastag" },
-      { name: "Services", path: "/vehicles/services"},
+      { name: "Service Costs", path: "/vehicles/services"},
       { name: "Expenses", path: "/vehicles/expenses"},
     ],
   },

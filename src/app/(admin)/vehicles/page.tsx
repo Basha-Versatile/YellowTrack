@@ -25,6 +25,7 @@ interface Vehicle {
   model: string;
   fuelType: string;
   permitType: string;
+  vehicleUsage: "PRIVATE" | "COMMERCIAL" | null;
   qrCodeUrl: string | null;
   profileImage: string | null;
   overallStatus: string;
@@ -50,6 +51,7 @@ export default function VehiclesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [groupFilter, setGroupFilter] = useState("ALL");
+  const [usageFilter, setUsageFilter] = useState<"ALL" | "PRIVATE" | "COMMERCIAL">("ALL");
   const [groups, setGroups] = useState<VehicleGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setFetching] = useState(false);
@@ -58,18 +60,22 @@ export default function VehiclesPage() {
   const searchRef = useRef(search);
   const filterRef = useRef(statusFilter);
   const groupRef = useRef(groupFilter);
+  const usageRef = useRef(usageFilter);
   searchRef.current = search;
   filterRef.current = statusFilter;
   groupRef.current = groupFilter;
+  usageRef.current = usageFilter;
 
-  const fetchVehicles = async (page = 1, opts?: { initial?: boolean; overrideStatus?: string; overrideGroup?: string }) => {
+  const fetchVehicles = async (page = 1, opts?: { initial?: boolean; overrideStatus?: string; overrideGroup?: string; overrideUsage?: "ALL" | "PRIVATE" | "COMMERCIAL" }) => {
     if (opts?.initial) setLoading(true); else setFetching(true);
     try {
+      const usage = opts?.overrideUsage ?? usageRef.current;
       const res = await vehicleAPI.getAll({
         page, limit: 10,
         search: searchRef.current || undefined,
         status: (opts?.overrideStatus ?? filterRef.current) !== "ALL" ? (opts?.overrideStatus ?? filterRef.current) : undefined,
         groupId: (opts?.overrideGroup ?? groupRef.current) !== "ALL" ? (opts?.overrideGroup ?? groupRef.current) : undefined,
+        vehicleUsage: usage !== "ALL" ? usage : undefined,
       });
       setVehicles(res.data.data.vehicles);
       setPagination(res.data.data.pagination);
@@ -170,6 +176,15 @@ export default function VehiclesPage() {
         />
 
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
+          {(["ALL", "PRIVATE", "COMMERCIAL"] as const).map((u) => (
+            <button key={u} onClick={() => { setUsageFilter(u); fetchVehicles(1, { overrideUsage: u }); }}
+              className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all ${usageFilter === u ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
+              {u === "ALL" ? "All" : u === "PRIVATE" ? "Private" : "Commercial"}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
           {(["ALL", "GREEN", "YELLOW", "ORANGE", "RED"] as const).map((s) => {
             const dot = s === "GREEN" ? "bg-emerald-500" : s === "YELLOW" ? "bg-amber-500" : s === "ORANGE" ? "bg-orange-500" : s === "RED" ? "bg-red-500" : "";
             return (
@@ -263,6 +278,11 @@ export default function VehiclesPage() {
                       <span className="text-[10px] px-2 py-0.5 rounded-md bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400 font-semibold flex items-center gap-1"><GIcon className="w-3 h-3" />{v.group.name}</span>
                     ); })()}
                     <span className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 font-semibold">{v.fuelType}</span>
+                    {v.vehicleUsage && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold ${v.vehicleUsage === "COMMERCIAL" ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"}`}>
+                        {v.vehicleUsage === "COMMERCIAL" ? "Commercial" : "Private"}
+                      </span>
+                    )}
                     {v.permitType && <span className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 font-semibold">{v.permitType}</span>}
                     {activeDriver && (
                       <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
@@ -339,6 +359,11 @@ export default function VehiclesPage() {
                     <span>{v.make} {v.model}</span>
                     <span className="text-gray-300 dark:text-gray-600">&bull;</span>
                     <span>{v.fuelType}</span>
+                    {v.vehicleUsage && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${v.vehicleUsage === "COMMERCIAL" ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"}`}>
+                        {v.vehicleUsage === "COMMERCIAL" ? "Commercial" : "Private"}
+                      </span>
+                    )}
                     {v.group && (() => { const GIcon = getVehicleTypeIcon(v.group.icon); return (
                       <><span className="text-gray-300 dark:text-gray-600">&bull;</span><span className="text-brand-500 dark:text-brand-400 font-medium flex items-center gap-0.5"><GIcon className="w-3 h-3" />{v.group.name}</span></>
                     ); })()}

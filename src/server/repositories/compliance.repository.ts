@@ -72,6 +72,20 @@ export async function createMany(docs: Array<Record<string, unknown>>) {
   );
 }
 
+export async function createOne(data: Record<string, unknown>) {
+  return ComplianceDocument.create({
+    ...data,
+    vehicleId:
+      typeof data.vehicleId === "string"
+        ? new mongoose.Types.ObjectId(data.vehicleId as string)
+        : data.vehicleId,
+  });
+}
+
+export async function removeById(id: string) {
+  return ComplianceDocument.findByIdAndDelete(id);
+}
+
 export async function renewDocument(
   oldDocId: string,
   newData: Record<string, unknown>,

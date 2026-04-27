@@ -20,7 +20,7 @@ export const POST = withRoute(
     const vehicle = await onboardVehicle(
       input.registrationNumber,
       images,
-      input.groupId,
+      input.groupId ?? null,
       getRequestOrigin(req),
       input.vehicleUsage ?? null,
     );

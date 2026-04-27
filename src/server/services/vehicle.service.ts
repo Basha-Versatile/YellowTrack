@@ -1,11 +1,11 @@
 import "server-only";
 import { AppError, BadRequestError, NotFoundError, ConflictError } from "@/lib/errors";
 import { fetchRcDetails } from "@/lib/surepass";
-import { InsurancePolicy, Tyre } from "@/models";
+import { COMPLIANCE_DOC_TYPES, InsurancePolicy } from "@/models";
 import * as vehicleRepo from "../repositories/vehicle.repository";
+import * as vehicleGroupRepo from "../repositories/vehicleGroup.repository";
 import * as complianceRepo from "../repositories/compliance.repository";
 import * as challanRepo from "../repositories/challan.repository";
-import * as docTypeRepo from "../repositories/documentType.repository";
 import {
   calculateComplianceStatus,
   daysUntilExpiry,
@@ -96,7 +96,11 @@ export async function onboardVehicle(
   origin?: string,
   vehicleUsage?: "PRIVATE" | "COMMERCIAL" | null,
 ) {
-  if (!groupId) throw new BadRequestError("Vehicle group is required for onboarding");
+  // No group selected during onboarding → assign to the default "Others" group
+  if (!groupId) {
+    const others = await vehicleGroupRepo.findOrCreateOthers();
+    groupId = String(others._id);
+  }
 
   // 1. duplicate check first — avoids burning a Surepass credit
   const existing = await vehicleRepo.findByRegistrationNumber(registrationNumber);
@@ -114,15 +118,7 @@ export async function onboardVehicle(
     );
   }
 
-  // 2. group must have doc types configured
-  const groupDocTypes = await docTypeRepo.findByGroupId(groupId);
-  if (groupDocTypes.length === 0) {
-    throw new BadRequestError(
-      "Selected vehicle group has no document types configured",
-    );
-  }
-
-  // 3. fetch from Surepass
+  // 2. fetch from Surepass
   const surepassData = (await fetchRcDetails(registrationNumber)) as SurepassRc;
 
   // 4. hard block on inactive/blacklisted
@@ -169,38 +165,22 @@ export async function onboardVehicle(
     );
   }
 
-  // 7. compliance docs from Surepass dates, filtered to group's required doc types
+  // 7. compliance docs — seed all 6 standard types as default cards.
+  // Surepass-returned expiry dates are pre-filled where available; the rest
+  // are empty placeholders the admin can fill or delete from the detail page.
   try {
-    const complianceDocs = groupDocTypes.map((dt) => {
-      const getter = SUREPASS_COMPLIANCE_DATE_MAP[dt.code];
+    const complianceDocs = COMPLIANCE_DOC_TYPES.map((type) => {
+      const getter = SUREPASS_COMPLIANCE_DATE_MAP[type];
       const expiryDate = getter ? getter(surepassData) : null;
       return {
         vehicleId,
-        type: dt.code,
+        type,
         expiryDate,
         status: calculateComplianceStatus(expiryDate),
         lastVerifiedAt: new Date(),
       };
     });
-    if (complianceDocs.length > 0) {
-      await complianceRepo.createMany(complianceDocs);
-    }
-    const missing = complianceDocs
-      .filter((d) => !d.expiryDate && SUREPASS_COMPLIANCE_DATE_MAP[d.type])
-      .map((d) => d.type);
-    if (missing.length > 0) {
-      warnings.push(
-        `RTA did not return expiry dates for: ${missing.join(", ")}. Update manually.`,
-      );
-    }
-    const manualTypes = complianceDocs
-      .filter((d) => !SUREPASS_COMPLIANCE_DATE_MAP[d.type])
-      .map((d) => d.type);
-    if (manualTypes.length > 0) {
-      warnings.push(
-        `Expiry must be set manually for: ${manualTypes.join(", ")}.`,
-      );
-    }
+    await complianceRepo.createMany(complianceDocs);
   } catch (err) {
     console.error(
       "Failed to create compliance documents:",
@@ -275,10 +255,15 @@ export async function manualOnboard(
     seatingCapacity,
     permitType,
     vehicleUsage,
-    groupId,
+    groupId: rawGroupId,
   } = data as Record<string, string | number | undefined>;
 
-  if (!groupId) throw new BadRequestError("Vehicle group is required for onboarding");
+  // No group selected during onboarding → assign to the default "Others" group
+  let groupId = rawGroupId;
+  if (!groupId) {
+    const others = await vehicleGroupRepo.findOrCreateOthers();
+    groupId = String(others._id);
+  }
 
   const existing = await vehicleRepo.findByRegistrationNumber(
     String(registrationNumber),
@@ -286,13 +271,6 @@ export async function manualOnboard(
   if (existing) {
     throw new ConflictError(
       "Vehicle with this registration number already exists",
-    );
-  }
-
-  const groupDocTypes = await docTypeRepo.findByGroupId(String(groupId));
-  if (groupDocTypes.length === 0) {
-    throw new BadRequestError(
-      "Selected vehicle group has no document types configured",
     );
   }
 
@@ -338,51 +316,23 @@ export async function manualOnboard(
     }
   }
 
-  const complianceDocs = groupDocTypes.map((dt) => {
-    const expiryKey = `${dt.code.toLowerCase()}Expiry`;
-    const fileKey = `${dt.code.toLowerCase()}File`;
-    const expiryRaw = data[expiryKey] as string | undefined;
-    const expiry = expiryRaw ? new Date(expiryRaw) : null;
-    return {
-      vehicleId,
-      type: dt.code,
-      expiryDate: expiry,
-      documentUrl: docFiles[fileKey] ?? null,
-      status: calculateComplianceStatus(expiry),
-      lastVerifiedAt: new Date(),
-    };
-  });
+  // Seed all 6 standard compliance types as empty default cards. Admin can
+  // upload files, edit expiry, delete unwanted ones, or add custom types
+  // from the vehicle detail page. Tyres are also handled there.
   try {
+    const complianceDocs = COMPLIANCE_DOC_TYPES.map((type) => ({
+      vehicleId,
+      type,
+      expiryDate: null,
+      status: calculateComplianceStatus(null),
+      lastVerifiedAt: new Date(),
+    }));
     await complianceRepo.createMany(complianceDocs);
   } catch (err) {
     console.error(
-      "Compliance doc creation failed:",
+      "Compliance doc seeding failed:",
       err instanceof Error ? err.message : err,
     );
-  }
-
-  if (data.tyres) {
-    try {
-      const tyresArr = typeof data.tyres === "string" ? JSON.parse(data.tyres) : data.tyres;
-      if (Array.isArray(tyresArr) && tyresArr.length > 0) {
-        await Tyre.insertMany(
-          tyresArr.map((t: Record<string, unknown>) => ({
-            vehicleId,
-            position: t.position,
-            brand: t.brand ?? null,
-            size: t.size ?? null,
-            installedAt: t.installedAt ? new Date(String(t.installedAt)) : null,
-            kmAtInstall: t.kmAtInstall ? parseInt(String(t.kmAtInstall), 10) : null,
-            condition: t.condition ?? "GOOD",
-          })),
-        );
-      }
-    } catch (err) {
-      console.error(
-        "Tyre creation failed:",
-        err instanceof Error ? err.message : err,
-      );
-    }
   }
 
   return vehicleRepo.findById(vehicleId);

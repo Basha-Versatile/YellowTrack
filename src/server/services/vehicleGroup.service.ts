@@ -1,6 +1,5 @@
 import "server-only";
 import { BadRequestError, NotFoundError } from "@/lib/errors";
-import { DocumentType } from "@/models";
 import * as repo from "../repositories/vehicleGroup.repository";
 
 export async function getAll() {
@@ -13,46 +12,16 @@ export async function getById(id: string) {
   return group;
 }
 
-export async function create(
-  data: Record<string, unknown> & { requiredDocTypeIds?: string[] },
-) {
-  const { requiredDocTypeIds, ...groupData } = data;
-  const group = await repo.create(groupData);
-  const groupId = String(group._id);
-
-  if (requiredDocTypeIds && requiredDocTypeIds.length > 0) {
-    await repo.setRequiredDocTypes(groupId, requiredDocTypeIds);
-  } else {
-    // default: link all system doc types
-    const systemTypes = await DocumentType.find({
-      isSystem: true,
-      isActive: true,
-    })
-      .select("_id")
-      .lean();
-    await repo.setRequiredDocTypes(
-      groupId,
-      systemTypes.map((dt) => String(dt._id)),
-    );
-  }
-
-  return repo.findById(groupId);
+export async function create(data: Record<string, unknown>) {
+  const group = await repo.create(data);
+  return repo.findById(String(group._id));
 }
 
-export async function update(
-  id: string,
-  data: Record<string, unknown> & { requiredDocTypeIds?: string[] },
-) {
+export async function update(id: string, data: Record<string, unknown>) {
   await getById(id);
-  const { requiredDocTypeIds, ...groupData } = data;
-
-  if (Object.keys(groupData).length > 0) {
-    await repo.update(id, groupData);
+  if (Object.keys(data).length > 0) {
+    await repo.update(id, data);
   }
-  if (requiredDocTypeIds !== undefined) {
-    await repo.setRequiredDocTypes(id, requiredDocTypeIds);
-  }
-
   return repo.findById(id);
 }
 

@@ -1,27 +1,10 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { vehicleAPI, vehicleGroupAPI, documentTypeAPI } from "@/lib/api";
+import { vehicleAPI } from "@/lib/api";
 import Link from "next/link";
 import { useToast } from "@/context/ToastContext";
-import DatePicker from "@/components/ui/DatePicker";
-import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
-import { Search, FileText, AlertTriangle, LayoutGrid, ChevronLeft, Pencil, Car, X, Info, CheckCircle2, ImageIcon, Upload, Plus, Check, Flame, Moon, Sun, Zap, Radio, Package, Users, MapPin, Globe, Circle, ChevronDown, ShieldCheck, Lightbulb } from "lucide-react";
-
-interface VehicleGroup { id: string; name: string; icon: string; color?: string; tyreCount?: number; }
-interface DocumentType { id: string; code: string; name: string; hasExpiry: boolean; isSystem: boolean; }
-
-const TYRE_POSITIONS: Record<number, string[]> = {
-  3: ["FL", "FR", "R"],
-  4: ["FL", "FR", "RL", "RR"],
-  6: ["FL", "FR", "RL_O", "RL_I", "RR_O", "RR_I"],
-  10: ["FL", "FR", "ML_O", "ML_I", "MR_O", "MR_I", "RL_O", "RL_I", "RR_O", "RR_I"],
-};
-const TYRE_LABELS: Record<string, string> = {
-  FL: "Front Left", FR: "Front Right", R: "Rear", RL: "Rear Left", RR: "Rear Right",
-  RL_O: "Rear L Out", RL_I: "Rear L In", RR_O: "Rear R Out", RR_I: "Rear R In",
-  ML_O: "Mid L Out", ML_I: "Mid L In", MR_O: "Mid R Out", MR_I: "Mid R In", SPARE: "Spare",
-};
+import { Search, FileText, AlertTriangle, LayoutGrid, ChevronLeft, Pencil, Car, X, Info, CheckCircle2, Plus, Check, Flame, Moon, Sun, Zap, Radio, Package, Users, MapPin, Globe, ShieldCheck, Lightbulb } from "lucide-react";
 
 const STEPS = [
   {
@@ -57,74 +40,23 @@ export default function OnboardVehiclePage() {
   const [activeStep, setActiveStep] = useState(-1);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<string | null>(null);
-  const [vehicleImages, setVehicleImages] = useState<File[]>([]);
-  const [groups, setGroups] = useState<VehicleGroup[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
-
-  // Dynamic doc types based on selected group
-  const [requiredDocTypes, setRequiredDocTypes] = useState<DocumentType[]>([]);
-  const [loadingDocTypes, setLoadingDocTypes] = useState(false);
-
-  useEffect(() => { vehicleGroupAPI.getAll().then((res) => setGroups(res.data.data)).catch(() => {}); }, []);
-
-  // Fetch required doc types when group changes + reset tyre form
-  useEffect(() => {
-    if (selectedGroupId) {
-      setLoadingDocTypes(true);
-      documentTypeAPI.getByGroupId(selectedGroupId)
-        .then((res) => setRequiredDocTypes(res.data.data))
-        .catch(() => setRequiredDocTypes([]))
-        .finally(() => setLoadingDocTypes(false));
-      // Reset tyre form for new group
-      const group = groups.find((g) => g.id === selectedGroupId);
-      const count = group?.tyreCount || 4;
-      const base = TYRE_POSITIONS[count] || Array.from({ length: count }, (_, i) => `T${i + 1}`);
-      setTyreForm([...base, "SPARE"].map((pos) => ({ position: pos, brand: "", size: "", condition: "GOOD" })));
-      setShowTyreSection(false);
-    } else {
-      setRequiredDocTypes([]);
-      setTyreForm([]);
-    }
-  }, [selectedGroupId, groups]);
-
   // Manual mode state -- dynamic
   const [mf, setMf] = useState<Record<string, string>>({ registrationNumber: "", ownerName: "", make: "", model: "", fuelType: "Petrol", chassisNumber: "", engineNumber: "", gvw: "", seatingCapacity: "", permitType: "PASSENGER" });
-  const [docExpiries, setDocExpiries] = useState<Record<string, string>>({});
-  const [docFiles, setDocFiles] = useState<Record<string, File | null>>({});
   const [manualLoading, setManualLoading] = useState(false);
-  const [showTyreSection, setShowTyreSection] = useState(false);
-  const [tyreForm, setTyreForm] = useState<Array<{ position: string; brand: string; size: string; condition: string }>>([]);
   const handleMfChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setMf({ ...mf, [e.target.name]: e.target.value });
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(""); setSuccess(null);
     if (!mf.registrationNumber || !mf.make || !mf.model) { setError("Registration number, make, and model are required"); return; }
-    if (!selectedGroupId) { setError("Please select a vehicle group"); return; }
     setManualLoading(true);
     try {
       const payload: Record<string, string | File | undefined> = {
         ...mf,
-        groupId: selectedGroupId,
         vehicleUsage,
         gvw: mf.gvw || undefined,
         seatingCapacity: mf.seatingCapacity || undefined,
       };
-      // Add dynamic doc expiries
-      Object.entries(docExpiries).forEach(([key, val]) => {
-        if (val) payload[key] = val;
-      });
-      // Add dynamic doc files
-      Object.entries(docFiles).forEach(([key, f]) => {
-        if (f) payload[key] = f;
-      });
-      // Add tyres if any data was entered
-      if (showTyreSection) {
-        const tyresWithData = tyreForm.filter((t) => t.brand || t.size);
-        if (tyresWithData.length > 0) {
-          payload.tyres = JSON.stringify(tyresWithData);
-        }
-      }
-      const res = await vehicleAPI.onboardManual(payload, vehicleImages.length > 0 ? vehicleImages : undefined);
+      const res = await vehicleAPI.onboardManual(payload);
       setSuccess(`${res.data.data.registrationNumber} onboarded successfully!`);
       toast.success("Vehicle Onboarded!", `${res.data.data.registrationNumber} added to your fleet`);
       setTimeout(() => router.push(`/vehicles/${res.data.data.id}`), 1200);
@@ -139,7 +71,6 @@ export default function OnboardVehiclePage() {
 
     const trimmed = registrationNumber.trim();
     if (!trimmed) { setError("Registration number is required"); return; }
-    if (!selectedGroupId) { setError("Please select a vehicle group"); return; }
 
     setLoading(true);
 
@@ -150,7 +81,7 @@ export default function OnboardVehiclePage() {
     }
 
     try {
-      const res = await vehicleAPI.onboard(trimmed, vehicleImages.length > 0 ? vehicleImages : undefined, selectedGroupId, vehicleUsage);
+      const res = await vehicleAPI.onboard(trimmed, undefined, undefined, vehicleUsage);
       const vehicle = res.data.data;
       const warnings: string[] = Array.isArray(vehicle?.warnings) ? vehicle.warnings : [];
       setActiveStep(STEPS.length); // all done
@@ -177,38 +108,8 @@ export default function OnboardVehiclePage() {
     }
   };
 
-  // Shared vehicle group selector component
-  const renderGroupSelector = () => (
-    groups.length > 0 ? (
-      <div>
-        <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-          <LayoutGrid className="w-4 h-4 text-yellow-500" />
-          Vehicle Group <span className="text-red-500">*</span>
-        </label>
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {groups.map((g) => { const Icon = getVehicleTypeIcon(g.icon); return (
-            <button key={g.id} type="button" onClick={() => setSelectedGroupId(selectedGroupId === g.id ? "" : g.id)}
-              className={`flex flex-col items-center gap-1.5 rounded-xl border-2 py-3 px-2 transition-all ${selectedGroupId === g.id ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 dark:border-yellow-500" : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800"}`}>
-              <Icon className="w-6 h-6" style={g.color ? { color: g.color } : undefined} />
-              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{g.name}</span>
-            </button>
-          ); })}
-        </div>
-        {!selectedGroupId && (
-          <p className="mt-1.5 text-[11px] text-amber-500 flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" />
-            Vehicle group is required for onboarding
-          </p>
-        )}
-        {selectedGroupId && requiredDocTypes.length > 0 && (
-          <p className="mt-1.5 text-[11px] text-emerald-500 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />
-            {requiredDocTypes.length} document{requiredDocTypes.length !== 1 ? "s" : ""} required for this group
-          </p>
-        )}
-      </div>
-    ) : null
-  );
+  // Group selection has been moved to the vehicle detail page. Newly onboarded
+  // vehicles default to the "Others" group on the backend.
 
   return (
     <div className="space-y-6">
@@ -327,52 +228,10 @@ export default function OnboardVehiclePage() {
                   </div>
                 )}
 
-                {/* Vehicle Group (required) */}
-                {renderGroupSelector()}
-
-                {/* Vehicle Photos */}
-                <div>
-                  <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    <ImageIcon className="w-4 h-4 text-yellow-500" />
-                    Vehicle Photos <span className="text-gray-400 font-normal normal-case">(optional)</span>
-                  </label>
-                  {vehicleImages.length > 0 ? (
-                    <div className="rounded-xl border-2 border-yellow-200 bg-yellow-50/50 dark:border-yellow-500/20 dark:bg-yellow-500/5 p-4">
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {vehicleImages.map((f, i) => (
-                          <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-yellow-200 dark:border-yellow-500/20 text-xs">
-                            <ImageIcon className="w-4 h-4 text-yellow-500" />
-                            <span className="text-gray-700 dark:text-gray-300 truncate max-w-[120px] font-medium">{f.name}</span>
-                            <button type="button" onClick={() => setVehicleImages((prev) => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-500 ml-0.5">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-yellow-700 dark:text-yellow-400 font-medium">{vehicleImages.length} photo{vehicleImages.length > 1 ? "s" : ""} selected</span>
-                        <div className="flex gap-2">
-                          <label className="text-[11px] font-semibold text-yellow-600 hover:text-yellow-700 cursor-pointer">
-                            + Add more
-                            <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const newFiles = Array.from(e.target.files || []); setVehicleImages((prev) => [...prev, ...newFiles]); e.target.value = ""; }} />
-                          </label>
-                          <button type="button" onClick={() => setVehicleImages([])} className="text-[11px] font-semibold text-red-500 hover:text-red-600">Clear all</button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <label className="flex items-center gap-4 p-5 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 dark:hover:border-yellow-500/50 cursor-pointer transition-all group">
-                      <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 group-hover:bg-yellow-100 dark:group-hover:bg-yellow-500/10 flex items-center justify-center transition-colors flex-shrink-0">
-                        <ImageIcon className="w-6 h-6 text-gray-400 group-hover:text-yellow-500 transition-colors" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-yellow-600 transition-colors">Upload vehicle photos</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">JPG, PNG — max 10MB each, up to 10 photos</p>
-                      </div>
-                      <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const newFiles = Array.from(e.target.files || []); setVehicleImages((prev) => [...prev, ...newFiles]); e.target.value = ""; }} />
-                    </label>
-                  )}
-                </div>
+                <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5" />
+                  Vehicle group and photos can be added later from the vehicle detail page.
+                </p>
 
                 {/* Submit */}
                 <button type="submit" disabled={loading || !!success}
@@ -472,14 +331,7 @@ export default function OnboardVehiclePage() {
                     <p className="text-white/50 text-sm mt-0.5">Enter details manually and upload compliance documents</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-6 mt-5">
-                  {["Vehicle Info", "Documents"].map((step, i) => (
-                    <div key={step} className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-yellow-500/20 border border-yellow-500/30 flex items-center justify-center text-[10px] font-bold text-yellow-400">{i + 1}</div>
-                      <span className="text-xs text-white/40 font-medium">{step}</span>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-xs text-white/40 mt-3">Documents are uploaded later from the vehicle&apos;s detail page.</p>
               </div>
             </div>
 
@@ -513,11 +365,6 @@ export default function OnboardVehiclePage() {
                       <input type="text" name={f.name} placeholder={f.placeholder} value={mf[f.name] || ""} onChange={handleMfChange} className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-yellow-500 transition-all group-hover:border-gray-300 dark:group-hover:border-gray-600" />
                     </div>
                   ))}
-                </div>
-
-                {/* Vehicle Group (required) */}
-                <div className="mt-5">
-                  {renderGroupSelector()}
                 </div>
 
                 {/* Fuel Type */}
@@ -604,186 +451,12 @@ export default function OnboardVehiclePage() {
                 </div>
               </div>
 
-              {/* Divider */}
-              <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent dark:via-gray-700" />
+              {/* Compliance documents are uploaded later from the vehicle detail page */}
 
-              {/* Dynamic Compliance Documents */}
-              <div>
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center shadow-sm shadow-yellow-500/20">
-                    <ShieldCheck className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Compliance Documents</h3>
-                    <p className="text-[11px] text-gray-400 mt-0.5">Upload documents and set expiry dates (defaults to 1 year if blank)</p>
-                  </div>
-                </div>
-
-                {!selectedGroupId ? (
-                  <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-8 text-center">
-                    <FileText className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Select a vehicle group above</p>
-                    <p className="text-xs text-gray-400 mt-1">Required documents will appear based on the selected group</p>
-                  </div>
-                ) : loadingDocTypes ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 animate-pulse">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-9 h-9 rounded-lg bg-gray-200 dark:bg-gray-700" />
-                          <div><div className="h-3.5 w-28 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-2.5 w-12 bg-gray-200 dark:bg-gray-700 rounded mt-1.5" /></div>
-                        </div>
-                        <div className="h-9 w-full bg-gray-100 dark:bg-gray-800 rounded-lg" />
-                        <div className="h-16 w-full bg-gray-100 dark:bg-gray-800 rounded-lg mt-3 border-2 border-dashed border-gray-200 dark:border-gray-700" />
-                      </div>
-                    ))}
-                  </div>
-                ) : requiredDocTypes.length === 0 ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5 p-6 text-center">
-                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">No document types configured for this group</p>
-                    <p className="text-xs text-amber-600/70 mt-1">Go to Vehicle Groups settings to configure required documents</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {requiredDocTypes.map((dt) => {
-                      const expiryKey = `${dt.code.toLowerCase()}Expiry`;
-                      const fileKey = `${dt.code.toLowerCase()}File`;
-                      const hasFile = !!docFiles[fileKey];
-                      return (
-                        <div key={dt.id} className={`relative rounded-xl border-2 p-4 transition-all duration-200 ${hasFile ? "border-emerald-300 bg-emerald-50/30 dark:border-emerald-500/30 dark:bg-emerald-500/5" : "border-gray-200 bg-white hover:border-yellow-300 dark:border-gray-700 dark:bg-gray-800/30 dark:hover:border-yellow-500/30"}`}>
-                          {hasFile && (
-                            <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
-                              <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                            </div>
-                          )}
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${hasFile ? "bg-emerald-100 dark:bg-emerald-500/20" : "bg-gray-100 dark:bg-gray-700"}`}>
-                              <FileText className={`w-4 h-4 ${hasFile ? "text-emerald-600 dark:text-emerald-400" : "text-gray-500"}`} />
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-gray-900 dark:text-white">{dt.name}</p>
-                              <div className="flex items-center gap-2">
-                                <p className="text-[10px] text-gray-400 font-mono">{dt.code}</p>
-                                {!dt.hasExpiry && <span className="text-[9px] font-semibold text-gray-500 bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">NO EXPIRY</span>}
-                              </div>
-                            </div>
-                          </div>
-
-                          {dt.hasExpiry && (
-                            <div className="mb-3">
-                              <label className="mb-1 block text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Expiry Date</label>
-                              <DatePicker value={docExpiries[expiryKey] || ""} onChange={(v) => setDocExpiries({ ...docExpiries, [expiryKey]: v })} placeholder="Select expiry date" />
-                            </div>
-                          )}
-
-                          {!hasFile ? (
-                            <label className="flex flex-col items-center justify-center py-4 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 dark:hover:border-yellow-500/50 cursor-pointer transition-colors group">
-                              <Upload className="w-6 h-6 text-gray-300 dark:text-gray-600 group-hover:text-yellow-500 transition-colors" />
-                              <span className="text-[11px] text-gray-400 group-hover:text-yellow-600 font-medium mt-1">Click to upload</span>
-                              <span className="text-[9px] text-gray-300 dark:text-gray-600 mt-0.5">PDF, JPG, PNG (max 10MB)</span>
-                              <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => setDocFiles((prev) => ({ ...prev, [fileKey]: e.target.files?.[0] || null }))} />
-                            </label>
-                          ) : (
-                            <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <FileText className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium truncate">{docFiles[fileKey]!.name}</span>
-                              </div>
-                              <button type="button" onClick={() => setDocFiles((prev) => ({ ...prev, [fileKey]: null }))} className="text-[10px] text-red-500 hover:text-red-600 font-semibold flex-shrink-0 ml-2">Remove</button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {selectedGroupId && requiredDocTypes.length > 0 && (
-                  <p className="mt-3 text-[11px] text-gray-400 flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5" />
-                    Accepted: PDF, JPG, JPEG, PNG (max 10MB). Documents can also be uploaded later.
-                  </p>
-                )}
-              </div>
-
-              {/* Vehicle Images */}
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center shadow-sm shadow-yellow-500/20">
-                    <ImageIcon className="w-4 h-4 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Vehicle Photos</h3>
-                    <p className="text-[11px] text-gray-400">Upload multiple photos of the vehicle (optional)</p>
-                  </div>
-                </div>
-                <label className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 dark:hover:border-yellow-500/50 cursor-pointer transition-colors group">
-                  <ImageIcon className="w-10 h-10 text-gray-300 dark:text-gray-600 group-hover:text-yellow-500 transition-colors" />
-                  <span className="text-xs text-gray-400 group-hover:text-yellow-600 font-medium mt-2">Click to upload vehicle photos</span>
-                  <span className="text-[10px] text-gray-300 dark:text-gray-600 mt-0.5">JPG, PNG (max 10MB each, up to 10 photos)</span>
-                  <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const newFiles = Array.from(e.target.files || []); setVehicleImages((prev) => [...prev, ...newFiles]); e.target.value = ""; }} />
-                </label>
-                {vehicleImages.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {vehicleImages.map((f, i) => (
-                      <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-yellow-50 dark:bg-yellow-500/10 text-xs text-yellow-700 dark:text-yellow-400">
-                        <ImageIcon className="w-3 h-3" />
-                        <span className="truncate max-w-[120px]">{f.name}</span>
-                        <button type="button" onClick={() => setVehicleImages((prev) => prev.filter((_, j) => j !== i))} className="text-red-500 hover:text-red-600 ml-0.5">&times;</button>
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => setVehicleImages([])} className="text-[10px] text-red-500 hover:text-red-600 font-medium px-2 py-1">Clear all</button>
-                  </div>
-                )}
-              </div>
-
-              {/* Tyre Profile (Optional) */}
-              {selectedGroupId && tyreForm.length > 0 && (
-                <div>
-                  <div className={`rounded-xl border-2 transition-all ${showTyreSection ? "border-gray-200 dark:border-gray-700" : "border-dashed border-gray-200 dark:border-gray-700"}`}>
-                    <button type="button" onClick={() => setShowTyreSection(!showTyreSection)}
-                      className="w-full flex items-center justify-between px-4 py-3.5 text-left">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                          <Circle className="w-4 h-4 text-gray-400" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Tyre Profile <span className="text-gray-400 font-normal normal-case">(optional)</span></p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">{tyreForm.length} positions based on vehicle group</p>
-                        </div>
-                      </div>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showTyreSection ? "rotate-180" : ""}`} />
-                    </button>
-                    {showTyreSection && (
-                      <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-800 pt-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {tyreForm.map((tyre, idx) => (
-                            <div key={tyre.position} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider">
-                                  {TYRE_LABELS[tyre.position] || tyre.position}
-                                </span>
-                                <select value={tyre.condition} onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], condition: e.target.value }; setTyreForm(n); }}
-                                  className="text-[10px] font-semibold rounded-lg border border-gray-200 bg-white px-2 py-1 dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none">
-                                  <option value="GOOD">Good</option>
-                                  <option value="AVERAGE">Average</option>
-                                  <option value="REPLACE">Replace</option>
-                                </select>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <input type="text" placeholder="Brand" value={tyre.brand} onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], brand: e.target.value }; setTyreForm(n); }}
-                                  className="h-8 rounded-lg border border-gray-200 bg-gray-50 px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                                <input type="text" placeholder="Size (215/60 R16)" value={tyre.size} onChange={(e) => { const n = [...tyreForm]; n[idx] = { ...n[idx], size: e.target.value }; setTyreForm(n); }}
-                                  className="h-8 rounded-lg border border-gray-200 bg-gray-50 px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="mt-2 text-[10px] text-gray-400">Fill in details for tyres you know. Leave blank for positions you want to add later.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5" />
+                Vehicle group and photos can be added later from the vehicle detail page.
+              </p>
 
               {/* Error */}
               {error && (
@@ -825,11 +498,10 @@ export default function OnboardVehiclePage() {
                 <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-gray-200 dark:bg-gray-700" />
                 <div className="space-y-5">
                   {[
-                    { num: "1", title: "Select Vehicle Group", desc: "Choose the vehicle type to determine required documents", Icon: LayoutGrid },
+                    { num: "1", title: "Select Vehicle Group", desc: "Choose the vehicle type for grouping and reporting", Icon: LayoutGrid },
                     { num: "2", title: "Enter Vehicle Info", desc: "Registration number, make, model, fuel type, and permit details", Icon: Car },
-                    { num: "3", title: "Upload Documents", desc: "Upload required compliance documents for the selected group", Icon: Upload },
-                    { num: "4", title: "QR Code Generated", desc: "A unique QR code is auto-generated for instant vehicle verification", Icon: LayoutGrid },
-                    { num: "5", title: "Vehicle Ready", desc: "Vehicle is added to your fleet with compliance tracking enabled", Icon: CheckCircle2 },
+                    { num: "3", title: "QR Code Generated", desc: "A unique QR code is auto-generated for instant vehicle verification", Icon: LayoutGrid },
+                    { num: "4", title: "Vehicle Ready", desc: "Add compliance documents and tyre profile from the vehicle's detail page", Icon: CheckCircle2 },
                   ].map((step) => (
                     <div key={step.num} className="relative flex gap-4 pl-1">
                       <div className="relative z-10 flex-shrink-0 w-[30px] h-[30px] rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">

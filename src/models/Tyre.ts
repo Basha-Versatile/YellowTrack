@@ -5,11 +5,7 @@ const tyreSchema = new Schema(
   {
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     position: { type: String, required: true },
-    brand: { type: String },
     size: { type: String },
-    installedAt: { type: Date },
-    kmAtInstall: { type: Number },
-    condition: { type: String, enum: ["GOOD", "AVERAGE", "REPLACE"], default: "GOOD" },
   },
   { timestamps: true },
 );

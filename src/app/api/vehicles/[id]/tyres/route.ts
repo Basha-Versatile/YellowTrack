@@ -10,23 +10,24 @@ export const runtime = "nodejs";
 
 const tyreSchema = z.object({
   position: z.string().min(1),
-  brand: z.string().optional().nullable(),
   size: z.string().optional().nullable(),
-  installedAt: z.string().optional().nullable(),
-  kmAtInstall: z.coerce.number().int().optional().nullable(),
-  condition: z.enum(["GOOD", "AVERAGE", "REPLACE"]).optional(),
 });
 
 const bodySchema = z.object({
+  tyreCount: z.coerce.number().int().min(2).max(20).optional(),
   tyres: z.array(tyreSchema),
 });
 
 export const PUT = withRoute<{ id: string }>(
   async ({ req, params }) => {
-    const { tyres } = await parseJson(req, bodySchema);
+    const { tyres, tyreCount } = await parseJson(req, bodySchema);
 
     const vehicle = await vehicleRepo.findById(params.id);
     if (!vehicle) throw new NotFoundError("Vehicle not found");
+
+    if (typeof tyreCount === "number") {
+      await vehicleRepo.update(params.id, { tyreCount });
+    }
 
     await Tyre.deleteMany({ vehicleId: params.id });
     if (tyres.length > 0) {
@@ -34,11 +35,7 @@ export const PUT = withRoute<{ id: string }>(
         tyres.map((t) => ({
           vehicleId: params.id,
           position: t.position,
-          brand: t.brand ?? null,
           size: t.size ?? null,
-          installedAt: t.installedAt ? new Date(t.installedAt) : null,
-          kmAtInstall: t.kmAtInstall ?? null,
-          condition: t.condition ?? "GOOD",
         })),
       );
     }

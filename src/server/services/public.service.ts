@@ -33,10 +33,12 @@ export async function getVehiclePublic(vehicleId: string) {
   // Recalculate compliance statuses for this vehicle
   const docs = await complianceRepo.findByVehicleId(vehicleId);
   const compliance = docs.map((d) => ({
+    id: String(d._id),
     type: d.type,
     status: calculateComplianceStatus(d.expiryDate),
     expiryDate: d.expiryDate ?? null,
     daysUntilExpiry: daysUntilExpiry(d.expiryDate),
+    documentUrl: d.documentUrl ?? null,
   }));
 
   const mappings = vehicle.driverMappings as Array<{
@@ -64,9 +66,11 @@ export async function getVehiclePublic(vehicleId: string) {
         }
       : null,
     compliance: compliance.map((d) => ({
+      id: d.id,
       type: d.type,
       status: d.status,
       expiryDate: d.expiryDate,
+      documentUrl: d.documentUrl,
     })),
   };
 }

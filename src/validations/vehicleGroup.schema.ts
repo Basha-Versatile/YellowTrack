@@ -5,12 +5,6 @@ export const createGroupSchema = z.object({
   icon: z.string().min(1, "Icon is required"),
   color: z.string().optional(),
   order: z.coerce.number().int().optional(),
-  tyreCount: z.coerce
-    .number()
-    .int()
-    .min(4, "Minimum 4 tyres (4+ wheelers only)")
-    .max(20)
-    .optional(),
   requiredDocTypeIds: z.array(z.string()).optional(),
 });
 

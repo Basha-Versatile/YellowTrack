@@ -16,13 +16,8 @@ export const runtime = "nodejs";
 type ExpenseCategoryKey =
   | "challans"
   | "services"
-  | "parts"
-  | "insurance"
-  | "tolls"
   | "compliance"
-  | "fuel"
-  | "maintenance"
-  | "misc";
+  | "fastag";
 
 type UnifiedExpense = {
   source: "CHALLAN" | "SERVICE" | "INSURANCE" | "TOLL" | "EXPENSE";
@@ -99,8 +94,7 @@ export const GET = withRoute(
       : tolls;
 
     const breakdown: Record<ExpenseCategoryKey, number> = {
-      challans: 0, services: 0, parts: 0, insurance: 0, tolls: 0,
-      compliance: 0, fuel: 0, maintenance: 0, misc: 0,
+      challans: 0, services: 0, compliance: 0, fastag: 0,
     };
     const allExpenses: UnifiedExpense[] = [];
 
@@ -120,11 +114,6 @@ export const GET = withRoute(
     }
     for (const s of services) {
       breakdown.services += s.totalCost ?? 0;
-      const partsTotal = ((s.parts as Array<{ unitCost: number; quantity: number }>) ?? []).reduce(
-        (sum, p) => sum + p.unitCost * p.quantity,
-        0,
-      );
-      breakdown.parts += partsTotal;
       allExpenses.push({
         source: "SERVICE",
         date: s.serviceDate,
@@ -136,9 +125,10 @@ export const GET = withRoute(
         category: "services",
       });
     }
+    // Insurance is treated as a Compliance expense (it's a compliance document)
     for (const ins of insurance) {
       const amt = ins.paidAmount ?? ins.premium ?? 0;
-      breakdown.insurance += amt;
+      breakdown.compliance += amt;
       allExpenses.push({
         source: "INSURANCE",
         date: ins.createdAt,
@@ -147,11 +137,12 @@ export const GET = withRoute(
         title: `${ins.insurer ?? "Insurance"} — ${ins.planName ?? ins.policyNumber ?? ""}`,
         amount: amt,
         proofUrl: ins.documentUrl ?? null,
-        category: "insurance",
+        category: "compliance",
       });
     }
+    // Toll transactions are FASTag expenses
     for (const t of filteredTolls) {
-      breakdown.tolls += t.amount;
+      breakdown.fastag += t.amount;
       const vId = fastagById.get(String(t.fastagId));
       allExpenses.push({
         source: "TOLL",
@@ -161,14 +152,16 @@ export const GET = withRoute(
         title: t.description || `Toll — ${t.tollPlaza ?? ""}`,
         amount: t.amount,
         proofUrl: null,
-        category: "tolls",
+        category: "fastag",
       });
     }
+    // Manual expense entries map directly to one of the four buckets
     for (const e of expenses) {
       const catKey: ExpenseCategoryKey =
-        e.category === "COMPLIANCE" ? "compliance" :
-        e.category === "FUEL" ? "fuel" :
-        e.category === "MAINTENANCE" ? "maintenance" : "misc";
+        e.category === "CHALLAN" ? "challans" :
+        e.category === "SERVICE" ? "services" :
+        e.category === "FASTAG" ? "fastag" :
+        "compliance"; // COMPLIANCE + any legacy values fall back here
       breakdown[catKey] = (breakdown[catKey] ?? 0) + e.amount;
       allExpenses.push({
         source: "EXPENSE",
@@ -178,7 +171,7 @@ export const GET = withRoute(
         title: e.title,
         amount: e.amount,
         proofUrl: e.proofUrl ?? null,
-        category: e.category.toLowerCase(),
+        category: catKey,
       });
     }
 
@@ -193,8 +186,7 @@ export const GET = withRoute(
       if (!timelineMap[month]) {
         timelineMap[month] = {
           period: month,
-          challans: 0, services: 0, insurance: 0, tolls: 0,
-          compliance: 0, fuel: 0, maintenance: 0, misc: 0, total: 0,
+          challans: 0, services: 0, compliance: 0, fastag: 0, total: 0,
         };
       }
       const bucket = timelineMap[month];

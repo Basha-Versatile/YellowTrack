@@ -3,13 +3,10 @@ import { NextRequest } from "next/server";
 import { env } from "./env";
 import { BadRequestError } from "./errors";
 import { storage, type StoredFile } from "./storage";
+import { validateUploadFile } from "./file-validation";
 
-export const ALLOWED_UPLOAD_MIMES = [
-  "application/pdf",
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-] as const;
+// Re-export for callers that previously imported the constant from this file.
+export { ALLOWED_UPLOAD_MIMES } from "./file-validation";
 
 export type UploadedFile = StoredFile & { fieldName: string; buffer: Buffer };
 
@@ -32,13 +29,9 @@ function pushIntoRecord<T>(
 }
 
 function assertAllowed(file: File): void {
-  if (file.size > env.MAX_UPLOAD_BYTES) {
-    throw new BadRequestError(
-      `File ${file.name} exceeds max size of ${Math.round(env.MAX_UPLOAD_BYTES / 1024 / 1024)}MB`,
-    );
-  }
-  if (!ALLOWED_UPLOAD_MIMES.includes(file.type as (typeof ALLOWED_UPLOAD_MIMES)[number])) {
-    throw new BadRequestError("Only PDF, JPEG, and PNG files are allowed");
+  const result = validateUploadFile(file, { maxBytes: env.MAX_UPLOAD_BYTES });
+  if (!result.ok) {
+    throw new BadRequestError(result.message);
   }
 }
 

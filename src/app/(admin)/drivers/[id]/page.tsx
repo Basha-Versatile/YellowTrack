@@ -9,6 +9,7 @@ import { DriverDetailSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
 import VerificationLinkShare from "@/components/ui/VerificationLinkShare";
 import AddressMapPicker from "@/components/public/AddressMapPicker";
+import { pickValidatedFile } from "@/lib/file-validation";
 import { ChevronLeft, ChevronRight, Pencil, Upload, FileText, Plus, ExternalLink, RefreshCw, Clock, MapPin, Check, User, Users, Bell, CreditCard, Calendar, Car, Navigation, Camera, Phone, X, Trash2 } from "lucide-react";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
@@ -351,7 +352,7 @@ export default function DriverDetailPage() {
   };
 
   const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const file = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
     if (!file) return;
     setUploadingProfilePhoto(true);
     try {
@@ -367,7 +368,7 @@ export default function DriverDetailPage() {
   };
 
   const handleAddrPhotoUpload = async (type: "current" | "permanent", e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const file = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
     if (!file) return;
     setUploadingAddrPhoto(type);
     try {
@@ -622,55 +623,68 @@ export default function DriverDetailPage() {
         <VerificationLinkShare token={driver.verificationToken} driverName={driver.name} />
       )}
 
-      {/* Upload Panel */}
+      {/* Upload Document Modal */}
       {showUpload && (
-        <div className="rounded-2xl border border-yellow-200 bg-yellow-50/50 p-5 dark:border-yellow-500/20 dark:bg-yellow-500/5">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Upload Driver Document</h3>
-          <form onSubmit={handleUpload} className="space-y-3">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
-                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Document Type</label>
-                <select value={uploadType} onChange={(e) => { setUploadType(e.target.value); if (e.target.value !== "OTHER") setUploadCustomLabel(""); }} className={inputClass}>
-                  {DOC_TYPES.map((dt) => {
-                    const exists = driver.documents.some((d) => d.type === dt.value);
-                    return <option key={dt.value} value={dt.value}>{dt.label}{exists ? " (replace)" : ""}</option>;
-                  })}
-                  <option value="OTHER">Other / Custom…</option>
-                </select>
-                {uploadType === "OTHER" && (
-                  <input type="text" placeholder="e.g. Trade License, NOC" value={uploadCustomLabel} onChange={(e) => setUploadCustomLabel(e.target.value)} maxLength={60}
-                    className={`${inputClass} mt-2`} />
-                )}
-              </div>
-              {!uploadLifetime && (
-                <div className="flex-1">
-                  <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Expiry Date</label>
-                  <DatePicker value={uploadExpiry} onChange={setUploadExpiry} placeholder="Select expiry date" />
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !uploading && (setShowUpload(false), setUploadError(""), setUploadLifetime(false))} />
+          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 px-6 py-5">
+              <h3 className="text-lg font-bold text-white">Upload Driver Document</h3>
+              <p className="text-white/80 text-xs mt-0.5">Pick a document type, set expiry, and attach the file.</p>
+            </div>
+            <form onSubmit={handleUpload}>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Document Type</label>
+                  <select value={uploadType} onChange={(e) => { setUploadType(e.target.value); if (e.target.value !== "OTHER") setUploadCustomLabel(""); }}
+                    className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-800 focus:border-yellow-400 focus:outline-none focus:ring-3 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                    {DOC_TYPES.map((dt) => {
+                      const exists = driver.documents.some((d) => d.type === dt.value);
+                      return <option key={dt.value} value={dt.value}>{dt.label}{exists ? " (replace)" : ""}</option>;
+                    })}
+                    <option value="OTHER">Other / Custom…</option>
+                  </select>
+                  {uploadType === "OTHER" && (
+                    <input type="text" placeholder="e.g. Trade License, NOC" value={uploadCustomLabel} onChange={(e) => setUploadCustomLabel(e.target.value)} maxLength={60}
+                      className="mt-2 w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-800 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                  )}
                 </div>
-              )}
-              <div className="flex-1">
-                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Document File</label>
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                  className="w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-yellow-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-yellow-700 hover:file:bg-yellow-100 dark:text-gray-400 dark:file:bg-yellow-500/10 dark:file:text-yellow-400" />
+
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer mb-2">
+                    <input type="checkbox" checked={uploadLifetime} onChange={(e) => { setUploadLifetime(e.target.checked); if (e.target.checked) setUploadExpiry(""); }}
+                      className="w-4 h-4 rounded border-gray-300 text-yellow-500 focus:ring-yellow-400" />
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Lifetime validity (no expiry)</span>
+                  </label>
+                  {!uploadLifetime && (
+                    <DatePicker value={uploadExpiry} onChange={setUploadExpiry} placeholder="Select expiry date" />
+                  )}
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Document File</label>
+                  <label className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 cursor-pointer transition-colors">
+                    <Upload className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-500 truncate flex-1">{uploadFile?.name ?? "Select PDF, JPG, or PNG"}</span>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m)); if (f) setUploadFile(f); }} />
+                  </label>
+                  {uploadFile && (
+                    <button type="button" onClick={() => setUploadFile(null)} className="mt-1 text-[10px] text-red-500 hover:text-red-600">Remove file</button>
+                  )}
+                </div>
+
+                {uploadError && <p className="text-sm text-red-600 dark:text-red-400">{uploadError}</p>}
               </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={uploadLifetime} onChange={(e) => { setUploadLifetime(e.target.checked); if (e.target.checked) setUploadExpiry(""); }}
-                  className="w-4 h-4 rounded border-gray-300 text-yellow-500 focus:ring-yellow-400" />
-                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Lifetime validity (no expiry)</span>
-              </label>
-              <div className="flex gap-2">
+              <div className="flex gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
                 <button type="submit" disabled={uploading}
-                  className="rounded-xl bg-yellow-500 px-6 py-2.5 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50 whitespace-nowrap transition-all">
-                  {uploading ? "Uploading..." : "Upload"}
+                  className="flex-1 h-11 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
+                  {uploading ? "Uploading…" : "Upload"}
                 </button>
-                <button type="button" onClick={() => { setShowUpload(false); setUploadError(""); setUploadLifetime(false); }}
-                  className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">Cancel</button>
+                <button type="button" onClick={() => { setShowUpload(false); setUploadError(""); setUploadLifetime(false); }} disabled={uploading}
+                  className="h-11 px-5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">Cancel</button>
               </div>
-            </div>
-          </form>
-          {uploadError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{uploadError}</p>}
+            </form>
+          </div>
         </div>
       )}
 
@@ -833,7 +847,8 @@ export default function DriverDetailPage() {
                               <Upload className="w-3.5 h-3.5" />
                               Upload File
                               <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => {
-                                if (e.target.files?.[0]) driverAPI.uploadDocument(id, e.target.files[0], doc.type, doc.expiryDate ? new Date(doc.expiryDate).toISOString().split("T")[0] : undefined, !doc.expiryDate).then(() => fetchDriver()).catch(console.error);
+                                const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
+                                if (f) driverAPI.uploadDocument(id, f, doc.type, doc.expiryDate ? new Date(doc.expiryDate).toISOString().split("T")[0] : undefined, !doc.expiryDate).then(() => fetchDriver()).catch(console.error);
                               }} />
                             </label>
                           )}
@@ -1350,7 +1365,7 @@ export default function DriverDetailPage() {
                       <span className="text-xs text-gray-400 mt-1">Click to upload (PDF, JPG, PNG)</span>
                     </>
                   )}
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => setRenewDriverFile(e.target.files?.[0] || null)} />
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m)); if (f) setRenewDriverFile(f); }} />
                 </label>
               </div>
               <div className="flex gap-3">

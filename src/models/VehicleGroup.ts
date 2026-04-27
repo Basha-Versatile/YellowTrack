@@ -7,7 +7,6 @@ const vehicleGroupSchema = new Schema(
     icon: { type: String, required: true },
     color: { type: String },
     order: { type: Number, default: 0 },
-    tyreCount: { type: Number, default: 4 },
   },
   { timestamps: true },
 );

@@ -183,13 +183,10 @@ export default function AddDriverPage() {
                     className="w-full h-14 rounded-xl border-2 border-gray-200 bg-gray-50 px-5 text-lg font-mono font-bold tracking-widest text-gray-900 placeholder:text-gray-300 placeholder:font-normal placeholder:tracking-normal focus:border-yellow-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:opacity-60 transition-all"
                   />
                   <label className="mt-5 mb-2 block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date of Birth</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={autoDob}
-                    onChange={(e) => setAutoDob(e.target.value)}
-                    disabled={autoLoading}
-                    max={new Date().toISOString().split("T")[0]}
-                    className="w-full h-12 rounded-xl border-2 border-gray-200 bg-gray-50 px-5 text-sm font-medium text-gray-900 focus:border-yellow-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:opacity-60 transition-all"
+                    onChange={setAutoDob}
+                    placeholder="Select date of birth"
                   />
                   <p className="mt-1.5 text-[11px] text-gray-400">DOB is required to verify the license against the Sarathi / Surepass database.</p>
                   <button type="submit" disabled={autoLoading || !!success}

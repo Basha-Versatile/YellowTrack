@@ -11,6 +11,8 @@ import { Plus, List, Calendar, Wrench, Car, ChevronRight, X, Upload, LayoutGrid,
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 import { SearchInput } from "@/components/ui/SearchInput";
+import DatePicker from "@/components/ui/DatePicker";
+import { pickValidatedFiles } from "@/lib/file-validation";
 
 interface VehicleBasic {
   id: string;
@@ -41,7 +43,9 @@ interface ServiceRecord {
 
 export default function VehicleServicesPage() {
   const toast = useToast();
-  const [tab, setTab] = useState<"services" | "schedule">("services");
+  // Schedule view is hidden in the UI — keep the state typed for the dead-code
+  // branches to compile; the toggle that would set it has been removed.
+  const [tab] = useState<"services" | "schedule">("services");
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [vehicles, setVehicles] = useState<VehicleBasic[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,8 +59,7 @@ export default function VehicleServicesPage() {
   const [showModal, setShowModal] = useState(false);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [savingService, setSavingService] = useState(false);
-  const [svcForm, setSvcForm] = useState({ title: "", description: "", serviceDate: "", odometerKm: "", totalCost: "", nextDueDate: "", nextDueKm: "", status: "COMPLETED" });
-  const [svcParts, setSvcParts] = useState<Array<{ name: string; quantity: string; unitCost: string }>>([{ name: "", quantity: "1", unitCost: "" }]);
+  const [svcForm, setSvcForm] = useState({ title: "", description: "", serviceDate: "", odometerKm: "", totalCost: "", status: "COMPLETED" });
   const [svcReceipts, setSvcReceipts] = useState<File[]>([]);
 
   // Calendar vehicle filter
@@ -80,8 +83,7 @@ export default function VehicleServicesPage() {
     const date = preDate || new Date().toISOString().split("T")[0];
     const isFuture = new Date(date) > new Date();
     const status = preStatus || (isFuture ? "UPCOMING" : "COMPLETED");
-    setSvcForm({ title: "", description: "", serviceDate: date, odometerKm: "", totalCost: "", nextDueDate: isFuture ? date : "", nextDueKm: "", status });
-    setSvcParts([{ name: "", quantity: "1", unitCost: "" }]);
+    setSvcForm({ title: "", description: "", serviceDate: date, odometerKm: "", totalCost: "", status });
     setSvcReceipts([]);
     setSelectedVehicleId(calVehicleId || "");
     setShowModal(true);
@@ -96,13 +98,8 @@ export default function VehicleServicesPage() {
       if (svcForm.description) formData.append("description", svcForm.description);
       formData.append("serviceDate", svcForm.serviceDate);
       if (svcForm.odometerKm) formData.append("odometerKm", svcForm.odometerKm);
-      const partsTotal = svcParts.filter((p) => p.name).reduce((sum, p) => sum + (parseFloat(p.unitCost) || 0) * (parseInt(p.quantity) || 1), 0);
-      formData.append("totalCost", svcForm.totalCost || partsTotal.toString());
-      if (svcForm.nextDueDate) formData.append("nextDueDate", svcForm.nextDueDate);
-      if (svcForm.nextDueKm) formData.append("nextDueKm", svcForm.nextDueKm);
+      formData.append("totalCost", svcForm.totalCost || "0");
       formData.append("status", svcForm.status);
-      const validParts = svcParts.filter((p) => p.name.trim());
-      if (validParts.length > 0) formData.append("parts", JSON.stringify(validParts));
       svcReceipts.forEach((f) => formData.append("receipts", f));
 
       await vehicleAPI.createService(selectedVehicleId, formData);
@@ -171,21 +168,9 @@ export default function VehicleServicesPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Track and schedule vehicle services across your fleet</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl">
-            <button onClick={() => setTab("services")}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${tab === "services" ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
-              <List className="w-4 h-4" />
-              Services
-            </button>
-            <button onClick={() => setTab("schedule")}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${tab === "schedule" ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
-              <Calendar className="w-4 h-4" />
-              Schedule
-            </button>
-          </div>
           <button onClick={() => openAddService()} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-brand-400 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
             <Plus className="w-4 h-4" />
-            {tab === "schedule" ? "Schedule" : "Add Service"}
+            Add Service
           </button>
         </div>
       </div>
@@ -488,7 +473,7 @@ export default function VehicleServicesPage() {
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden max-h-[90vh] flex flex-col">
             <div className={`px-6 py-5 flex-shrink-0 ${svcForm.status === "UPCOMING" ? "bg-gradient-to-r from-yellow-500 to-yellow-400" : "bg-gradient-to-r from-brand-500 to-brand-400"}`}>
               <h3 className="text-lg font-bold text-white">{svcForm.status === "UPCOMING" ? "Schedule Service" : "Log Service"}</h3>
-              <p className="text-white/60 text-sm mt-0.5">{svcForm.status === "UPCOMING" ? "Plan an upcoming service with expected parts" : "Record a completed service with details"}</p>
+              <p className="text-white/60 text-sm mt-0.5">{svcForm.status === "UPCOMING" ? "Plan an upcoming service" : "Record a completed service with details"}</p>
             </div>
             <div className="p-6 space-y-5 overflow-y-auto">
               {/* Vehicle selector */}
@@ -524,11 +509,7 @@ export default function VehicleServicesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">{svcForm.status === "UPCOMING" ? "Scheduled Date *" : "Service Date *"}</label>
-                  <input type="date" value={svcForm.serviceDate} onChange={(e) => {
-                    const val = e.target.value;
-                    setSvcForm((prev) => ({ ...prev, serviceDate: val, ...(prev.status === "UPCOMING" ? { nextDueDate: val } : {}) }));
-                  }}
-                    className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                  <DatePicker value={svcForm.serviceDate} onChange={(v) => setSvcForm((prev) => ({ ...prev, serviceDate: v }))} placeholder="Select date" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Odometer (km)</label>
@@ -537,51 +518,11 @@ export default function VehicleServicesPage() {
                 </div>
               </div>
 
-              {/* Parts */}
+              {/* Total cost */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{svcForm.status === "UPCOMING" ? "Parts to be Changed" : "Parts Changed"}</label>
-                  <button type="button" onClick={() => setSvcParts([...svcParts, { name: "", quantity: "1", unitCost: "" }])}
-                    className="text-[10px] font-semibold text-brand-500 hover:text-brand-600 flex items-center gap-0.5">
-                    <Plus className="w-3 h-3" />
-                    Add Part
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {svcParts.map((part, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input type="text" placeholder="Part name" value={part.name} onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], name: e.target.value }; setSvcParts(n); }}
-                        className="flex-1 h-9 rounded-lg border border-gray-200 bg-gray-50 px-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                      <input type="number" placeholder="Qty" value={part.quantity} onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], quantity: e.target.value }; setSvcParts(n); }}
-                        className="w-16 h-9 rounded-lg border border-gray-200 bg-gray-50 px-2 text-xs text-center text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">&#8377;</span>
-                        <input type="number" placeholder="Cost" value={part.unitCost} onChange={(e) => { const n = [...svcParts]; n[idx] = { ...n[idx], unitCost: e.target.value }; setSvcParts(n); }}
-                          className="w-24 h-9 rounded-lg border border-gray-200 bg-gray-50 pl-6 pr-2 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                      </div>
-                      {svcParts.length > 1 && (
-                        <button type="button" onClick={() => setSvcParts(svcParts.filter((_, i) => i !== idx))}
-                          className="w-8 h-9 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center justify-center transition-colors">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Total + Next Due */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Total Cost (&#8377;)</label>
-                  <input type="number" placeholder="Auto from parts" value={svcForm.totalCost} onChange={(e) => setSvcForm({ ...svcForm, totalCost: e.target.value })}
-                    className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Next Due Date</label>
-                  <input type="date" value={svcForm.nextDueDate} onChange={(e) => setSvcForm({ ...svcForm, nextDueDate: e.target.value })}
-                    className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                </div>
+                <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Total Cost (&#8377;)</label>
+                <input type="number" placeholder="0" value={svcForm.totalCost} onChange={(e) => setSvcForm({ ...svcForm, totalCost: e.target.value })}
+                  className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
               </div>
 
               {/* Receipt upload */}
@@ -599,7 +540,7 @@ export default function VehicleServicesPage() {
                 <label className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-brand-400 cursor-pointer transition-colors group">
                   <Upload className="w-4 h-4 text-gray-300 group-hover:text-brand-500" />
                   <span className="text-xs text-gray-400 group-hover:text-brand-600">Upload receipts</span>
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { setSvcReceipts([...svcReceipts, ...Array.from(e.target.files || [])]); e.target.value = ""; }} />
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) setSvcReceipts([...svcReceipts, ...fs]); }} />
                 </label>
               </div>
 

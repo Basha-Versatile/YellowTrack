@@ -21,3 +21,11 @@ export const PUT = withRoute<{ id: string }>(
   },
   { auth: true },
 );
+
+export const DELETE = withRoute<{ id: string }>(
+  async ({ params }) => {
+    const removed = await complianceRepo.removeById(params.id);
+    return success(removed, "Compliance document removed");
+  },
+  { auth: true },
+);

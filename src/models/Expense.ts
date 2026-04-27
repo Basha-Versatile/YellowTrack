@@ -2,13 +2,10 @@ import "server-only";
 import { Schema, model, models, type Model, type InferSchemaType } from "mongoose";
 
 export const EXPENSE_CATEGORIES = [
+  "CHALLAN",
+  "SERVICE",
   "COMPLIANCE",
-  "FUEL",
-  "TYRE",
-  "MAINTENANCE",
-  "PARKING",
-  "TOLL",
-  "MISC",
+  "FASTAG",
 ] as const;
 
 const expenseSchema = new Schema(

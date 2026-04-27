@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ChevronLeft, Banknote, RefreshCw, Clock, Check, AlertTriangle, Search, Calendar, X, ImageIcon, CheckCircle2 } from "lucide-react";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import DatePicker from "@/components/ui/DatePicker";
 
 interface Challan {
   id: string;
@@ -299,11 +300,9 @@ export default function VehicleChallansPage() {
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">From</span>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-            className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+          <DatePicker value={dateFrom} onChange={setDateFrom} placeholder="From date" />
           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">To</span>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-            className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+          <DatePicker value={dateTo} onChange={setDateTo} placeholder="To date" minDate={dateFrom} />
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(""); setDateTo(""); }}
               className="flex items-center gap-1 h-10 px-3 rounded-xl text-xs font-medium text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">

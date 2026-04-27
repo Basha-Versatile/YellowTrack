@@ -16,10 +16,6 @@ export async function getById(id: string) {
   return dt;
 }
 
-export async function getByGroupId(groupId: string) {
-  return repo.findByGroupId(groupId);
-}
-
 export async function create(data: {
   code: string;
   name: string;
@@ -55,12 +51,6 @@ export async function remove(id: string) {
   const dt = await getById(id);
   if ((dt as unknown as { isSystem: boolean }).isSystem) {
     throw new BadRequestError("Cannot delete a system document type");
-  }
-  const refCount = await repo.countGroupReferences(id);
-  if (refCount > 0) {
-    throw new BadRequestError(
-      `Cannot delete: this document type is assigned to ${refCount} group${refCount > 1 ? "s" : ""}. Remove it from all groups first.`,
-    );
   }
   return repo.remove(id);
 }

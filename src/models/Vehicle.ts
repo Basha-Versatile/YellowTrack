@@ -14,6 +14,7 @@ const vehicleSchema = new Schema(
     seatingCapacity: { type: Number },
     permitType: { type: String },
     vehicleUsage: { type: String, enum: ["PRIVATE", "COMMERCIAL"] },
+    tyreCount: { type: Number, min: 2, max: 20 },
     registrationDate: { type: Date },
     qrCodeUrl: { type: String },
     invoiceUrl: { type: String },
