@@ -3,19 +3,28 @@ import {
   PublicAccessAction,
   VehiclePublicAccessLog,
 } from "@/models/VehiclePublicAccessLog";
+import {
+  type ScopedContext,
+  tenantFilter,
+  tenantStamp,
+} from "@/lib/auth/tenant-context";
 
-export async function logAccess(params: {
-  vehicleId: string;
-  target: string;
-  action: PublicAccessAction;
-  documentUrl?: string | null;
-  accessorName?: string | null;
-  accessorPhone?: string | null;
-  ip?: string | null;
-  userAgent?: string | null;
-}) {
+export async function logAccess(
+  ctx: ScopedContext,
+  params: {
+    vehicleId: string;
+    target: string;
+    action: PublicAccessAction;
+    documentUrl?: string | null;
+    accessorName?: string | null;
+    accessorPhone?: string | null;
+    ip?: string | null;
+    userAgent?: string | null;
+  },
+) {
   try {
     await VehiclePublicAccessLog.create({
+      ...tenantStamp(ctx),
       vehicleId: params.vehicleId,
       target: params.target,
       action: params.action,
@@ -34,8 +43,14 @@ export async function logAccess(params: {
   }
 }
 
-export async function findByVehicle(vehicleId: string, limit = 200) {
-  const entries = await VehiclePublicAccessLog.find({ vehicleId })
+export async function findByVehicle(
+  ctx: ScopedContext,
+  vehicleId: string,
+  limit = 200,
+) {
+  const entries = await VehiclePublicAccessLog.find(
+    tenantFilter(ctx, { vehicleId }),
+  )
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();

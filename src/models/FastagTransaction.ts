@@ -5,6 +5,7 @@ export const FASTAG_TXN_TYPES = ["TOLL", "RECHARGE", "REFUND"] as const;
 
 const fastagTransactionSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     fastagId: { type: Schema.Types.ObjectId, ref: "Fastag", required: true, index: true },
     type: { type: String, enum: FASTAG_TXN_TYPES, required: true },
     amount: { type: Number, required: true },

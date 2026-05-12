@@ -28,11 +28,13 @@ async function createTokenPair(user: {
   id: string;
   email: string;
   role: string;
+  tenantId: string | null;
 }): Promise<Omit<AuthResult, "user">> {
   const accessToken = signAccessToken({
     id: user.id,
     email: user.email,
     role: user.role,
+    tenantId: user.tenantId,
   });
   const refreshToken = generateRefreshToken();
   const refreshTokenExpiresAt = getRefreshTokenExpiry();
@@ -73,6 +75,16 @@ export async function login(input: {
     comparePassword(c: string): Promise<boolean>;
   }).comparePassword(input.password);
   if (!isMatch) throw new UnauthorizedError("Invalid email or password");
+
+  if ((doc as unknown as { status?: string }).status === "SUSPENDED") {
+    throw new UnauthorizedError(
+      "Your account is suspended. Contact your administrator.",
+    );
+  }
+
+  // Stamp last-login (fire-and-forget).
+  (doc as unknown as { lastLoginAt?: Date }).lastLoginAt = new Date();
+  await (doc as unknown as { save: () => Promise<unknown> }).save().catch(() => undefined);
 
   const publicUser = toPublicUser(doc);
   const tokens = await createTokenPair(publicUser);

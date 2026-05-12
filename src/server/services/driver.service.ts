@@ -6,6 +6,7 @@ import {
   ConflictError,
   NotFoundError,
 } from "@/lib/errors";
+import type { ScopedContext } from "@/lib/auth/tenant-context";
 import * as driverRepo from "../repositories/driver.repository";
 import * as docChangeRepo from "../repositories/driverDocumentChange.repository";
 import * as driverChangeRepo from "../repositories/driverChange.repository";
@@ -57,8 +58,12 @@ function getValidVehicleClasses(driverClass: string): string[] {
 
 // ── Public API ────────────────────────────────────────────────
 
-export async function createDriver(data: Record<string, unknown>) {
+export async function createDriver(
+  ctx: ScopedContext,
+  data: Record<string, unknown>,
+) {
   const existing = await driverRepo.findByLicenseNumber(
+    ctx,
     String(data.licenseNumber),
   );
   if (existing) {
@@ -70,15 +75,15 @@ export async function createDriver(data: Record<string, unknown>) {
     throw new BadRequestError("Cannot add driver with expired license");
   }
 
-  return driverRepo.create({
+  return driverRepo.create(ctx, {
     ...data,
     licenseExpiry,
     verificationToken: randomUUID(),
   });
 }
 
-export async function getAllDrivers() {
-  const drivers = await driverRepo.findAll();
+export async function getAllDrivers(ctx: ScopedContext) {
+  const drivers = await driverRepo.findAll(ctx);
   return drivers.map((d) => ({
     ...d,
     licenseStatus: calculateLicenseStatus(d.licenseExpiry as Date | string),
@@ -86,8 +91,8 @@ export async function getAllDrivers() {
   }));
 }
 
-export async function getDriverById(id: string) {
-  const driver = await driverRepo.findById(id);
+export async function getDriverById(ctx: ScopedContext, id: string) {
+  const driver = await driverRepo.findById(ctx, id);
   if (!driver) throw new NotFoundError("Driver not found");
   return {
     ...driver,
@@ -97,17 +102,18 @@ export async function getDriverById(id: string) {
 }
 
 export async function assignDriverToVehicle(
+  ctx: ScopedContext,
   driverId: string,
   vehicleId: string,
 ) {
-  const driver = await driverRepo.findById(driverId);
+  const driver = await driverRepo.findById(ctx, driverId);
   if (!driver) throw new NotFoundError("Driver not found");
 
   if (new Date(driver.licenseExpiry as Date | string) < new Date()) {
     throw new BadRequestError("Cannot assign driver with expired license");
   }
 
-  const vehicle = await vehicleRepo.findById(vehicleId);
+  const vehicle = await vehicleRepo.findById(ctx, vehicleId);
   if (!vehicle) throw new NotFoundError("Vehicle not found");
 
   const validClasses = getValidVehicleClasses(driver.vehicleClass as string);
@@ -118,7 +124,7 @@ export async function assignDriverToVehicle(
     );
   }
 
-  return driverRepo.assignToVehicle(driverId, vehicleId);
+  return driverRepo.assignToVehicle(ctx, driverId, vehicleId);
 }
 
 type NormalizedDl = {
@@ -214,10 +220,11 @@ function normalizeFromMock(mock: Awaited<ReturnType<typeof fetchDriverByLicense>
 }
 
 export async function autoCreateDriver(
+  ctx: ScopedContext,
   licenseNumber: string,
   dob?: string | null,
 ) {
-  const existing = await driverRepo.findByLicenseNumber(licenseNumber);
+  const existing = await driverRepo.findByLicenseNumber(ctx, licenseNumber);
   if (existing) {
     throw new ConflictError("Driver with this license number already exists");
   }
@@ -254,7 +261,7 @@ export async function autoCreateDriver(
     throw new BadRequestError("Cannot add driver with expired license");
   }
 
-  const driver = await driverRepo.create({
+  const driver = await driverRepo.create(ctx, {
     name: normalized.name,
     phone: normalized.phone,
     aadhaarLast4: normalized.aadhaarLast4,
@@ -283,11 +290,12 @@ export async function autoCreateDriver(
 }
 
 export async function uploadDriverDocument(
+  ctx: ScopedContext,
   driverId: string,
   docData: { type: string; expiryDate?: Date | string | null; lifetime: boolean },
   fileUrl: string,
 ) {
-  const driver = await driverRepo.findById(driverId);
+  const driver = await driverRepo.findById(ctx, driverId);
   if (!driver) throw new NotFoundError("Driver not found");
 
   const expiryDate = docData.lifetime
@@ -306,20 +314,28 @@ export async function uploadDriverDocument(
     isActive: true,
   };
 
-  const existing = await driverRepo.findActiveByDriverAndType(driverId, docData.type);
+  const existing = await driverRepo.findActiveByDriverAndType(
+    ctx,
+    driverId,
+    docData.type,
+  );
   if (existing) {
-    return driverRepo.renewDocument(String(existing._id), newData);
+    return driverRepo.renewDocument(ctx, String(existing._id), newData);
   }
-  return driverRepo.createDocument(newData);
+  return driverRepo.createDocument(ctx, newData);
 }
 
-export async function getDocumentHistory(driverId: string, type: string) {
-  const driver = await driverRepo.findById(driverId);
+export async function getDocumentHistory(
+  ctx: ScopedContext,
+  driverId: string,
+  type: string,
+) {
+  const driver = await driverRepo.findById(ctx, driverId);
   if (!driver) throw new NotFoundError("Driver not found");
-  const changes = await docChangeRepo.findByDriverAndType(driverId, type);
+  const changes = await docChangeRepo.findByDriverAndType(ctx, driverId, type);
   if (changes.length > 0) return changes;
   // Backfill: old docs may predate the change log — expose them as synthetic entries
-  const docs = await driverRepo.getDocHistory(driverId, type);
+  const docs = await driverRepo.getDocHistory(ctx, driverId, type);
   return docs.map((d) => {
     const doc = d as Record<string, unknown>;
     return {
@@ -340,12 +356,13 @@ export async function getDocumentHistory(driverId: string, type: string) {
 }
 
 export async function renewDriverDocument(
+  ctx: ScopedContext,
   driverId: string,
   oldDocId: string,
   newDocData: { expiryDate?: Date | string | null; lifetime: boolean },
   fileUrl: string | null,
 ) {
-  const oldDoc = await driverRepo.findDocById(oldDocId);
+  const oldDoc = await driverRepo.findDocById(ctx, oldDocId);
   if (!oldDoc || String(oldDoc.driverId) !== driverId) {
     throw new NotFoundError("Document not found");
   }
@@ -356,7 +373,7 @@ export async function renewDriverDocument(
       ? new Date(newDocData.expiryDate)
       : null;
 
-  return driverRepo.renewDocument(oldDocId, {
+  return driverRepo.renewDocument(ctx, oldDocId, {
     driverId,
     type: oldDoc.type,
     expiryDate,
@@ -383,22 +400,23 @@ const ADDRESS_FIELDS = [
 ];
 
 export async function updateDriver(
+  ctx: ScopedContext,
   id: string,
   data: Record<string, unknown>,
   actor: driverChangeRepo.Actor,
 ) {
-  const driver = await driverRepo.findById(id);
+  const driver = await driverRepo.findById(ctx, id);
   if (!driver) throw new NotFoundError("Driver not found");
   const before = driver as Record<string, unknown>;
 
-  const updated = await driverRepo.update(id, data);
+  const updated = await driverRepo.update(ctx, id, data);
   if (!updated) throw new NotFoundError("Driver not found");
   const after = updated as Record<string, unknown>;
 
   // Profile fields
   const profileDiffs = driverChangeRepo.diffFields(before, after, SIMPLE_FIELDS);
   if (profileDiffs.length > 0) {
-    await driverChangeRepo.logDriverChange({
+    await driverChangeRepo.logDriverChange(ctx, {
       driverId: id,
       changeType: "PROFILE_UPDATED",
       fields: profileDiffs,
@@ -409,7 +427,7 @@ export async function updateDriver(
   // Address fields (grouped — they move together)
   const addressDiffs = driverChangeRepo.diffFields(before, after, ADDRESS_FIELDS);
   if (addressDiffs.length > 0) {
-    await driverChangeRepo.logDriverChange({
+    await driverChangeRepo.logDriverChange(ctx, {
       driverId: id,
       changeType: "ADDRESS_UPDATED",
       fields: addressDiffs,
@@ -420,7 +438,7 @@ export async function updateDriver(
   // Emergency contacts — serialized diff
   const ecDiffs = driverChangeRepo.diffFields(before, after, ["emergencyContacts"]);
   if (ecDiffs.length > 0) {
-    await driverChangeRepo.logDriverChange({
+    await driverChangeRepo.logDriverChange(ctx, {
       driverId: id,
       changeType: "EMERGENCY_CONTACTS_UPDATED",
       fields: ecDiffs,
@@ -431,7 +449,7 @@ export async function updateDriver(
   // Profile photo
   const photoDiffs = driverChangeRepo.diffFields(before, after, ["profilePhoto"]);
   if (photoDiffs.length > 0) {
-    await driverChangeRepo.logDriverChange({
+    await driverChangeRepo.logDriverChange(ctx, {
       driverId: id,
       changeType: "PROFILE_PHOTO_UPDATED",
       fields: photoDiffs,
@@ -446,13 +464,14 @@ export async function updateDriver(
   };
 }
 
-export async function getDriverChangeLog(id: string) {
-  const driver = await driverRepo.findById(id);
+export async function getDriverChangeLog(ctx: ScopedContext, id: string) {
+  const driver = await driverRepo.findById(ctx, id);
   if (!driver) throw new NotFoundError("Driver not found");
-  return driverChangeRepo.findByDriver(id);
+  return driverChangeRepo.findByDriver(ctx, id);
 }
 
 export async function adminUploadAddressPhoto(
+  ctx: ScopedContext,
   driverId: string,
   type: "current" | "permanent",
   photoUrl: string,
@@ -461,7 +480,7 @@ export async function adminUploadAddressPhoto(
   if (type !== "current" && type !== "permanent") {
     throw new BadRequestError("Invalid address type");
   }
-  const driver = await driverRepo.findById(driverId);
+  const driver = await driverRepo.findById(ctx, driverId);
   if (!driver) throw new NotFoundError("Driver not found");
   const d = driver as Record<string, unknown>;
 
@@ -472,8 +491,8 @@ export async function adminUploadAddressPhoto(
     throw new BadRequestError("Maximum 5 photos allowed per address");
   }
   const photos = [...existing, photoUrl];
-  await driverRepo.update(driverId, { [field]: photos });
-  await driverChangeRepo.logDriverChange({
+  await driverRepo.update(ctx, driverId, { [field]: photos });
+  await driverChangeRepo.logDriverChange(ctx, {
     driverId,
     changeType: "ADDRESS_PHOTO_ADDED",
     fields: [{ field, before: null, after: photoUrl }],
@@ -484,6 +503,7 @@ export async function adminUploadAddressPhoto(
 }
 
 export async function adminDeleteAddressPhoto(
+  ctx: ScopedContext,
   driverId: string,
   type: "current" | "permanent",
   url: string,
@@ -492,7 +512,7 @@ export async function adminDeleteAddressPhoto(
   if (type !== "current" && type !== "permanent") {
     throw new BadRequestError("Invalid address type");
   }
-  const driver = await driverRepo.findById(driverId);
+  const driver = await driverRepo.findById(ctx, driverId);
   if (!driver) throw new NotFoundError("Driver not found");
   const d = driver as Record<string, unknown>;
 
@@ -500,8 +520,8 @@ export async function adminDeleteAddressPhoto(
     type === "current" ? "currentAddressPhotos" : "permanentAddressPhotos";
   const existing = (d[field] as string[] | undefined) ?? [];
   const photos = existing.filter((p) => p !== url);
-  await driverRepo.update(driverId, { [field]: photos });
-  await driverChangeRepo.logDriverChange({
+  await driverRepo.update(ctx, driverId, { [field]: photos });
+  await driverChangeRepo.logDriverChange(ctx, {
     driverId,
     changeType: "ADDRESS_PHOTO_REMOVED",
     fields: [{ field, before: url, after: null }],
@@ -512,15 +532,16 @@ export async function adminDeleteAddressPhoto(
 }
 
 export async function adminUploadProfilePhoto(
+  ctx: ScopedContext,
   driverId: string,
   photoUrl: string,
   actor: driverChangeRepo.Actor,
 ) {
-  const driver = await driverRepo.findById(driverId);
+  const driver = await driverRepo.findById(ctx, driverId);
   if (!driver) throw new NotFoundError("Driver not found");
   const prev = (driver as Record<string, unknown>).profilePhoto ?? null;
-  await driverRepo.update(driverId, { profilePhoto: photoUrl });
-  await driverChangeRepo.logDriverChange({
+  await driverRepo.update(ctx, driverId, { profilePhoto: photoUrl });
+  await driverChangeRepo.logDriverChange(ctx, {
     driverId,
     changeType: "PROFILE_PHOTO_UPDATED",
     fields: [{ field: "profilePhoto", before: prev, after: photoUrl }],
@@ -529,8 +550,8 @@ export async function adminUploadProfilePhoto(
   return { profilePhoto: photoUrl };
 }
 
-export async function getDriverComplianceStats() {
-  const drivers = await driverRepo.findAll();
+export async function getDriverComplianceStats(ctx: ScopedContext) {
+  const drivers = await driverRepo.findAll(ctx);
   const totalDrivers = drivers.length;
 
   const license = { green: 0, yellow: 0, orange: 0, red: 0 };
@@ -567,8 +588,8 @@ export async function getDriverComplianceStats() {
   return { totalDrivers, license, documents: docs };
 }
 
-export async function toggleAdminVerification(id: string) {
-  const driver = await driverRepo.findById(id);
+export async function toggleAdminVerification(ctx: ScopedContext, id: string) {
+  const driver = await driverRepo.findById(ctx, id);
   if (!driver) throw new NotFoundError("Driver not found");
   const current = Boolean(driver.adminVerified);
   if (!current && !driver.selfVerifiedAt) {
@@ -579,5 +600,5 @@ export async function toggleAdminVerification(id: string) {
   const updateData = current
     ? { adminVerified: false, selfVerifiedAt: null }
     : { adminVerified: true };
-  return driverRepo.update(id, updateData);
+  return driverRepo.update(ctx, id, updateData);
 }

@@ -24,6 +24,7 @@ const changedFieldSchema = new Schema(
 
 const driverDocumentChangeSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     documentId: { type: Schema.Types.ObjectId, ref: "DriverDocument", required: true, index: true },
     driverId: { type: Schema.Types.ObjectId, ref: "Driver", required: true, index: true },
     type: { type: String, required: true },

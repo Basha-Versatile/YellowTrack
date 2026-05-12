@@ -1,5 +1,6 @@
 import "server-only";
 import { AppError, BadRequestError, NotFoundError } from "@/lib/errors";
+import type { ScopedContext } from "@/lib/auth/tenant-context";
 import * as paymentRepo from "../repositories/payment.repository";
 import * as challanRepo from "../repositories/challan.repository";
 import { create as createNotification } from "./notification.service";
@@ -11,12 +12,12 @@ type PaySingleInput = {
   paidBy: string;
 };
 
-export async function paySingle(input: PaySingleInput) {
-  const challan = await challanRepo.findById(input.challanId);
+export async function paySingle(ctx: ScopedContext, input: PaySingleInput) {
+  const challan = await challanRepo.findById(ctx, input.challanId);
   if (!challan) throw new NotFoundError("Challan not found");
   if (challan.status === "PAID") throw new BadRequestError("Challan already paid");
 
-  const payment = await paymentRepo.create({
+  const payment = await paymentRepo.create(ctx, {
     totalAmount: challan.amount,
     method: input.method,
     transactionId: input.transactionId ?? `TXN-${Date.now()}`,
@@ -28,7 +29,7 @@ export async function paySingle(input: PaySingleInput) {
     (challan.vehicle as { registrationNumber?: string } | null)?.registrationNumber ??
     "vehicle";
   try {
-    await createNotification({
+    await createNotification(ctx, {
       userId: input.paidBy,
       type: "CHALLAN_PAID",
       title: "Challan Paid",
@@ -49,11 +50,11 @@ type PayBulkInput = {
   paidBy: string;
 };
 
-export async function payBulk(input: PayBulkInput) {
+export async function payBulk(ctx: ScopedContext, input: PayBulkInput) {
   if (!input.challanIds?.length) throw new BadRequestError("No challans selected");
 
   const challans = await Promise.all(
-    input.challanIds.map((id) => challanRepo.findById(id)),
+    input.challanIds.map((id) => challanRepo.findById(ctx, id)),
   );
   const invalid = challans.filter((c) => !c || c.status === "PAID");
   if (invalid.length) {
@@ -67,7 +68,7 @@ export async function payBulk(input: PayBulkInput) {
     0,
   );
 
-  const payment = await paymentRepo.create({
+  const payment = await paymentRepo.create(ctx, {
     totalAmount,
     method: input.method,
     transactionId: input.transactionId ?? `BULK-TXN-${Date.now()}`,
@@ -76,7 +77,7 @@ export async function payBulk(input: PayBulkInput) {
   });
 
   try {
-    await createNotification({
+    await createNotification(ctx, {
       userId: input.paidBy,
       type: "CHALLAN_PAID",
       title: "Bulk Payment Successful",
@@ -89,14 +90,15 @@ export async function payBulk(input: PayBulkInput) {
   return payment;
 }
 
-export async function getPaymentById(id: string) {
-  const payment = await paymentRepo.findById(id);
+export async function getPaymentById(ctx: ScopedContext, id: string) {
+  const payment = await paymentRepo.findById(ctx, id);
   if (!payment) throw new AppError("Payment not found", 404);
   return payment;
 }
 
 export async function getAllPayments(
+  ctx: ScopedContext,
   query: { page?: number; limit?: number } = {},
 ) {
-  return paymentRepo.findAll(query);
+  return paymentRepo.findAll(ctx, query);
 }

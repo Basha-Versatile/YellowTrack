@@ -1,16 +1,19 @@
 import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { getVehicleById, syncChallans } from "@/server/services/vehicle.service";
 
 export const runtime = "nodejs";
 
 export const POST = withRoute<{ id: string }>(
-  async ({ params }) => {
-    const vehicle = (await getVehicleById(params.id)) as unknown as Record<
+  async ({ params, session }) => {
+    const ctx = tenantOf(session);
+    const vehicle = (await getVehicleById(ctx, params.id)) as unknown as Record<
       string,
       unknown
     >;
     await syncChallans(
+      ctx,
       String(vehicle._id),
       vehicle.registrationNumber as string,
     );

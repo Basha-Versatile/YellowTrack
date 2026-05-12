@@ -1,6 +1,7 @@
 import { withRoute, parseJson } from "@/lib/api-handler";
 import { created } from "@/lib/http";
 import { z } from "zod";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { autoCreateDriver } from "@/server/services/driver.service";
 
 export const runtime = "nodejs";
@@ -19,9 +20,10 @@ const bodySchema = z.object({
 });
 
 export const POST = withRoute(
-  async ({ req }) => {
+  async ({ req, session }) => {
+    const ctx = tenantOf(session);
     const { licenseNumber, dob } = await parseJson(req, bodySchema);
-    const driver = await autoCreateDriver(licenseNumber, dob);
+    const driver = await autoCreateDriver(ctx, licenseNumber, dob);
     return created(driver, "Driver verified and created successfully");
   },
   { auth: true },

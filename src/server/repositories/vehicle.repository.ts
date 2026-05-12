@@ -8,6 +8,11 @@ import {
   VehicleDriverMapping,
   VehicleGroup,
 } from "@/models";
+import {
+  type ScopedContext,
+  tenantFilter,
+  tenantStamp,
+} from "@/lib/auth/tenant-context";
 
 export type VehicleListQuery = {
   page?: number;
@@ -31,35 +36,38 @@ type EnrichedVehicle = Record<string, unknown> & {
   driverMappings: Array<Record<string, unknown>>;
 };
 
-export async function findAll({
-  page = 1,
-  limit = 10,
-  search,
-  status,
-  groupId,
-  vehicleUsage,
-}: VehicleListQuery): Promise<Paginated<EnrichedVehicle>> {
+export async function findAll(
+  ctx: ScopedContext,
+  {
+    page = 1,
+    limit = 10,
+    search,
+    status,
+    groupId,
+    vehicleUsage,
+  }: VehicleListQuery,
+): Promise<Paginated<EnrichedVehicle>> {
   const skip = (page - 1) * limit;
-  const filter: Record<string, unknown> = {};
+  const extras: Record<string, unknown> = {};
 
   if (search) {
-    filter.$or = [
+    extras.$or = [
       { registrationNumber: { $regex: search, $options: "i" } },
       { make: { $regex: search, $options: "i" } },
       { model: { $regex: search, $options: "i" } },
     ];
   }
-  if (groupId) filter.groupId = groupId;
-  if (vehicleUsage) filter.vehicleUsage = vehicleUsage;
+  if (groupId) extras.groupId = groupId;
+  if (vehicleUsage) extras.vehicleUsage = vehicleUsage;
 
   if (status) {
-    const vehicleIdsWithStatus = await ComplianceDocument.find({
-      status,
-      isActive: true,
-    })
-      .distinct("vehicleId");
-    filter._id = { $in: vehicleIdsWithStatus };
+    const vehicleIdsWithStatus = await ComplianceDocument.find(
+      tenantFilter(ctx, { status, isActive: true }),
+    ).distinct("vehicleId");
+    extras._id = { $in: vehicleIdsWithStatus };
   }
+
+  const filter = tenantFilter(ctx, extras);
 
   const [vehicles, total] = await Promise.all([
     Vehicle.find(filter)
@@ -85,20 +93,17 @@ export async function findAll({
   const [groups, complianceDocs, pendingChallans, activeMappings] =
     await Promise.all([
       groupIds.length
-        ? VehicleGroup.find({ _id: { $in: groupIds } }).lean()
+        ? VehicleGroup.find(tenantFilter(ctx, { _id: { $in: groupIds } })).lean()
         : [],
-      ComplianceDocument.find({
-        vehicleId: { $in: vehicleIds },
-        isActive: true,
-      }).lean(),
-      Challan.find({
-        vehicleId: { $in: vehicleIds },
-        status: "PENDING",
-      }).lean(),
-      VehicleDriverMapping.find({
-        vehicleId: { $in: vehicleIds },
-        isActive: true,
-      })
+      ComplianceDocument.find(
+        tenantFilter(ctx, { vehicleId: { $in: vehicleIds }, isActive: true }),
+      ).lean(),
+      Challan.find(
+        tenantFilter(ctx, { vehicleId: { $in: vehicleIds }, status: "PENDING" }),
+      ).lean(),
+      VehicleDriverMapping.find(
+        tenantFilter(ctx, { vehicleId: { $in: vehicleIds }, isActive: true }),
+      )
         .populate({ path: "driverId", model: Driver })
         .lean(),
     ]);
@@ -142,7 +147,74 @@ export async function findAll({
   };
 }
 
-export async function findById(id: string): Promise<EnrichedVehicle | null> {
+export async function findById(
+  ctx: ScopedContext,
+  id: string,
+): Promise<EnrichedVehicle | null> {
+  const vehicle = await Vehicle.findOne(tenantFilter(ctx, { _id: id })).lean();
+  if (!vehicle) return null;
+
+  const [
+    group,
+    complianceDocuments,
+    challans,
+    driverMappings,
+    tyres,
+  ] = await Promise.all([
+    vehicle.groupId
+      ? VehicleGroup.findOne(
+          tenantFilter(ctx, { _id: vehicle.groupId }),
+        ).lean()
+      : null,
+    ComplianceDocument.find(
+      tenantFilter(ctx, { vehicleId: id, isActive: true }),
+    )
+      .sort({ type: 1 })
+      .lean(),
+    Challan.find(tenantFilter(ctx, { vehicleId: id }))
+      .sort({ issuedAt: -1 })
+      .lean(),
+    VehicleDriverMapping.find(tenantFilter(ctx, { vehicleId: id }))
+      .sort({ assignedAt: -1 })
+      .populate({ path: "driverId", model: Driver })
+      .lean(),
+    Tyre.find(tenantFilter(ctx, { vehicleId: id }))
+      .sort({ position: 1 })
+      .lean(),
+  ]);
+
+  const mappings = (
+    driverMappings as unknown as Array<
+      Record<string, unknown> & { driverId: unknown }
+    >
+  ).map((m) => ({ ...m, driver: m.driverId }));
+
+  return {
+    ...vehicle,
+    group,
+    complianceDocuments,
+    challans,
+    driverMappings: mappings,
+    tyres,
+  } as unknown as EnrichedVehicle;
+}
+
+/**
+ * ⚠ ESCAPE HATCH — does NOT enforce tenant scope. Public-endpoint-only.
+ *
+ * Used by:
+ *   - `public.service.getVehiclePublic` — the unguessable `/public/vehicle/[id]`
+ *     URL IS the access control; we resolve the vehicle to discover its
+ *     tenantId, then build a token-scoped ctx for any follow-up writes.
+ *   - `/api/public/vehicles/[id]/access` (access log POST) — same pattern.
+ *
+ * Returns the same enriched shape as `findById(ctx, id)`. Reads cross-tenant.
+ * Grep for `findByIdAnyTenant` to audit usage — every call site must be a
+ * public endpoint that intentionally needs cross-tenant resolution by ID.
+ */
+export async function findByIdAnyTenant(
+  id: string,
+): Promise<EnrichedVehicle | null> {
   const vehicle = await Vehicle.findById(id).lean();
   if (!vehicle) return null;
 
@@ -157,9 +229,7 @@ export async function findById(id: string): Promise<EnrichedVehicle | null> {
     ComplianceDocument.find({ vehicleId: id, isActive: true })
       .sort({ type: 1 })
       .lean(),
-    Challan.find({ vehicleId: id })
-      .sort({ issuedAt: -1 })
-      .lean(),
+    Challan.find({ vehicleId: id }).sort({ issuedAt: -1 }).lean(),
     VehicleDriverMapping.find({ vehicleId: id })
       .sort({ assignedAt: -1 })
       .populate({ path: "driverId", model: Driver })
@@ -183,35 +253,58 @@ export async function findById(id: string): Promise<EnrichedVehicle | null> {
   } as unknown as EnrichedVehicle;
 }
 
-export async function findByRegistrationNumber(registrationNumber: string) {
-  return Vehicle.findOne({
-    registrationNumber: registrationNumber.toUpperCase(),
-  }).lean();
+export async function findByRegistrationNumber(
+  ctx: ScopedContext,
+  registrationNumber: string,
+) {
+  return Vehicle.findOne(
+    tenantFilter(ctx, {
+      registrationNumber: registrationNumber.toUpperCase(),
+    }),
+  ).lean();
 }
 
-export async function create(data: Record<string, unknown>) {
+export async function create(
+  ctx: ScopedContext,
+  data: Record<string, unknown>,
+) {
   return Vehicle.create({
     ...data,
+    ...tenantStamp(ctx),
     registrationNumber: String(data.registrationNumber).toUpperCase(),
   });
 }
 
-export async function update(id: string, data: Record<string, unknown>) {
-  return Vehicle.findByIdAndUpdate(id, data, { new: true });
+export async function update(
+  ctx: ScopedContext,
+  id: string,
+  data: Record<string, unknown>,
+) {
+  return Vehicle.findOneAndUpdate(tenantFilter(ctx, { _id: id }), data, {
+    new: true,
+  });
 }
 
-export async function getDashboardStats() {
+export async function getDashboardStats(ctx: ScopedContext) {
   const [totalVehicles, greenDocs, yellowDocs, orangeDocs, redDocs] =
     await Promise.all([
-      Vehicle.countDocuments(),
-      ComplianceDocument.countDocuments({ status: "GREEN", isActive: true }),
-      ComplianceDocument.countDocuments({ status: "YELLOW", isActive: true }),
-      ComplianceDocument.countDocuments({ status: "ORANGE", isActive: true }),
-      ComplianceDocument.countDocuments({ status: "RED", isActive: true }),
+      Vehicle.countDocuments(tenantFilter(ctx)),
+      ComplianceDocument.countDocuments(
+        tenantFilter(ctx, { status: "GREEN", isActive: true }),
+      ),
+      ComplianceDocument.countDocuments(
+        tenantFilter(ctx, { status: "YELLOW", isActive: true }),
+      ),
+      ComplianceDocument.countDocuments(
+        tenantFilter(ctx, { status: "ORANGE", isActive: true }),
+      ),
+      ComplianceDocument.countDocuments(
+        tenantFilter(ctx, { status: "RED", isActive: true }),
+      ),
     ]);
 
   const pendingAgg = await Challan.aggregate([
-    { $match: { status: "PENDING" } },
+    { $match: tenantFilter(ctx, { status: "PENDING" }) },
     { $group: { _id: null, sum: { $sum: "$amount" }, count: { $sum: 1 } } },
   ]);
 

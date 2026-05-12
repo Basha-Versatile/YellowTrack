@@ -1,12 +1,14 @@
 import { withRoute } from "@/lib/api-handler";
 import { created } from "@/lib/http";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { parseMultipart, firstFile, firstString } from "@/lib/upload";
 import { renewDriverDocument } from "@/server/services/driver.service";
 
 export const runtime = "nodejs";
 
 export const POST = withRoute<{ id: string; docId: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const { fields, files } = await parseMultipart(req);
     const file = firstFile(files, "document");
 
@@ -15,6 +17,7 @@ export const POST = withRoute<{ id: string; docId: string }>(
     const lifetime = lifetimeRaw === "true" || lifetimeRaw === "1";
 
     const doc = await renewDriverDocument(
+      ctx,
       params.id,
       params.docId,
       { expiryDate, lifetime },

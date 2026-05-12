@@ -3,12 +3,20 @@ import { success, created } from "@/lib/http";
 import { BadRequestError } from "@/lib/errors";
 import { ServiceRecord } from "@/models";
 import { parseMultipart } from "@/lib/upload";
+import {
+  tenantOf,
+  tenantFilter,
+  tenantStamp,
+} from "@/lib/auth/tenant-context";
 
 export const runtime = "nodejs";
 
 export const GET = withRoute<{ id: string }>(
-  async ({ params }) => {
-    const services = await ServiceRecord.find({ vehicleId: params.id })
+  async ({ params, session }) => {
+    const ctx = tenantOf(session);
+    const services = await ServiceRecord.find(
+      tenantFilter(ctx, { vehicleId: params.id }),
+    )
       .sort({ serviceDate: -1 })
       .lean();
     return success(services, "Services fetched");
@@ -17,7 +25,8 @@ export const GET = withRoute<{ id: string }>(
 );
 
 export const POST = withRoute<{ id: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const { fields, files } = await parseMultipart(req);
     const val = (k: string) =>
       Array.isArray(fields[k]) ? (fields[k] as string[])[0] : (fields[k] as string | undefined);
@@ -45,6 +54,7 @@ export const POST = withRoute<{ id: string }>(
     }
 
     const record = await ServiceRecord.create({
+      ...tenantStamp(ctx),
       vehicleId: params.id,
       title,
       description: val("description") ?? null,

@@ -13,6 +13,7 @@ const servicePartSchema = new Schema(
 
 const serviceRecordSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     title: { type: String, required: true },
     description: { type: String },

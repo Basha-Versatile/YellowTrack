@@ -1,26 +1,28 @@
 import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
 import { ServiceRecord, Vehicle, VehicleGroup } from "@/models";
+import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
 
 export const runtime = "nodejs";
 
 export const GET = withRoute(
-  async ({ req }) => {
+  async ({ req, session }) => {
+    const ctx = tenantOf(session);
     const sp = req.nextUrl.searchParams;
     const status = sp.get("status");
     const vehicleId = sp.get("vehicleId");
 
-    const filter: Record<string, unknown> = {};
-    if (status) filter.status = status;
-    if (vehicleId) filter.vehicleId = vehicleId;
+    const extras: Record<string, unknown> = {};
+    if (status) extras.status = status;
+    if (vehicleId) extras.vehicleId = vehicleId;
 
-    const services = await ServiceRecord.find(filter)
+    const services = await ServiceRecord.find(tenantFilter(ctx, extras))
       .sort({ serviceDate: -1 })
       .lean();
 
     const vehicleIds = [...new Set(services.map((s) => String(s.vehicleId)))];
     const vehicles = vehicleIds.length
-      ? await Vehicle.find({ _id: { $in: vehicleIds } })
+      ? await Vehicle.find(tenantFilter(ctx, { _id: { $in: vehicleIds } }))
           .select("_id registrationNumber make model profileImage groupId")
           .lean()
       : [];
@@ -28,7 +30,7 @@ export const GET = withRoute(
       .map((v) => v.groupId)
       .filter((id): id is NonNullable<typeof id> => Boolean(id));
     const groups = groupIds.length
-      ? await VehicleGroup.find({ _id: { $in: groupIds } })
+      ? await VehicleGroup.find(tenantFilter(ctx, { _id: { $in: groupIds } }))
           .select("_id name icon color")
           .lean()
       : [];

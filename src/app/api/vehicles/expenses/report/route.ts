@@ -10,6 +10,7 @@ import {
   Fastag,
   Vehicle,
 } from "@/models";
+import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
 
 export const runtime = "nodejs";
 
@@ -31,7 +32,8 @@ type UnifiedExpense = {
 };
 
 export const GET = withRoute(
-  async ({ req }) => {
+  async ({ req, session }) => {
+    const ctx = tenantOf(session);
     const sp = req.nextUrl.searchParams;
     const vehicleId = sp.get("vehicleId");
     const from = sp.get("from");
@@ -45,30 +47,42 @@ export const GET = withRoute(
 
     const [challans, services, insurance, tolls, expenses, allVehicles] =
       await Promise.all([
-        Challan.find({
-          ...vehicleFilter,
-          status: "PAID",
-          paidAt: { $gte: dateFrom, $lte: dateTo },
-        }).lean(),
-        ServiceRecord.find({
-          ...vehicleFilter,
-          status: "COMPLETED",
-          serviceDate: { $gte: dateFrom, $lte: dateTo },
-        }).lean(),
-        InsurancePolicy.find({
-          ...vehicleFilter,
-          paidAmount: { $gt: 0 },
-          createdAt: { $gte: dateFrom, $lte: dateTo },
-        }).lean(),
-        FastagTransaction.find({
-          type: "TOLL",
-          createdAt: { $gte: dateFrom, $lte: dateTo },
-        }).lean(),
-        Expense.find({
-          ...vehicleFilter,
-          expenseDate: { $gte: dateFrom, $lte: dateTo },
-        }).lean(),
-        Vehicle.find().select("_id registrationNumber make model").lean(),
+        Challan.find(
+          tenantFilter(ctx, {
+            ...vehicleFilter,
+            status: "PAID",
+            paidAt: { $gte: dateFrom, $lte: dateTo },
+          }),
+        ).lean(),
+        ServiceRecord.find(
+          tenantFilter(ctx, {
+            ...vehicleFilter,
+            status: "COMPLETED",
+            serviceDate: { $gte: dateFrom, $lte: dateTo },
+          }),
+        ).lean(),
+        InsurancePolicy.find(
+          tenantFilter(ctx, {
+            ...vehicleFilter,
+            paidAmount: { $gt: 0 },
+            createdAt: { $gte: dateFrom, $lte: dateTo },
+          }),
+        ).lean(),
+        FastagTransaction.find(
+          tenantFilter(ctx, {
+            type: "TOLL",
+            createdAt: { $gte: dateFrom, $lte: dateTo },
+          }),
+        ).lean(),
+        Expense.find(
+          tenantFilter(ctx, {
+            ...vehicleFilter,
+            expenseDate: { $gte: dateFrom, $lte: dateTo },
+          }),
+        ).lean(),
+        Vehicle.find(tenantFilter(ctx))
+          .select("_id registrationNumber make model")
+          .lean(),
       ]);
 
     const vehicleById = new Map(
@@ -82,7 +96,9 @@ export const GET = withRoute(
     const fastagById = new Map<string, mongoose.Types.ObjectId>();
     const fastagIds = [...new Set(tolls.map((t) => String(t.fastagId)))];
     if (fastagIds.length) {
-      const fastags = await Fastag.find({ _id: { $in: fastagIds } })
+      const fastags = await Fastag.find(
+        tenantFilter(ctx, { _id: { $in: fastagIds } }),
+      )
         .select("_id vehicleId")
         .lean();
       for (const f of fastags) fastagById.set(String(f._id), f.vehicleId as mongoose.Types.ObjectId);

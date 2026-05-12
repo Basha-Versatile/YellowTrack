@@ -3,6 +3,7 @@ import { Schema, model, models, type Model, type InferSchemaType } from "mongoos
 
 const vehicleDriverMappingSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     driverId: { type: Schema.Types.ObjectId, ref: "Driver", required: true, index: true },
     assignedAt: { type: Date, default: () => new Date() },

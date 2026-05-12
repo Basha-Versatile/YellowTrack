@@ -2,6 +2,7 @@ import "server-only";
 import { AppError, BadRequestError, NotFoundError, ConflictError } from "@/lib/errors";
 import { fetchRcDetails } from "@/lib/surepass";
 import { COMPLIANCE_DOC_TYPES, InsurancePolicy } from "@/models";
+import { type ScopedContext, tenantStamp } from "@/lib/auth/tenant-context";
 import * as vehicleRepo from "../repositories/vehicle.repository";
 import * as vehicleGroupRepo from "../repositories/vehicleGroup.repository";
 import * as complianceRepo from "../repositories/compliance.repository";
@@ -90,20 +91,23 @@ function getOverallStatus(
 // ── Public API ────────────────────────────────────────────────
 
 export async function onboardVehicle(
+  ctx: ScopedContext,
   registrationNumber: string,
   images: string[] = [],
   groupId: string | null,
   origin?: string,
   vehicleUsage?: "PRIVATE" | "COMMERCIAL" | null,
 ) {
+  const stamp = tenantStamp(ctx);
+
   // No group selected during onboarding → assign to the default "Others" group
   if (!groupId) {
-    const others = await vehicleGroupRepo.findOrCreateOthers();
+    const others = await vehicleGroupRepo.findOrCreateOthers(ctx);
     groupId = String(others._id);
   }
 
   // 1. duplicate check first — avoids burning a Surepass credit
-  const existing = await vehicleRepo.findByRegistrationNumber(registrationNumber);
+  const existing = await vehicleRepo.findByRegistrationNumber(ctx, registrationNumber);
   if (existing) {
     const onboardedOn = existing.createdAt
       ? new Date(existing.createdAt).toLocaleDateString("en-IN", {
@@ -141,7 +145,7 @@ export async function onboardVehicle(
   const vehicleData = mapSurepassToVehicle(surepassData);
   const warnings: string[] = [];
 
-  const createdDoc = await vehicleRepo.create({
+  const createdDoc = await vehicleRepo.create(ctx, {
     registrationNumber,
     ...vehicleData,
     images,
@@ -154,7 +158,7 @@ export async function onboardVehicle(
   // 6. QR (best-effort)
   try {
     const qrCodeUrl = await generateQRCodeForVehicle(vehicleId, origin);
-    await vehicleRepo.update(vehicleId, { qrCodeUrl });
+    await vehicleRepo.update(ctx, vehicleId, { qrCodeUrl });
   } catch (err) {
     console.error(
       "Failed to generate QR code:",
@@ -173,6 +177,7 @@ export async function onboardVehicle(
       const getter = SUREPASS_COMPLIANCE_DATE_MAP[type];
       const expiryDate = getter ? getter(surepassData) : null;
       return {
+        ...stamp,
         vehicleId,
         type,
         expiryDate,
@@ -197,6 +202,7 @@ export async function onboardVehicle(
   if (policyNumber || insurer) {
     try {
       await InsurancePolicy.create({
+        ...stamp,
         vehicleId,
         policyNumber: policyNumber ?? null,
         insurer: insurer ?? null,
@@ -215,7 +221,7 @@ export async function onboardVehicle(
   // 9. challan sync runs separately — not during onboarding
 
   // 10. refetch full vehicle + trigger alerts
-  const fullVehicle = await vehicleRepo.findById(vehicleId);
+  const fullVehicle = await vehicleRepo.findById(ctx, vehicleId);
   if (fullVehicle?.complianceDocuments) {
     for (const doc of fullVehicle.complianceDocuments as Array<{
       type: string;
@@ -224,6 +230,7 @@ export async function onboardVehicle(
     }>) {
       if (doc.status === "YELLOW" || doc.status === "RED") {
         await triggerVehicleAlert(
+          ctx,
           registrationNumber,
           doc.type,
           doc.status,
@@ -238,11 +245,13 @@ export async function onboardVehicle(
 }
 
 export async function manualOnboard(
+  ctx: ScopedContext,
   data: Record<string, unknown>,
   docFiles: Record<string, string | null | undefined> = {},
   images: string[] = [],
   origin?: string,
 ) {
+  const stamp = tenantStamp(ctx);
   const {
     registrationNumber,
     ownerName,
@@ -261,11 +270,12 @@ export async function manualOnboard(
   // No group selected during onboarding → assign to the default "Others" group
   let groupId = rawGroupId;
   if (!groupId) {
-    const others = await vehicleGroupRepo.findOrCreateOthers();
+    const others = await vehicleGroupRepo.findOrCreateOthers(ctx);
     groupId = String(others._id);
   }
 
   const existing = await vehicleRepo.findByRegistrationNumber(
+    ctx,
     String(registrationNumber),
   );
   if (existing) {
@@ -274,7 +284,7 @@ export async function manualOnboard(
     );
   }
 
-  const createdDoc = await vehicleRepo.create({
+  const createdDoc = await vehicleRepo.create(ctx, {
     registrationNumber: String(registrationNumber),
     ownerName: ownerName ?? null,
     make,
@@ -297,7 +307,7 @@ export async function manualOnboard(
 
   try {
     const qrCodeUrl = await generateQRCodeForVehicle(vehicleId, origin);
-    await vehicleRepo.update(vehicleId, { qrCodeUrl });
+    await vehicleRepo.update(ctx, vehicleId, { qrCodeUrl });
   } catch (err) {
     console.error(
       "QR generation failed:",
@@ -307,7 +317,7 @@ export async function manualOnboard(
 
   if (docFiles.invoiceFile) {
     try {
-      await vehicleRepo.update(vehicleId, { invoiceUrl: docFiles.invoiceFile });
+      await vehicleRepo.update(ctx, vehicleId, { invoiceUrl: docFiles.invoiceFile });
     } catch (err) {
       console.error(
         "Invoice save failed:",
@@ -316,11 +326,9 @@ export async function manualOnboard(
     }
   }
 
-  // Seed all 6 standard compliance types as empty default cards. Admin can
-  // upload files, edit expiry, delete unwanted ones, or add custom types
-  // from the vehicle detail page. Tyres are also handled there.
   try {
     const complianceDocs = COMPLIANCE_DOC_TYPES.map((type) => ({
+      ...stamp,
       vehicleId,
       type,
       expiryDate: null,
@@ -335,11 +343,14 @@ export async function manualOnboard(
     );
   }
 
-  return vehicleRepo.findById(vehicleId);
+  return vehicleRepo.findById(ctx, vehicleId);
 }
 
-export async function getAllVehicles(query: vehicleRepo.VehicleListQuery) {
-  const result = await vehicleRepo.findAll(query);
+export async function getAllVehicles(
+  ctx: ScopedContext,
+  query: vehicleRepo.VehicleListQuery,
+) {
+  const result = await vehicleRepo.findAll(ctx, query);
   result.vehicles = result.vehicles.map((v) => {
     const docs = v.complianceDocuments as Array<{
       expiryDate?: Date | string | null;
@@ -365,8 +376,8 @@ export async function getAllVehicles(query: vehicleRepo.VehicleListQuery) {
   return result;
 }
 
-export async function getVehicleById(id: string) {
-  const vehicle = await vehicleRepo.findById(id);
+export async function getVehicleById(ctx: ScopedContext, id: string) {
+  const vehicle = await vehicleRepo.findById(ctx, id);
   if (!vehicle) throw new NotFoundError("Vehicle not found");
 
   const docs = vehicle.complianceDocuments as Array<{
@@ -406,10 +417,16 @@ export async function getVehicleById(id: string) {
   };
 }
 
-export async function syncChallans(vehicleId: string, registrationNumber: string) {
+export async function syncChallans(
+  ctx: ScopedContext,
+  vehicleId: string,
+  registrationNumber: string,
+) {
+  const stamp = tenantStamp(ctx);
   const data = await fetchChallans(registrationNumber);
   if (data.length === 0) return;
   const challans = data.map((c) => ({
+    ...stamp,
     vehicleId,
     amount: c.amount,
     userCharges: c.userCharges ?? 0,
@@ -427,10 +444,10 @@ export async function syncChallans(vehicleId: string, registrationNumber: string
   await challanRepo.createMany(challans);
 }
 
-export async function getDashboardStats() {
+export async function getDashboardStats(ctx: ScopedContext) {
   const [vehicleStats, challanStats] = await Promise.all([
-    vehicleRepo.getDashboardStats(),
-    challanRepo.getStats(),
+    vehicleRepo.getDashboardStats(ctx),
+    challanRepo.getStats(ctx),
   ]);
   return { ...vehicleStats, challans: challanStats };
 }

@@ -144,6 +144,76 @@ export const authAPI = {
   refresh: () => api.post("/auth/refresh"),
   logout: () => api.post("/auth/logout"),
   logoutAll: () => api.post("/auth/logout-all"),
+  resetPassword: (newPassword: string, confirmPassword: string) =>
+    api.post("/auth/reset-password", { newPassword, confirmPassword }),
+};
+
+// ── Roles & permissions ────────────────────────────────────
+export const rolesAPI = {
+  list: () => api.get("/roles"),
+  get: (id: string) => api.get(`/roles/${id}`),
+  create: (data: { name: string; description?: string; permissions: string[] }) =>
+    api.post("/roles", data),
+  update: (
+    id: string,
+    data: { name?: string; description?: string | null; permissions?: string[] },
+  ) => api.put(`/roles/${id}`, data),
+  remove: (id: string) => api.delete(`/roles/${id}`),
+};
+
+export const permissionsAPI = {
+  get: () => api.get("/permissions"),
+};
+
+export const usersAPI = {
+  list: () => api.get("/users"),
+  invite: (data: { name: string; email: string; roleId?: string | null }) =>
+    api.post("/users", data),
+  update: (
+    id: string,
+    data: { name?: string; roleId?: string | null },
+  ) => api.patch(`/users/${id}`, data),
+  remove: (id: string) => api.delete(`/users/${id}`),
+  suspend: (id: string) => api.post(`/users/${id}/suspend`),
+  resume: (id: string) => api.delete(`/users/${id}/suspend`),
+  resetPassword: (id: string) => api.post(`/users/${id}/reset-password`),
+};
+
+// ── Superadmin ──────────────────────────────────────────────
+export const superadminAPI = {
+  getStats: () => api.get("/superadmin/stats"),
+  listTenants: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: "ACTIVE" | "SUSPENDED" | "DELETED";
+    plan?: "FREE" | "PRO" | "ENTERPRISE";
+  }) => api.get("/superadmin/tenants", { params }),
+  getTenant: (id: string) => api.get(`/superadmin/tenants/${id}`),
+  createTenant: (data: {
+    name: string;
+    slug: string;
+    plan?: "FREE" | "PRO" | "ENTERPRISE";
+    billingEmail?: string | null;
+    limits?: { maxVehicles?: number; maxDrivers?: number; maxUsers?: number };
+    admin: { name: string; email: string };
+  }) => api.post("/superadmin/tenants", data),
+  updateTenant: (
+    id: string,
+    data: { name?: string; plan?: string; billingEmail?: string | null; limits?: unknown },
+  ) => api.patch(`/superadmin/tenants/${id}`, data),
+  suspendTenant: (id: string) => api.post(`/superadmin/tenants/${id}/suspend`),
+  resumeTenant: (id: string) => api.delete(`/superadmin/tenants/${id}/suspend`),
+  deleteTenant: (id: string) => api.delete(`/superadmin/tenants/${id}`),
+  listVehicles: (params?: {
+    tenantId?: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: "GREEN" | "YELLOW" | "RED";
+  }) => api.get("/superadmin/vehicles", { params }),
+  listDrivers: (params?: { tenantId?: string }) =>
+    api.get("/superadmin/drivers", { params }),
 };
 
 // ── Vehicles ────────────────────────────────────────────────

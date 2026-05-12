@@ -3,6 +3,7 @@ import { success } from "@/lib/http";
 import { z } from "zod";
 import { NotFoundError } from "@/lib/errors";
 import { Tyre } from "@/models";
+import { tenantOf, tenantFilter, tenantStamp } from "@/lib/auth/tenant-context";
 import * as vehicleRepo from "@/server/repositories/vehicle.repository";
 import { getVehicleById } from "@/server/services/vehicle.service";
 
@@ -19,20 +20,23 @@ const bodySchema = z.object({
 });
 
 export const PUT = withRoute<{ id: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const { tyres, tyreCount } = await parseJson(req, bodySchema);
 
-    const vehicle = await vehicleRepo.findById(params.id);
+    const vehicle = await vehicleRepo.findById(ctx, params.id);
     if (!vehicle) throw new NotFoundError("Vehicle not found");
 
     if (typeof tyreCount === "number") {
-      await vehicleRepo.update(params.id, { tyreCount });
+      await vehicleRepo.update(ctx, params.id, { tyreCount });
     }
 
-    await Tyre.deleteMany({ vehicleId: params.id });
+    await Tyre.deleteMany(tenantFilter(ctx, { vehicleId: params.id }));
     if (tyres.length > 0) {
+      const stamp = tenantStamp(ctx);
       await Tyre.insertMany(
         tyres.map((t) => ({
+          ...stamp,
           vehicleId: params.id,
           position: t.position,
           size: t.size ?? null,
@@ -40,7 +44,7 @@ export const PUT = withRoute<{ id: string }>(
       );
     }
 
-    const updated = await getVehicleById(params.id);
+    const updated = await getVehicleById(ctx, params.id);
     return success(updated, "Tyres updated successfully");
   },
   { auth: true },

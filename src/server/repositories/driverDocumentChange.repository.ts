@@ -4,6 +4,11 @@ import {
   type DocChangeType,
 } from "@/models/DriverDocumentChange";
 import { DriverDocument } from "@/models/DriverDocument";
+import {
+  type ScopedContext,
+  tenantFilter,
+  tenantStamp,
+} from "@/lib/auth/tenant-context";
 
 export type ChangedField = {
   field: string;
@@ -11,17 +16,21 @@ export type ChangedField = {
   after: unknown;
 };
 
-export async function logChange(params: {
-  documentId: string;
-  driverId: string;
-  type: string;
-  changeType: DocChangeType;
-  fields?: ChangedField[];
-  note?: string;
-  changedBy?: string;
-}) {
+export async function logChange(
+  ctx: ScopedContext,
+  params: {
+    documentId: string;
+    driverId: string;
+    type: string;
+    changeType: DocChangeType;
+    fields?: ChangedField[];
+    note?: string;
+    changedBy?: string;
+  },
+) {
   try {
     await DriverDocumentChange.create({
+      ...tenantStamp(ctx),
       documentId: params.documentId,
       driverId: params.driverId,
       type: params.type,
@@ -39,13 +48,21 @@ export async function logChange(params: {
   }
 }
 
-export async function findByDriverAndType(driverId: string, type: string) {
-  const changes = await DriverDocumentChange.find({ driverId, type })
+export async function findByDriverAndType(
+  ctx: ScopedContext,
+  driverId: string,
+  type: string,
+) {
+  const changes = await DriverDocumentChange.find(
+    tenantFilter(ctx, { driverId, type }),
+  )
     .sort({ createdAt: -1 })
     .lean();
 
   const docIds = Array.from(new Set(changes.map((c) => String(c.documentId))));
-  const docs = await DriverDocument.find({ _id: { $in: docIds } })
+  const docs = await DriverDocument.find(
+    tenantFilter(ctx, { _id: { $in: docIds } }),
+  )
     .select("documentUrl expiryDate isActive archivedAt")
     .lean();
   const byId = new Map(docs.map((d) => [String(d._id), d]));

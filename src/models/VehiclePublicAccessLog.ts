@@ -6,6 +6,7 @@ export type PublicAccessAction = (typeof PUBLIC_ACCESS_ACTIONS)[number];
 
 const vehiclePublicAccessLogSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     /** "VEHICLE" for the verification page itself; otherwise the doc type code (RC, INSURANCE, …) */
     target: { type: String, required: true },

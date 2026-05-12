@@ -1,6 +1,19 @@
 import "server-only";
 
-export { User, type UserAttrs, type UserDoc } from "./User";
+export {
+  Tenant,
+  type TenantAttrs,
+  TENANT_STATUS,
+  TENANT_PLANS,
+} from "./Tenant";
+export { Role, type RoleAttrs } from "./Role";
+export {
+  User,
+  type UserAttrs,
+  type UserDoc,
+  USER_ROLES,
+  type UserRole,
+} from "./User";
 export { RefreshToken, type RefreshTokenAttrs } from "./RefreshToken";
 export { DocumentType, type DocumentTypeAttrs } from "./DocumentType";
 export { VehicleGroup, type VehicleGroupAttrs } from "./VehicleGroup";

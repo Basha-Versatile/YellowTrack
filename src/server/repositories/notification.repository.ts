@@ -1,15 +1,24 @@
 import "server-only";
 import mongoose from "mongoose";
 import { Notification } from "@/models";
+import {
+  type ScopedContext,
+  tenantFilter,
+  tenantStamp,
+} from "@/lib/auth/tenant-context";
 
-export async function create(data: {
-  userId: string;
-  type: string;
-  title: string;
-  message: string;
-  entityId?: string;
-}) {
+export async function create(
+  ctx: ScopedContext,
+  data: {
+    userId: string;
+    type: string;
+    title: string;
+    message: string;
+    entityId?: string;
+  },
+) {
   return Notification.create({
+    ...tenantStamp(ctx),
     userId: new mongoose.Types.ObjectId(data.userId),
     type: data.type,
     title: data.title,
@@ -19,6 +28,7 @@ export async function create(data: {
 }
 
 export async function createMany(
+  ctx: ScopedContext,
   notifications: Array<{
     userId: string;
     type: string;
@@ -28,8 +38,10 @@ export async function createMany(
   }>,
 ) {
   if (notifications.length === 0) return [];
+  const stamp = tenantStamp(ctx);
   return Notification.insertMany(
     notifications.map((n) => ({
+      ...stamp,
       userId: new mongoose.Types.ObjectId(n.userId),
       type: n.type,
       title: n.title,
@@ -40,6 +52,7 @@ export async function createMany(
 }
 
 export async function findByUserId(
+  ctx: ScopedContext,
   userId: string,
   {
     page = 1,
@@ -50,17 +63,17 @@ export async function findByUserId(
   const pg = Number(page) || 1;
   const lim = Number(limit) || 20;
   const skip = (pg - 1) * lim;
-  const filter: Record<string, unknown> = { userId };
-  if (unreadOnly) filter.isRead = false;
+  const extras: Record<string, unknown> = { userId };
+  if (unreadOnly) extras.isRead = false;
 
   const [notifications, total, unreadCount] = await Promise.all([
-    Notification.find(filter)
+    Notification.find(tenantFilter(ctx, extras))
       .skip(skip)
       .limit(lim)
       .sort({ createdAt: -1 })
       .lean(),
-    Notification.countDocuments(filter),
-    Notification.countDocuments({ userId, isRead: false }),
+    Notification.countDocuments(tenantFilter(ctx, extras)),
+    Notification.countDocuments(tenantFilter(ctx, { userId, isRead: false })),
   ]);
   return {
     notifications,
@@ -71,14 +84,26 @@ export async function findByUserId(
   };
 }
 
-export async function markAsRead(id: string, userId: string) {
-  return Notification.updateMany({ _id: id, userId }, { isRead: true });
+export async function markAsRead(
+  ctx: ScopedContext,
+  id: string,
+  userId: string,
+) {
+  return Notification.updateMany(
+    tenantFilter(ctx, { _id: id, userId }),
+    { isRead: true },
+  );
 }
 
-export async function markAllAsRead(userId: string) {
-  return Notification.updateMany({ userId, isRead: false }, { isRead: true });
+export async function markAllAsRead(ctx: ScopedContext, userId: string) {
+  return Notification.updateMany(
+    tenantFilter(ctx, { userId, isRead: false }),
+    { isRead: true },
+  );
 }
 
-export async function getUnreadCount(userId: string) {
-  return Notification.countDocuments({ userId, isRead: false });
+export async function getUnreadCount(ctx: ScopedContext, userId: string) {
+  return Notification.countDocuments(
+    tenantFilter(ctx, { userId, isRead: false }),
+  );
 }

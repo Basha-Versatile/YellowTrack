@@ -14,6 +14,11 @@ export async function GET(
   try {
     await dbConnect();
     const { id } = await context.params;
+    // Cross-tenant lookup by design: this route generates a QR encoding the
+    // public verification URL (`/public/vehicle/[id]`), which is itself
+    // cross-tenant by design (the unguessable ID is the access control).
+    // Anyone with the vehicle ID can already hit that public page, so the
+    // existence check here is no extra leak.
     const vehicle = await Vehicle.findById(id).lean();
     if (!vehicle) {
       return NextResponse.json(

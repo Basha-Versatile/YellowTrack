@@ -1,6 +1,7 @@
 import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
 import { BadRequestError } from "@/lib/errors";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { firstFile, parseMultipart } from "@/lib/upload";
 import { adminUploadProfilePhoto } from "@/server/services/driver.service";
 
@@ -8,10 +9,11 @@ export const runtime = "nodejs";
 
 export const POST = withRoute<{ id: string }>(
   async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const { files } = await parseMultipart(req);
     const file = firstFile(files, "photo");
     if (!file) throw new BadRequestError("Photo file is required");
-    const result = await adminUploadProfilePhoto(params.id, file.url, {
+    const result = await adminUploadProfilePhoto(ctx, params.id, file.url, {
       name: session?.email ?? "system",
       role: "ADMIN",
     });

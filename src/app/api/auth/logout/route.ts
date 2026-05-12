@@ -2,6 +2,7 @@ import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
 import {
   REFRESH_COOKIE_NAME,
+  clearAccessCookie,
   clearRefreshCookie,
 } from "@/lib/auth/cookies";
 import { logout as logoutToken } from "@/server/services/auth.service";
@@ -13,5 +14,6 @@ export const POST = withRoute(async ({ req }) => {
   await logoutToken(token);
 
   const res = success(null, "Logged out successfully");
+  clearAccessCookie(res);
   return clearRefreshCookie(res);
 });

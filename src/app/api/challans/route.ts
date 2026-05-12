@@ -1,11 +1,13 @@
 import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import * as challanRepo from "@/server/repositories/challan.repository";
 
 export const runtime = "nodejs";
 
 export const GET = withRoute(
-  async ({ req }) => {
+  async ({ req, session }) => {
+    const ctx = tenantOf(session);
     const sp = req.nextUrl.searchParams;
     const query = {
       page: sp.get("page") ? Number(sp.get("page")) : undefined,
@@ -14,7 +16,7 @@ export const GET = withRoute(
       vehicleId: sp.get("vehicleId") ?? undefined,
       search: sp.get("search") ?? undefined,
     };
-    const result = await challanRepo.findAll(query);
+    const result = await challanRepo.findAll(ctx, query);
     return success(result, "Success");
   },
   { auth: true },

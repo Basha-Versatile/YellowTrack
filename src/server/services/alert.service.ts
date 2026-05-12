@@ -1,15 +1,17 @@
 import "server-only";
+import type { ScopedContext } from "@/lib/auth/tenant-context";
 import { create as createNotification } from "./notification.service";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import * as driverRepo from "../repositories/driver.repository";
 
 async function dispatchWhatsAppToDriver(
+  ctx: ScopedContext,
   driverId: string | undefined,
   body: string,
 ): Promise<void> {
   if (!driverId) return;
   try {
-    const driver = await driverRepo.findById(driverId);
+    const driver = await driverRepo.findById(ctx, driverId);
     const phone = (driver as Record<string, unknown> | null)?.phone as string | undefined;
     if (!phone) return;
     const normalized = phone.startsWith("+") ? phone : `+91${phone}`;
@@ -26,10 +28,12 @@ async function dispatchWhatsAppToDriver(
 /**
  * Alert triggers — write Notification records + console log.
  * Matches legacy backend/src/services/alert.service.js behavior.
- * When userId is omitted, notification.create broadcasts to all ADMIN users.
+ * When userId is omitted, notification.create broadcasts to all ADMIN users
+ * in the tenant.
  */
 
 export async function triggerVehicleAlert(
+  ctx: ScopedContext,
   vehicleRegNo: string,
   docType: string,
   status: string,
@@ -53,7 +57,7 @@ export async function triggerVehicleAlert(
 
   console.log(`🚨 [${severity}] ${title}`);
 
-  await createNotification({
+  await createNotification(ctx, {
     type: "VEHICLE_DOC_EXPIRY",
     title,
     message,
@@ -62,6 +66,7 @@ export async function triggerVehicleAlert(
 }
 
 export async function triggerDriverAlert(
+  ctx: ScopedContext,
   driverName: string,
   licenseNumber: string,
   status: string,
@@ -96,7 +101,7 @@ export async function triggerDriverAlert(
 
   console.log(`🚨 [${severity}] ${title}`);
 
-  await createNotification({
+  await createNotification(ctx, {
     type: "LICENSE_EXPIRY",
     title,
     message,
@@ -105,11 +110,12 @@ export async function triggerDriverAlert(
 
   // Urgent / critical license expiries also fan out to WhatsApp (stubbed until a provider is set up)
   if (severity !== "WARNING") {
-    await dispatchWhatsAppToDriver(driverId, message);
+    await dispatchWhatsAppToDriver(ctx, driverId, message);
   }
 }
 
 export async function triggerDriverDocAlert(
+  ctx: ScopedContext,
   driverName: string,
   docType: string,
   status: string,
@@ -144,7 +150,7 @@ export async function triggerDriverDocAlert(
 
   console.log(`🚨 [${severity}] ${title}`);
 
-  await createNotification({
+  await createNotification(ctx, {
     type: "DRIVER_DOC_EXPIRY",
     title,
     message,
@@ -153,11 +159,12 @@ export async function triggerDriverDocAlert(
 
   // Urgent / critical doc expiries also fan out to WhatsApp (stubbed until a provider is set up)
   if (severity !== "WARNING") {
-    await dispatchWhatsAppToDriver(driverId, message);
+    await dispatchWhatsAppToDriver(ctx, driverId, message);
   }
 }
 
 export async function triggerFastagAlert(
+  ctx: ScopedContext,
   vehicleRegNo: string,
   balance: number,
   fastagId?: string,
@@ -166,7 +173,7 @@ export async function triggerFastagAlert(
   const message = `FASTag balance for ${vehicleRegNo} is ₹${Math.round(balance)}. Please recharge soon.`;
   console.log(`🚨 [${balance <= 0 ? "CRITICAL" : "WARNING"}] ${title}`);
 
-  await createNotification({
+  await createNotification(ctx, {
     type: "FASTAG_LOW_BALANCE",
     title,
     message,
@@ -175,6 +182,7 @@ export async function triggerFastagAlert(
 }
 
 export async function triggerServiceAlert(
+  ctx: ScopedContext,
   vehicleRegNo: string,
   serviceTitle: string,
   nextDueDate: Date | string,
@@ -195,7 +203,7 @@ export async function triggerServiceAlert(
 
   console.log(`🔧 [${severity}] ${title}`);
 
-  await createNotification({
+  await createNotification(ctx, {
     type: "SERVICE_DUE",
     title,
     message,

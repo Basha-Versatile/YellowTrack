@@ -1,6 +1,7 @@
 import { withRoute, parseJson } from "@/lib/api-handler";
 import { success } from "@/lib/http";
 import { z } from "zod";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { getPlans } from "@/server/services/insurance.service";
 
 export const runtime = "nodejs";
@@ -10,9 +11,10 @@ const schema = z.object({
 });
 
 export const POST = withRoute(
-  async ({ req }) => {
+  async ({ req, session }) => {
+    const ctx = tenantOf(session);
     const { vehicleId } = await parseJson(req, schema);
-    return success(await getPlans(vehicleId), "Insurance plans fetched");
+    return success(await getPlans(ctx, vehicleId), "Insurance plans fetched");
   },
   { auth: true },
 );

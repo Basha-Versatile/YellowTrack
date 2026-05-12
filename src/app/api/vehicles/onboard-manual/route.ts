@@ -1,5 +1,6 @@
 import { withRoute } from "@/lib/api-handler";
 import { created } from "@/lib/http";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { manualOnboardSchema } from "@/validations/vehicle.schema";
 import { parseMultipart } from "@/lib/upload";
 import { manualOnboard } from "@/server/services/vehicle.service";
@@ -8,7 +9,8 @@ import { getRequestOrigin } from "@/lib/request-origin";
 export const runtime = "nodejs";
 
 export const POST = withRoute(
-  async ({ req }) => {
+  async ({ req, session }) => {
+    const ctx = tenantOf(session);
     const { fields, files } = await parseMultipart(req);
 
     // Normalize fields (take first value for each key) for zod
@@ -31,6 +33,7 @@ export const POST = withRoute(
     }
 
     const vehicle = await manualOnboard(
+      ctx,
       { ...validated, ...flatFields },
       docFiles,
       images,

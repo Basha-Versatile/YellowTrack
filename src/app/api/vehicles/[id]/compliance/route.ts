@@ -2,6 +2,7 @@ import { withRoute } from "@/lib/api-handler";
 import { created, success } from "@/lib/http";
 import { BadRequestError, ConflictError } from "@/lib/errors";
 import { firstFile, firstString, parseMultipart } from "@/lib/upload";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { uploadComplianceDocSchema } from "@/validations/document.schema";
 import * as complianceRepo from "@/server/repositories/compliance.repository";
 import {
@@ -12,8 +13,9 @@ import {
 export const runtime = "nodejs";
 
 export const GET = withRoute<{ id: string }>(
-  async ({ params }) => {
-    const docs = await complianceRepo.findByVehicleId(params.id);
+  async ({ params, session }) => {
+    const ctx = tenantOf(session);
+    const docs = await complianceRepo.findByVehicleId(ctx, params.id);
     const enriched = docs.map((d) => ({
       ...d,
       status: calculateComplianceStatus(d.expiryDate),
@@ -25,7 +27,8 @@ export const GET = withRoute<{ id: string }>(
 );
 
 export const POST = withRoute<{ id: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const { fields, files } = await parseMultipart(req);
     const input = uploadComplianceDocSchema.parse({
       type: firstString(fields, "type"),
@@ -34,7 +37,7 @@ export const POST = withRoute<{ id: string }>(
     });
 
     // Reject if an active doc of this type already exists — admin should renew, not duplicate
-    const existing = await complianceRepo.findByVehicleId(params.id);
+    const existing = await complianceRepo.findByVehicleId(ctx, params.id);
     if (existing.some((d) => d.type === input.type && d.isActive)) {
       throw new ConflictError(
         `A ${input.type} document already exists for this vehicle. Use renew to replace it.`,
@@ -54,7 +57,7 @@ export const POST = withRoute<{ id: string }>(
       throw new BadRequestError("Provide an expiry date, mark as lifetime, or upload a file");
     }
 
-    const doc = await complianceRepo.createOne({
+    const doc = await complianceRepo.createOne(ctx, {
       vehicleId: params.id,
       type: input.type,
       expiryDate: finalExpiry,

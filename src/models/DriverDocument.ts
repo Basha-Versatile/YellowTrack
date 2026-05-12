@@ -11,6 +11,7 @@ export const DRIVER_DOC_TYPES = [
 
 const driverDocumentSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     driverId: { type: Schema.Types.ObjectId, ref: "Driver", required: true },
     type: { type: String, required: true, trim: true, maxlength: 80 },
     expiryDate: { type: Date },

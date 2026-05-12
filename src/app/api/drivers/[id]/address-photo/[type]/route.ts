@@ -1,6 +1,7 @@
 import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
 import { BadRequestError } from "@/lib/errors";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { firstFile, firstString, parseMultipart } from "@/lib/upload";
 import {
   adminDeleteAddressPhoto,
@@ -11,6 +12,7 @@ export const runtime = "nodejs";
 
 export const POST = withRoute<{ id: string; type: string }>(
   async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     if (params.type !== "current" && params.type !== "permanent") {
       throw new BadRequestError("Invalid address type");
     }
@@ -18,6 +20,7 @@ export const POST = withRoute<{ id: string; type: string }>(
     const file = firstFile(files, "photo");
     if (!file) throw new BadRequestError("Photo file is required");
     const result = await adminUploadAddressPhoto(
+      ctx,
       params.id,
       params.type,
       file.url,
@@ -30,16 +33,20 @@ export const POST = withRoute<{ id: string; type: string }>(
 
 export const DELETE = withRoute<{ id: string; type: string }>(
   async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     if (params.type !== "current" && params.type !== "permanent") {
       throw new BadRequestError("Invalid address type");
     }
     const { fields } = await parseMultipart(req);
     const url = firstString(fields, "url");
     if (!url) throw new BadRequestError("Photo URL is required");
-    const result = await adminDeleteAddressPhoto(params.id, params.type, url, {
-      name: session?.email ?? "system",
-      role: "ADMIN",
-    });
+    const result = await adminDeleteAddressPhoto(
+      ctx,
+      params.id,
+      params.type,
+      url,
+      { name: session?.email ?? "system", role: "ADMIN" },
+    );
     return success(result, "Address photo removed");
   },
   { auth: true },

@@ -5,6 +5,7 @@ export const FASTAG_STATUS = ["ACTIVE", "INACTIVE", "BLACKLISTED", "EXPIRED"] as
 
 const fastagSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     tagId: { type: String, required: true, unique: true, index: true },
     provider: { type: String },

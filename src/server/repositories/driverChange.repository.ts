@@ -1,5 +1,10 @@
 import "server-only";
 import { DriverChange, type DriverChangeType } from "@/models/DriverChange";
+import {
+  type ScopedContext,
+  tenantFilter,
+  tenantStamp,
+} from "@/lib/auth/tenant-context";
 
 export type DriverChangeFieldDiff = {
   field: string;
@@ -12,15 +17,19 @@ export type Actor = {
   role: "ADMIN" | "DRIVER";
 };
 
-export async function logDriverChange(params: {
-  driverId: string;
-  changeType: DriverChangeType;
-  fields?: DriverChangeFieldDiff[];
-  note?: string;
-  actor: Actor;
-}) {
+export async function logDriverChange(
+  ctx: ScopedContext,
+  params: {
+    driverId: string;
+    changeType: DriverChangeType;
+    fields?: DriverChangeFieldDiff[];
+    note?: string;
+    actor: Actor;
+  },
+) {
   try {
     await DriverChange.create({
+      ...tenantStamp(ctx),
       driverId: params.driverId,
       changeType: params.changeType,
       fields: params.fields ?? [],
@@ -37,8 +46,8 @@ export async function logDriverChange(params: {
   }
 }
 
-export async function findByDriver(driverId: string) {
-  const entries = await DriverChange.find({ driverId })
+export async function findByDriver(ctx: ScopedContext, driverId: string) {
+  const entries = await DriverChange.find(tenantFilter(ctx, { driverId }))
     .sort({ createdAt: -1 })
     .lean();
   return entries.map((e) => ({

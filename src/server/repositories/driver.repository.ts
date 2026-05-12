@@ -6,6 +6,11 @@ import {
   Vehicle,
   VehicleDriverMapping,
 } from "@/models";
+import {
+  type ScopedContext,
+  tenantFilter,
+  tenantStamp,
+} from "@/lib/auth/tenant-context";
 import { logChange } from "./driverDocumentChange.repository";
 
 type DriverEnriched = Record<string, unknown> & {
@@ -14,17 +19,23 @@ type DriverEnriched = Record<string, unknown> & {
   vehicleMappings: Array<Record<string, unknown>>;
 };
 
-export async function findAll(): Promise<DriverEnriched[]> {
-  const drivers = await Driver.find().sort({ createdAt: -1 }).lean();
+export async function findAll(ctx: ScopedContext): Promise<DriverEnriched[]> {
+  const drivers = await Driver.find(tenantFilter(ctx))
+    .sort({ createdAt: -1 })
+    .lean();
   if (drivers.length === 0) return [];
 
   const driverIds = drivers.map((d) => d._id);
 
   const [docs, mappings] = await Promise.all([
-    DriverDocument.find({ driverId: { $in: driverIds }, isActive: true })
+    DriverDocument.find(
+      tenantFilter(ctx, { driverId: { $in: driverIds }, isActive: true }),
+    )
       .sort({ createdAt: -1 })
       .lean(),
-    VehicleDriverMapping.find({ driverId: { $in: driverIds }, isActive: true })
+    VehicleDriverMapping.find(
+      tenantFilter(ctx, { driverId: { $in: driverIds }, isActive: true }),
+    )
       .populate({ path: "vehicleId", model: Vehicle })
       .lean(),
   ]);
@@ -52,15 +63,20 @@ export async function findAll(): Promise<DriverEnriched[]> {
   }));
 }
 
-export async function findById(id: string): Promise<DriverEnriched | null> {
-  const driver = await Driver.findById(id).lean();
+export async function findById(
+  ctx: ScopedContext,
+  id: string,
+): Promise<DriverEnriched | null> {
+  const driver = await Driver.findOne(tenantFilter(ctx, { _id: id })).lean();
   if (!driver) return null;
 
   const [docs, mappings] = await Promise.all([
-    DriverDocument.find({ driverId: id, isActive: true })
+    DriverDocument.find(
+      tenantFilter(ctx, { driverId: id, isActive: true }),
+    )
       .sort({ createdAt: -1 })
       .lean(),
-    VehicleDriverMapping.find({ driverId: id })
+    VehicleDriverMapping.find(tenantFilter(ctx, { driverId: id }))
       .sort({ assignedAt: -1 })
       .populate({ path: "vehicleId", model: Vehicle })
       .lean(),
@@ -79,50 +95,79 @@ export async function findById(id: string): Promise<DriverEnriched | null> {
   };
 }
 
-export async function findByLicenseNumber(licenseNumber: string) {
-  return Driver.findOne({ licenseNumber: licenseNumber.toUpperCase() }).lean();
+export async function findByLicenseNumber(
+  ctx: ScopedContext,
+  licenseNumber: string,
+) {
+  return Driver.findOne(
+    tenantFilter(ctx, { licenseNumber: licenseNumber.toUpperCase() }),
+  ).lean();
 }
 
-export async function findByVerificationToken(token: string) {
+/**
+ * Public driver-verify flow: verificationToken is a globally-unique, unguessable
+ * secret. The token IS the access control, so this lookup is intentionally
+ * cross-tenant. Only used by `public.service.getDriverByToken` and friends.
+ */
+export async function findByVerificationTokenAnyTenant(token: string) {
   return Driver.findOne({ verificationToken: token }).lean();
 }
 
-export async function create(data: Record<string, unknown>) {
-  return Driver.create(data);
+export async function create(
+  ctx: ScopedContext,
+  data: Record<string, unknown>,
+) {
+  return Driver.create({ ...data, ...tenantStamp(ctx) });
 }
 
-export async function update(id: string, data: Record<string, unknown>) {
-  const doc = await Driver.findByIdAndUpdate(id, data, { new: true });
+export async function update(
+  ctx: ScopedContext,
+  id: string,
+  data: Record<string, unknown>,
+) {
+  const doc = await Driver.findOneAndUpdate(
+    tenantFilter(ctx, { _id: id }),
+    data,
+    { new: true },
+  );
   if (!doc) return null;
-  return findById(id);
+  return findById(ctx, id);
 }
 
-export async function assignToVehicle(driverId: string, vehicleId: string) {
+export async function assignToVehicle(
+  ctx: ScopedContext,
+  driverId: string,
+  vehicleId: string,
+) {
   await VehicleDriverMapping.updateMany(
-    { vehicleId, isActive: true },
+    tenantFilter(ctx, { vehicleId, isActive: true }),
     { isActive: false, unassignedAt: new Date() },
   );
   await VehicleDriverMapping.updateMany(
-    { driverId, isActive: true },
+    tenantFilter(ctx, { driverId, isActive: true }),
     { isActive: false, unassignedAt: new Date() },
   );
   const mapping = await VehicleDriverMapping.create({
+    ...tenantStamp(ctx),
     driverId: new mongoose.Types.ObjectId(driverId),
     vehicleId: new mongoose.Types.ObjectId(vehicleId),
     isActive: true,
   });
 
   const [driver, vehicle] = await Promise.all([
-    Driver.findById(driverId).lean(),
-    Vehicle.findById(vehicleId).lean(),
+    Driver.findOne(tenantFilter(ctx, { _id: driverId })).lean(),
+    Vehicle.findOne(tenantFilter(ctx, { _id: vehicleId })).lean(),
   ]);
 
   return { ...mapping.toObject(), driver, vehicle };
 }
 
-export async function createDocument(data: Record<string, unknown>) {
-  const doc = await DriverDocument.create(data);
-  await logChange({
+export async function createDocument(
+  ctx: ScopedContext,
+  data: Record<string, unknown>,
+) {
+  const doc = await DriverDocument.create({ ...data, ...tenantStamp(ctx) });
+  await logChange(ctx, {
     documentId: String(doc._id),
     driverId: String(doc.driverId),
     type: String(doc.type),
@@ -136,18 +181,21 @@ export async function createDocument(data: Record<string, unknown>) {
 }
 
 export async function updateDocumentExpiry(
+  ctx: ScopedContext,
   docId: string,
   expiryDate: Date | string | null,
 ) {
-  const prev = await DriverDocument.findById(docId).lean();
+  const prev = await DriverDocument.findOne(
+    tenantFilter(ctx, { _id: docId }),
+  ).lean();
   if (!prev) return null;
 
   const beforeExpiry = prev.expiryDate ?? null;
   let updated;
 
   if (!expiryDate) {
-    updated = await DriverDocument.findByIdAndUpdate(
-      docId,
+    updated = await DriverDocument.findOneAndUpdate(
+      tenantFilter(ctx, { _id: docId }),
       { expiryDate: null, status: "GREEN" },
       { new: true },
     );
@@ -157,8 +205,8 @@ export async function updateDocumentExpiry(
     );
     const status =
       days <= 0 ? "RED" : days <= 7 ? "ORANGE" : days <= 30 ? "YELLOW" : "GREEN";
-    updated = await DriverDocument.findByIdAndUpdate(
-      docId,
+    updated = await DriverDocument.findOneAndUpdate(
+      tenantFilter(ctx, { _id: docId }),
       { expiryDate: new Date(expiryDate), status },
       { new: true },
     );
@@ -175,7 +223,7 @@ export async function updateDocumentExpiry(
         : !beforeExpiry && afterExpiry
           ? "LIFETIME_REMOVED"
           : "EXPIRY_UPDATED";
-    await logChange({
+    await logChange(ctx, {
       documentId: docId,
       driverId: String(prev.driverId),
       type: String(prev.type),
@@ -186,26 +234,38 @@ export async function updateDocumentExpiry(
   return updated;
 }
 
-export async function findActiveByDriverAndType(driverId: string, type: string) {
-  return DriverDocument.findOne({ driverId, type, isActive: true }).lean();
+export async function findActiveByDriverAndType(
+  ctx: ScopedContext,
+  driverId: string,
+  type: string,
+) {
+  return DriverDocument.findOne(
+    tenantFilter(ctx, { driverId, type, isActive: true }),
+  ).lean();
 }
 
-export async function findDocById(id: string) {
-  return DriverDocument.findById(id).lean();
+export async function findDocById(ctx: ScopedContext, id: string) {
+  return DriverDocument.findOne(tenantFilter(ctx, { _id: id })).lean();
 }
 
 export async function renewDocument(
+  ctx: ScopedContext,
   oldDocId: string,
   newData: Record<string, unknown>,
 ) {
-  const oldDoc = await DriverDocument.findById(oldDocId).lean();
+  const oldDoc = await DriverDocument.findOne(
+    tenantFilter(ctx, { _id: oldDocId }),
+  ).lean();
 
-  await DriverDocument.findByIdAndUpdate(oldDocId, {
-    isActive: false,
-    archivedAt: new Date(),
-  });
+  await DriverDocument.findOneAndUpdate(
+    tenantFilter(ctx, { _id: oldDocId }),
+    {
+      isActive: false,
+      archivedAt: new Date(),
+    },
+  );
   if (oldDoc) {
-    await logChange({
+    await logChange(ctx, {
       documentId: oldDocId,
       driverId: String(oldDoc.driverId),
       type: String(oldDoc.type),
@@ -215,7 +275,7 @@ export async function renewDocument(
     });
   }
 
-  const newDoc = await DriverDocument.create(newData);
+  const newDoc = await DriverDocument.create({ ...newData, ...tenantStamp(ctx) });
 
   if (oldDoc) {
     const fileChanged = (oldDoc.documentUrl ?? null) !== (newData.documentUrl ?? null);
@@ -241,7 +301,7 @@ export async function renewDocument(
       });
     }
 
-    await logChange({
+    await logChange(ctx, {
       documentId: String(newDoc._id),
       driverId: String(newDoc.driverId),
       type: String(newDoc.type),
@@ -253,8 +313,12 @@ export async function renewDocument(
   return newDoc;
 }
 
-export async function getDocHistory(driverId: string, type: string) {
-  return DriverDocument.find({ driverId, type })
+export async function getDocHistory(
+  ctx: ScopedContext,
+  driverId: string,
+  type: string,
+) {
+  return DriverDocument.find(tenantFilter(ctx, { driverId, type }))
     .sort({ createdAt: -1 })
     .lean();
 }

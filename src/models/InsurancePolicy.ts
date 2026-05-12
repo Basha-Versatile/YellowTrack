@@ -5,6 +5,7 @@ export const INSURANCE_STATUS = ["ACTIVE", "EXPIRING", "EXPIRED", "RENEWED"] as 
 
 const insurancePolicySchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     policyNumber: { type: String },
     insurer: { type: String },

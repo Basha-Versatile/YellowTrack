@@ -3,7 +3,8 @@ import { Schema, model, models, type Model, type InferSchemaType } from "mongoos
 
 const vehicleSchema = new Schema(
   {
-    registrationNumber: { type: String, required: true, unique: true, uppercase: true, trim: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    registrationNumber: { type: String, required: true, uppercase: true, trim: true, index: true },
     ownerName: { type: String },
     make: { type: String, required: true },
     model: { type: String, required: true },
@@ -46,6 +47,9 @@ const vehicleSchema = new Schema(
   },
   { timestamps: true },
 );
+
+// Tenant-scoped uniqueness: two tenants may register the same vehicle number.
+vehicleSchema.index({ tenantId: 1, registrationNumber: 1 }, { unique: true });
 
 export type VehicleAttrs = InferSchemaType<typeof vehicleSchema>;
 

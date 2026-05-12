@@ -1,5 +1,6 @@
 import "server-only";
 import { AppError, BadRequestError, NotFoundError } from "@/lib/errors";
+import { tokenScopedTenantOf } from "@/lib/auth/tenant-context";
 import * as driverRepo from "../repositories/driver.repository";
 import * as driverChangeRepo from "../repositories/driverChange.repository";
 import * as vehicleRepo from "../repositories/vehicle.repository";
@@ -27,11 +28,14 @@ const PUBLIC_ADDRESS_FIELDS = [
 ];
 
 export async function getVehiclePublic(vehicleId: string) {
-  const vehicle = await vehicleRepo.findById(vehicleId);
+  // Public route: cross-tenant by design. URL acts as the access control.
+  const vehicle = await vehicleRepo.findByIdAnyTenant(vehicleId);
   if (!vehicle) throw new NotFoundError("Vehicle not found");
 
-  // Recalculate compliance statuses for this vehicle
-  const docs = await complianceRepo.findByVehicleId(vehicleId);
+  // Recalculate compliance statuses for this vehicle. Use the vehicle's own
+  // tenant scope so the compliance docs are looked up safely.
+  const ctx = tokenScopedTenantOf(String(vehicle.tenantId));
+  const docs = await complianceRepo.findByVehicleId(ctx, vehicleId);
   const compliance = docs.map((d) => ({
     id: String(d._id),
     type: d.type,
@@ -76,7 +80,7 @@ export async function getVehiclePublic(vehicleId: string) {
 }
 
 export async function getDriverByToken(token: string) {
-  const driver = await driverRepo.findByVerificationToken(token);
+  const driver = await driverRepo.findByVerificationTokenAnyTenant(token);
   if (!driver) throw new NotFoundError("Invalid verification link");
   const d = driver as Record<string, unknown>;
   return {
@@ -111,7 +115,7 @@ export async function updateDriverByToken(
   token: string,
   validated: Record<string, unknown>,
 ) {
-  const driver = await driverRepo.findByVerificationToken(token);
+  const driver = await driverRepo.findByVerificationTokenAnyTenant(token);
   if (!driver) throw new NotFoundError("Invalid verification link");
   const d = driver as Record<string, unknown>;
   if (d.adminVerified) {
@@ -121,8 +125,9 @@ export async function updateDriverByToken(
     );
   }
 
+  const ctx = tokenScopedTenantOf(String(d.tenantId));
   const updateData = { ...validated, selfVerifiedAt: new Date() };
-  const updated = await driverRepo.update(String(d._id), updateData);
+  const updated = await driverRepo.update(ctx, String(d._id), updateData);
 
   // Audit: diff each field group and log with actor = "Driver (self-verify)"
   const before = d;
@@ -133,7 +138,7 @@ export async function updateDriverByToken(
   };
   const profileDiffs = driverChangeRepo.diffFields(before, after, PUBLIC_SIMPLE_FIELDS);
   if (profileDiffs.length > 0) {
-    await driverChangeRepo.logDriverChange({
+    await driverChangeRepo.logDriverChange(ctx, {
       driverId: String(d._id),
       changeType: "PROFILE_UPDATED",
       fields: profileDiffs,
@@ -142,7 +147,7 @@ export async function updateDriverByToken(
   }
   const addressDiffs = driverChangeRepo.diffFields(before, after, PUBLIC_ADDRESS_FIELDS);
   if (addressDiffs.length > 0) {
-    await driverChangeRepo.logDriverChange({
+    await driverChangeRepo.logDriverChange(ctx, {
       driverId: String(d._id),
       changeType: "ADDRESS_UPDATED",
       fields: addressDiffs,
@@ -151,7 +156,7 @@ export async function updateDriverByToken(
   }
   const ecDiffs = driverChangeRepo.diffFields(before, after, ["emergencyContacts"]);
   if (ecDiffs.length > 0) {
-    await driverChangeRepo.logDriverChange({
+    await driverChangeRepo.logDriverChange(ctx, {
       driverId: String(d._id),
       changeType: "EMERGENCY_CONTACTS_UPDATED",
       fields: ecDiffs,
@@ -160,7 +165,7 @@ export async function updateDriverByToken(
   }
 
   try {
-    await createNotification({
+    await createNotification(ctx, {
       type: "DRIVER_SELF_VERIFIED",
       title: `Driver Verified — ${d.name}`,
       message: `${d.name} (${d.licenseNumber}) has submitted their profile verification. Review and approve.`,
@@ -177,12 +182,13 @@ export async function updateDriverByToken(
 }
 
 export async function uploadDriverPhoto(token: string, photoUrl: string) {
-  const driver = await driverRepo.findByVerificationToken(token);
+  const driver = await driverRepo.findByVerificationTokenAnyTenant(token);
   if (!driver) throw new NotFoundError("Invalid verification link");
   const d = driver as Record<string, unknown>;
+  const ctx = tokenScopedTenantOf(String(d.tenantId));
   const prev = d.profilePhoto ?? null;
-  await driverRepo.update(String(d._id), { profilePhoto: photoUrl });
-  await driverChangeRepo.logDriverChange({
+  await driverRepo.update(ctx, String(d._id), { profilePhoto: photoUrl });
+  await driverChangeRepo.logDriverChange(ctx, {
     driverId: String(d._id),
     changeType: "PROFILE_PHOTO_UPDATED",
     fields: [{ field: "profilePhoto", before: prev, after: photoUrl }],
@@ -199,9 +205,10 @@ export async function uploadAddressPhoto(
   if (type !== "current" && type !== "permanent") {
     throw new BadRequestError("Invalid address type");
   }
-  const driver = await driverRepo.findByVerificationToken(token);
+  const driver = await driverRepo.findByVerificationTokenAnyTenant(token);
   if (!driver) throw new NotFoundError("Invalid verification link");
   const d = driver as Record<string, unknown>;
+  const ctx = tokenScopedTenantOf(String(d.tenantId));
 
   const field =
     type === "current" ? "currentAddressPhotos" : "permanentAddressPhotos";
@@ -210,8 +217,8 @@ export async function uploadAddressPhoto(
     throw new BadRequestError("Maximum 5 photos allowed per address");
   }
   const updated = [...existing, photoUrl];
-  await driverRepo.update(String(d._id), { [field]: updated });
-  await driverChangeRepo.logDriverChange({
+  await driverRepo.update(ctx, String(d._id), { [field]: updated });
+  await driverChangeRepo.logDriverChange(ctx, {
     driverId: String(d._id),
     changeType: "ADDRESS_PHOTO_ADDED",
     fields: [{ field, before: null, after: photoUrl }],
@@ -229,16 +236,17 @@ export async function deleteAddressPhoto(
   if (type !== "current" && type !== "permanent") {
     throw new BadRequestError("Invalid address type");
   }
-  const driver = await driverRepo.findByVerificationToken(token);
+  const driver = await driverRepo.findByVerificationTokenAnyTenant(token);
   if (!driver) throw new NotFoundError("Invalid verification link");
   const d = driver as Record<string, unknown>;
+  const ctx = tokenScopedTenantOf(String(d.tenantId));
 
   const field =
     type === "current" ? "currentAddressPhotos" : "permanentAddressPhotos";
   const existing = (d[field] as string[] | undefined) ?? [];
   const updated = existing.filter((p) => p !== url);
-  await driverRepo.update(String(d._id), { [field]: updated });
-  await driverChangeRepo.logDriverChange({
+  await driverRepo.update(ctx, String(d._id), { [field]: updated });
+  await driverChangeRepo.logDriverChange(ctx, {
     driverId: String(d._id),
     changeType: "ADDRESS_PHOTO_REMOVED",
     fields: [{ field, before: url, after: null }],

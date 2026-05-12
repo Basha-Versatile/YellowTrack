@@ -5,6 +5,7 @@ export const CHALLAN_STATUS = ["PENDING", "PROCESSING", "PAID", "FAILED"] as con
 
 const challanSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     challanNumber: { type: String },
     amount: { type: Number, required: true },

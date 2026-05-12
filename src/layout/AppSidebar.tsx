@@ -14,14 +14,23 @@ import {
 } from "../icons/index";
 import { BsFillCarFrontFill } from "react-icons/bs";
 import { MdSpaceDashboard } from "react-icons/md";
-import { Lightbulb } from "lucide-react";
+import { Lightbulb, Shield, UsersRound } from "lucide-react";
+
+type NavSubItem = {
+  name: string;
+  path: string;
+  pro?: boolean;
+  new?: boolean;
+  perm?: string;
+};
 
 type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
   new?: boolean;
-  subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
+  perm?: string;
+  subItems?: NavSubItem[];
 };
 
 const navItems: NavItem[] = [
@@ -29,28 +38,29 @@ const navItems: NavItem[] = [
     icon: <MdSpaceDashboard className="h-5 w-5" />,
     name: "Dashboard",
     path: "/",
+    // Dashboard is the home page — visible to anyone in the tenant.
   },
   {
     icon: <BsFillCarFrontFill className="h-5 w-5" />,
     name: "Vehicles",
     subItems: [
-      { name: "All Vehicles", path: "/vehicles" },
-      { name: "Vehicle Groups", path: "/vehicles/groups" },
-      { name: "Onboard Vehicle", path: "/vehicles/onboard" },
-      { name: "Compliance", path: "/compliance" },
-      { name: "Challans", path: "/challans" },
-      { name: "FASTag", path: "/fastag" },
-      { name: "Service Costs", path: "/vehicles/services"},
-      { name: "Expenses", path: "/vehicles/expenses"},
+      { name: "All Vehicles", path: "/vehicles", perm: "vehicles:read" },
+      { name: "Vehicle Groups", path: "/vehicles/groups", perm: "groups:read" },
+      { name: "Onboard Vehicle", path: "/vehicles/onboard", perm: "vehicles:create" },
+      { name: "Compliance", path: "/compliance", perm: "compliance:read" },
+      { name: "Challans", path: "/challans", perm: "challans:read" },
+      { name: "FASTag", path: "/fastag", perm: "fastag:read" },
+      { name: "Service Costs", path: "/vehicles/services", perm: "services:read" },
+      { name: "Expenses", path: "/vehicles/expenses", perm: "expenses:read" },
     ],
   },
   {
     icon: <UserCircleIcon />,
     name: "Drivers",
     subItems: [
-      { name: "All Drivers", path: "/drivers" },
-      { name: "Add Driver", path: "/drivers/add" },
-      { name: "Compliance", path: "/drivers/compliance" },
+      { name: "All Drivers", path: "/drivers", perm: "drivers:read" },
+      { name: "Add Driver", path: "/drivers/add", perm: "drivers:create" },
+      { name: "Compliance", path: "/drivers/compliance", perm: "drivers:read" },
     ],
   },
   {
@@ -58,6 +68,18 @@ const navItems: NavItem[] = [
     name: "Feedback",
     path: "/suggest-feature",
     new: true,
+  },
+  {
+    icon: <UsersRound className="h-5 w-5" />,
+    name: "Users",
+    path: "/settings/users",
+    perm: "settings.users:manage",
+  },
+  {
+    icon: <Shield className="h-5 w-5" />,
+    name: "Roles & permissions",
+    path: "/settings/roles",
+    perm: "settings.roles:manage",
   },
   // {
   //   icon: <TaskIcon />,
@@ -71,9 +93,29 @@ const supportItems: NavItem[] = [];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
   const pathname = usePathname();
   const expanded = isExpanded || isHovered || isMobileOpen;
+
+  // Filter nav items by the current user's permissions.
+  //   - Admin gets every permission via defaultPermissionsForRole("ADMIN").
+  //   - Items with no `perm` (e.g. Dashboard, Feedback) are always visible.
+  //   - Parent items hide entirely when ALL their sub-items are hidden.
+  const visibleNavItems = React.useMemo(() => {
+    return navItems
+      .map((nav) => {
+        if (nav.subItems) {
+          const visibleSubs = nav.subItems.filter(
+            (s) => !s.perm || hasPermission(s.perm),
+          );
+          if (visibleSubs.length === 0) return null;
+          return { ...nav, subItems: visibleSubs };
+        }
+        if (nav.perm && !hasPermission(nav.perm)) return null;
+        return nav;
+      })
+      .filter((n): n is NavItem => n !== null);
+  }, [hasPermission]);
 
   const renderMenuItems = (
     navItems: NavItem[],
@@ -327,7 +369,7 @@ const AppSidebar: React.FC = () => {
                 <HorizontaLDots className="text-gray-400" />
               </div>
             )}
-            {renderMenuItems(navItems, "main")}
+            {renderMenuItems(visibleNavItems, "main")}
           </div>
 
           {/* Support section */}

@@ -6,6 +6,7 @@ export const PAYMENT_STATUS = ["SUCCESS", "FAILED", "PENDING"] as const;
 
 const paymentSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     totalAmount: { type: Number, required: true },
     method: { type: String, enum: PAYMENT_METHODS, required: true },
     transactionId: { type: String },

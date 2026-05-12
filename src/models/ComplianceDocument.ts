@@ -14,6 +14,7 @@ export const COMPLIANCE_STATUS = ["GREEN", "YELLOW", "RED"] as const;
 
 const complianceDocumentSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true },
     type: { type: String, required: true }, // kept as string to support route_permit variants
     expiryDate: { type: Date },

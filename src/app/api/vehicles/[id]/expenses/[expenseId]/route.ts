@@ -3,16 +3,20 @@ import { success } from "@/lib/http";
 import { NotFoundError } from "@/lib/errors";
 import { Expense } from "@/models";
 import { parseMultipart, firstFile } from "@/lib/upload";
+import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
 
 export const runtime = "nodejs";
 
 export const PUT = withRoute<{ id: string; expenseId: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const { fields, files } = await parseMultipart(req);
     const val = (k: string) =>
       Array.isArray(fields[k]) ? (fields[k] as string[])[0] : (fields[k] as string | undefined);
 
-    const existing = await Expense.findById(params.expenseId);
+    const existing = await Expense.findOne(
+      tenantFilter(ctx, { _id: params.expenseId }),
+    );
     if (!existing) throw new NotFoundError("Expense not found");
 
     const proof = firstFile(files, "proof");
@@ -26,17 +30,22 @@ export const PUT = withRoute<{ id: string; expenseId: string }>(
     if (val("description") !== undefined)
       update.description = val("description") || null;
 
-    const updated = await Expense.findByIdAndUpdate(params.expenseId, update, {
-      new: true,
-    });
+    const updated = await Expense.findOneAndUpdate(
+      tenantFilter(ctx, { _id: params.expenseId }),
+      update,
+      { new: true },
+    );
     return success(updated, "Expense updated");
   },
   { auth: true },
 );
 
 export const DELETE = withRoute<{ id: string; expenseId: string }>(
-  async ({ params }) => {
-    await Expense.findByIdAndDelete(params.expenseId);
+  async ({ params, session }) => {
+    const ctx = tenantOf(session);
+    await Expense.findOneAndDelete(
+      tenantFilter(ctx, { _id: params.expenseId }),
+    );
     return success(null, "Expense deleted");
   },
   { auth: true },

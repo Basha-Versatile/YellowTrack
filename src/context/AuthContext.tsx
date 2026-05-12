@@ -1,6 +1,6 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { authAPI, setAccessToken, clearTokens } from "@/lib/api";
+import { authAPI, permissionsAPI, setAccessToken, clearTokens } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/context/ToastContext";
 
@@ -9,15 +9,27 @@ interface User {
   email: string;
   name: string;
   role: string;
+  tenantId: string | null;
+  mustResetPassword?: boolean;
+}
+
+function postLoginRoute(user: User): string {
+  if (user.mustResetPassword) return "/reset-password";
+  if (user.role === "SUPERADMIN") return "/superadmin";
+  return "/";
 }
 
 interface AuthContextType {
   user: User | null;
+  permissions: Set<string>;
+  hasPermission: (perm: string) => boolean;
   isLoading: boolean;
+  permissionsLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
+  refreshPermissions: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,9 +38,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [permissions, setPermissions] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
   const router = useRouter();
   const toast = useToast();
+
+  const loadPermissions = useCallback(async () => {
+    setPermissionsLoading(true);
+    try {
+      const res = await permissionsAPI.get();
+      const mine = (res.data.data.mine as string[]) ?? [];
+      setPermissions(new Set(mine));
+    } catch {
+      setPermissions(new Set());
+    } finally {
+      setPermissionsLoading(false);
+    }
+  }, []);
+
+  const hasPermission = useCallback(
+    (perm: string) => permissions.has(perm),
+    [permissions],
+  );
 
   // On mount: restore user from localStorage and try to refresh the access token
   useEffect(() => {
@@ -40,15 +72,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setUser(JSON.parse(savedUser));
         setAccessToken(savedToken);
 
-        // Silently refresh the access token to validate the session
         try {
           const res = await authAPI.refresh();
           const { user: freshUser, accessToken: newToken } = res.data.data;
           setAccessToken(newToken);
           setUser(freshUser);
           localStorage.setItem("user", JSON.stringify(freshUser));
+          if (freshUser.role !== "SUPERADMIN") {
+            await loadPermissions();
+          }
         } catch {
-          // Refresh failed — session expired
           clearTokens();
           setUser(null);
         }
@@ -58,7 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     init();
-  }, []);
+  }, [loadPermissions]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -67,10 +100,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setAccessToken(accessToken);
       setUser(newUser);
       localStorage.setItem("user", JSON.stringify(newUser));
+      if (newUser.role !== "SUPERADMIN") {
+        await loadPermissions();
+      }
       toast.success("Welcome back!", `Signed in as ${newUser.name}`);
-      router.push("/");
+      router.push(postLoginRoute(newUser));
     },
-    [router, toast]
+    [router, toast, loadPermissions]
   );
 
   const register = useCallback(
@@ -80,20 +116,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setAccessToken(accessToken);
       setUser(newUser);
       localStorage.setItem("user", JSON.stringify(newUser));
+      if (newUser.role !== "SUPERADMIN") {
+        await loadPermissions();
+      }
       toast.success("Account created!", `Welcome, ${newUser.name}`);
-      router.push("/");
+      router.push(postLoginRoute(newUser));
     },
-    [router, toast]
+    [router, toast, loadPermissions]
   );
 
   const logout = useCallback(async () => {
     try {
       await authAPI.logout();
     } catch {
-      // Continue logout even if API call fails
+      /* ignore */
     }
     clearTokens();
     setUser(null);
+    setPermissions(new Set());
     toast.info("Signed out", "You have been logged out successfully");
     router.push("/auth");
   }, [router, toast]);
@@ -102,16 +142,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       await authAPI.logoutAll();
     } catch {
-      // Continue logout even if API call fails
+      /* ignore */
     }
     clearTokens();
     setUser(null);
+    setPermissions(new Set());
     router.push("/auth");
   }, [router]);
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, login, register, logout, logoutAll }}
+      value={{
+        user,
+        permissions,
+        hasPermission,
+        isLoading,
+        permissionsLoading,
+        login,
+        register,
+        logout,
+        logoutAll,
+        refreshPermissions: loadPermissions,
+      }}
     >
       {children}
     </AuthContext.Provider>

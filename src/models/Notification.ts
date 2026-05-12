@@ -21,6 +21,7 @@ export const NOTIFICATION_TYPES = [
 
 const notificationSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     // Free-form string (NO enum) — matches legacy Prisma schema & supports future types
     type: { type: String, required: true },

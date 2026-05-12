@@ -1,6 +1,6 @@
 import { withRoute, parseJson } from "@/lib/api-handler";
 import { success } from "@/lib/http";
-import { setRefreshCookie } from "@/lib/auth/cookies";
+import { setAccessCookie, setRefreshCookie } from "@/lib/auth/cookies";
 import { loginSchema } from "@/validations/auth.schema";
 import { login as loginUser } from "@/server/services/auth.service";
 
@@ -12,5 +12,6 @@ export const POST = withRoute(async ({ req }) => {
     await loginUser(input);
 
   const res = success({ user, accessToken }, "Login successful");
+  setAccessCookie(res, accessToken);
   return setRefreshCookie(res, refreshToken, refreshTokenExpiresAt);
 });

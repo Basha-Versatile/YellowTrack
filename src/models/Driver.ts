@@ -12,10 +12,11 @@ const emergencyContactSchema = new Schema(
 
 const driverSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     name: { type: String, required: true, trim: true },
     phone: { type: String },
     aadhaarLast4: { type: String, maxlength: 4 },
-    licenseNumber: { type: String, required: true, unique: true, uppercase: true, trim: true, index: true },
+    licenseNumber: { type: String, required: true, uppercase: true, trim: true, index: true },
     licenseExpiry: { type: Date, required: true },
     dob: { type: Date },
     dateOfIssue: { type: Date },
@@ -41,6 +42,10 @@ const driverSchema = new Schema(
   },
   { timestamps: true },
 );
+
+// Tenant-scoped uniqueness: licenseNumber is unique within a tenant.
+// verificationToken stays globally unique — it's a public security token.
+driverSchema.index({ tenantId: 1, licenseNumber: 1 }, { unique: true });
 
 export type DriverAttrs = InferSchemaType<typeof driverSchema>;
 

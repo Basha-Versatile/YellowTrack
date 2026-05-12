@@ -1,57 +1,38 @@
-"use client";
-
-import { useSidebar } from "@/context/SidebarContext";
-import AppHeader from "@/layout/AppHeader";
-import AppSidebar from "@/layout/AppSidebar";
-import Backdrop from "@/layout/Backdrop";
 import React from "react";
-import { usePathname } from "next/navigation";
+import { redirect } from "next/navigation";
+import { getSessionFromCookie } from "@/lib/auth/session";
+import { dbConnect } from "@/lib/db";
+import { Tenant, User } from "@/models";
+import AdminLayoutClient from "./AdminLayoutClient";
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isExpanded, isHovered, isMobileOpen } = useSidebar();
-  const pathname = usePathname();
+  const session = await getSessionFromCookie();
 
-  // Route-specific styles for the main content container
-  const getRouteSpecificStyles = () => {
-    switch (pathname) {
-      case "/text-generator":
-        return "";
-      case "/code-generator":
-        return "";
-      case "/image-generator":
-        return "";
-      case "/video-generator":
-        return "";
-      default:
-        return "p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6";
-    }
-  };
+  if (!session) redirect("/signin");
+  if (session.role === "SUPERADMIN") redirect("/superadmin");
+  if (session.role !== "ADMIN" && session.role !== "OPERATOR") {
+    redirect("/signin");
+  }
 
-  // Dynamic class for main content margin based on sidebar state
-  const mainContentMargin = isMobileOpen
-    ? "ml-0"
-    : isExpanded || isHovered
-    ? "xl:ml-[280px]"
-    : "xl:ml-[80px]";
+  await dbConnect();
 
-  return (
-    <div className="min-h-screen xl:flex">
-      {/* Sidebar and Backdrop */}
-      <AppSidebar />
-      <Backdrop />
-      {/* Main Content Area */}
-      <div
-        className={`flex-1 min-w-0 overflow-x-clip transition-all duration-300 ease-in-out ${mainContentMargin}`}
-      >
-        {/* Header */}
-        <AppHeader />
-        {/* Page Content */}
-        <div className={getRouteSpecificStyles()}>{children}</div>
-      </div>
-    </div>
-  );
+  // Read user state — block suspended accounts and force password reset.
+  const user = await User.findById(session.id)
+    .select("mustResetPassword status")
+    .lean();
+  if (!user || user.status === "SUSPENDED") redirect("/account-suspended");
+  if (user.mustResetPassword) redirect("/reset-password");
+
+  // Block access if tenant is suspended/deleted.
+  if (session.tenantId) {
+    const tenant = await Tenant.findById(session.tenantId).select("status").lean();
+    if (!tenant || tenant.status === "DELETED") redirect("/signin");
+    if (tenant.status === "SUSPENDED") redirect("/account-suspended");
+  }
+
+  return <AdminLayoutClient>{children}</AdminLayoutClient>;
 }

@@ -23,6 +23,7 @@ export const SUGGESTION_STATUSES = [
 
 const featureSuggestionSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     userEmail: { type: String, required: true },
     title: { type: String, required: true, trim: true, maxlength: 120 },

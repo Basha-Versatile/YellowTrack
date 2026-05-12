@@ -3,33 +3,42 @@ import { success, created } from "@/lib/http";
 import { BadRequestError } from "@/lib/errors";
 import { Expense } from "@/models";
 import { parseMultipart, firstFile } from "@/lib/upload";
+import {
+  tenantOf,
+  tenantFilter,
+  tenantStamp,
+} from "@/lib/auth/tenant-context";
 
 export const runtime = "nodejs";
 
 export const GET = withRoute<{ id: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const sp = req.nextUrl.searchParams;
     const from = sp.get("from");
     const to = sp.get("to");
     const category = sp.get("category");
 
-    const filter: Record<string, unknown> = { vehicleId: params.id };
+    const extras: Record<string, unknown> = { vehicleId: params.id };
     if (from || to) {
       const range: Record<string, Date> = {};
       if (from) range.$gte = new Date(from);
       if (to) range.$lte = new Date(to);
-      filter.expenseDate = range;
+      extras.expenseDate = range;
     }
-    if (category) filter.category = category;
+    if (category) extras.category = category;
 
-    const expenses = await Expense.find(filter).sort({ expenseDate: -1 }).lean();
+    const expenses = await Expense.find(tenantFilter(ctx, extras))
+      .sort({ expenseDate: -1 })
+      .lean();
     return success(expenses, "Expenses fetched");
   },
   { auth: true },
 );
 
 export const POST = withRoute<{ id: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const { fields, files } = await parseMultipart(req);
     const val = (k: string) =>
       Array.isArray(fields[k]) ? (fields[k] as string[])[0] : (fields[k] as string | undefined);
@@ -44,6 +53,7 @@ export const POST = withRoute<{ id: string }>(
 
     const proof = firstFile(files, "proof");
     const expense = await Expense.create({
+      ...tenantStamp(ctx),
       vehicleId: params.id,
       category,
       title,

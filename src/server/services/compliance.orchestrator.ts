@@ -1,5 +1,10 @@
 import "server-only";
-import { ComplianceDocument, ServiceRecord, Vehicle } from "@/models";
+import { ComplianceDocument, ServiceRecord, Tenant, Vehicle } from "@/models";
+import {
+  type ScopedContext,
+  tenantFilter,
+  tokenScopedTenantOf,
+} from "@/lib/auth/tenant-context";
 import {
   calculateComplianceStatus,
 } from "./compliance.service";
@@ -16,30 +21,27 @@ import {
  * Refresh all compliance document statuses based on current date.
  * Returns { total, updated }.
  */
-export async function updateComplianceStatuses() {
-  const allDocs = await complianceRepo.findAll();
+export async function updateComplianceStatuses(ctx: ScopedContext) {
+  const allDocs = await complianceRepo.findAll(ctx);
   let updated = 0;
   for (const doc of allDocs) {
     const newStatus = calculateComplianceStatus(
       doc.expiryDate as Date | string | null | undefined,
     );
     if (newStatus !== doc.status) {
-      await ComplianceDocument.findByIdAndUpdate(doc._id, {
-        status: newStatus,
-        lastVerifiedAt: new Date(),
-      });
+      await ComplianceDocument.findOneAndUpdate(
+        tenantFilter(ctx, { _id: doc._id }),
+        { status: newStatus, lastVerifiedAt: new Date() },
+      );
       updated++;
     }
   }
   return { total: allDocs.length, updated };
 }
 
-/**
- * Full compliance + license + doc + service sweep.
- * De-duplicates alerts per invocation via in-memory Set (the legacy daily tracker
- * is stateful; per-invocation dedupe is the closest stateless equivalent for Vercel Cron).
- */
-export async function runComplianceCheck() {
+async function runComplianceCheckForTenant(
+  ctx: ScopedContext,
+): Promise<number> {
   const sentThisRun = new Set<string>();
   const alreadySent = (key: string) => {
     if (sentThisRun.has(key)) return true;
@@ -49,11 +51,11 @@ export async function runComplianceCheck() {
 
   let alertCount = 0;
 
-  // 1. Refresh statuses on all compliance docs
-  await updateComplianceStatuses();
+  // 1. Refresh statuses on all compliance docs within this tenant
+  await updateComplianceStatuses(ctx);
 
   // 2. Vehicle doc expiry alerts
-  const allDocs = await complianceRepo.findAll();
+  const allDocs = await complianceRepo.findAll(ctx);
   for (const doc of allDocs) {
     if (!doc.expiryDate) continue;
     const status = calculateComplianceStatus(
@@ -62,9 +64,12 @@ export async function runComplianceCheck() {
     if (status === "YELLOW" || status === "ORANGE" || status === "RED") {
       const key = `vehicle-doc-${doc.vehicleId}-${doc.type}`;
       if (!alreadySent(key)) {
-        const vehicle = await Vehicle.findById(doc.vehicleId).lean();
+        const vehicle = await Vehicle.findOne(
+          tenantFilter(ctx, { _id: doc.vehicleId }),
+        ).lean();
         if (vehicle) {
           await triggerVehicleAlert(
+            ctx,
             String(vehicle.registrationNumber),
             doc.type,
             status,
@@ -78,7 +83,7 @@ export async function runComplianceCheck() {
   }
 
   // 3. Driver license + doc alerts
-  const drivers = await driverRepo.findAll();
+  const drivers = await driverRepo.findAll(ctx);
   for (const driver of drivers) {
     const d = driver as Record<string, unknown>;
     const licenseExpiry = d.licenseExpiry as Date | string;
@@ -90,6 +95,7 @@ export async function runComplianceCheck() {
       if (!alreadySent(key)) {
         const status = days <= 0 ? "RED" : days <= 4 ? "ORANGE" : "YELLOW";
         await triggerDriverAlert(
+          ctx,
           d.name as string,
           d.licenseNumber as string,
           status,
@@ -113,6 +119,7 @@ export async function runComplianceCheck() {
           const docStatus =
             docDays <= 0 ? "RED" : docDays <= 4 ? "ORANGE" : "YELLOW";
           await triggerDriverDocAlert(
+            ctx,
             d.name as string,
             doc.type as string,
             docStatus,
@@ -127,12 +134,12 @@ export async function runComplianceCheck() {
 
   // 4. Upcoming / overdue service records (due within 7 days)
   const cutoff = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const upcoming = await ServiceRecord.find({
-    nextDueDate: { $lte: cutoff },
-  }).lean();
+  const upcoming = await ServiceRecord.find(
+    tenantFilter(ctx, { nextDueDate: { $lte: cutoff } }),
+  ).lean();
   const vehicleIds = [...new Set(upcoming.map((s) => String(s.vehicleId)))];
   const vehicles = vehicleIds.length
-    ? await Vehicle.find({ _id: { $in: vehicleIds } })
+    ? await Vehicle.find(tenantFilter(ctx, { _id: { $in: vehicleIds } }))
         .select("_id registrationNumber")
         .lean()
     : [];
@@ -143,12 +150,42 @@ export async function runComplianceCheck() {
     const vehicle = vMap.get(String(svc.vehicleId));
     if (!alreadySent(key) && vehicle && svc.nextDueDate) {
       await triggerServiceAlert(
+        ctx,
         String(vehicle.registrationNumber),
         svc.title as string,
         svc.nextDueDate as Date,
         String(svc.vehicleId),
       );
       alertCount++;
+    }
+  }
+
+  return alertCount;
+}
+
+/**
+ * Full compliance + license + doc + service sweep across all active tenants.
+ * Loops over every active tenant, building a tenant-scoped ctx for each one
+ * so notifications and queries stay tenant-bounded.
+ *
+ * Per-invocation alert de-duplication is per-tenant (the legacy daily tracker
+ * is stateful; per-invocation dedupe is the closest stateless equivalent for Vercel Cron).
+ */
+export async function runComplianceCheck() {
+  const tenants = await Tenant.find({ status: "ACTIVE" })
+    .select("_id")
+    .lean();
+
+  let alertCount = 0;
+  for (const tenant of tenants) {
+    const ctx = tokenScopedTenantOf(String(tenant._id));
+    try {
+      alertCount += await runComplianceCheckForTenant(ctx);
+    } catch (err) {
+      console.error(
+        `[CRON_COMPLIANCE] tenant ${String(tenant._id)} failed:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 

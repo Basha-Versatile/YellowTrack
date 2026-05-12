@@ -1,6 +1,10 @@
 import "server-only";
 import mongoose from "mongoose";
 import { Challan, Payment, Vehicle } from "@/models";
+import {
+  type ScopedContext,
+  tenantFilter,
+} from "@/lib/auth/tenant-context";
 
 export type ChallanListQuery = {
   page?: number;
@@ -10,25 +14,27 @@ export type ChallanListQuery = {
   search?: string;
 };
 
-export async function findById(id: string) {
-  const challan = await Challan.findById(id).lean();
+export async function findById(ctx: ScopedContext, id: string) {
+  const challan = await Challan.findOne(tenantFilter(ctx, { _id: id })).lean();
   if (!challan) return null;
   const [vehicle, payment] = await Promise.all([
-    Vehicle.findById(challan.vehicleId).lean(),
-    challan.paymentId ? Payment.findById(challan.paymentId).lean() : null,
+    Vehicle.findOne(tenantFilter(ctx, { _id: challan.vehicleId })).lean(),
+    challan.paymentId
+      ? Payment.findOne(tenantFilter(ctx, { _id: challan.paymentId })).lean()
+      : null,
   ]);
   return { ...challan, vehicle, payment };
 }
 
-export async function findByVehicleId(vehicleId: string) {
-  const challans = await Challan.find({ vehicleId })
+export async function findByVehicleId(ctx: ScopedContext, vehicleId: string) {
+  const challans = await Challan.find(tenantFilter(ctx, { vehicleId }))
     .sort({ issuedAt: -1 })
     .lean();
   const paymentIds = challans
     .map((c) => c.paymentId)
     .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
   const payments = paymentIds.length
-    ? await Payment.find({ _id: { $in: paymentIds } }).lean()
+    ? await Payment.find(tenantFilter(ctx, { _id: { $in: paymentIds } })).lean()
     : [];
   const byId = new Map(payments.map((p) => [String(p._id), p]));
   return challans.map((c) => ({
@@ -37,26 +43,33 @@ export async function findByVehicleId(vehicleId: string) {
   }));
 }
 
-export async function findAll({
-  page = 1,
-  limit = 20,
-  status,
-  vehicleId,
-  search,
-}: ChallanListQuery = {}) {
+export async function findAll(
+  ctx: ScopedContext,
+  {
+    page = 1,
+    limit = 20,
+    status,
+    vehicleId,
+    search,
+  }: ChallanListQuery = {},
+) {
   const skip = (page - 1) * limit;
-  const filter: Record<string, unknown> = {};
-  if (status) filter.status = status;
-  if (vehicleId) filter.vehicleId = vehicleId;
+  const extras: Record<string, unknown> = {};
+  if (status) extras.status = status;
+  if (vehicleId) extras.vehicleId = vehicleId;
 
   if (search) {
-    const vehicles = await Vehicle.find({
-      registrationNumber: { $regex: search, $options: "i" },
-    })
+    const vehicles = await Vehicle.find(
+      tenantFilter(ctx, {
+        registrationNumber: { $regex: search, $options: "i" },
+      }),
+    )
       .select("_id")
       .lean();
-    filter.vehicleId = { $in: vehicles.map((v) => v._id) };
+    extras.vehicleId = { $in: vehicles.map((v) => v._id) };
   }
+
+  const filter = tenantFilter(ctx, extras);
 
   const [challans, total] = await Promise.all([
     Challan.find(filter)
@@ -73,10 +86,10 @@ export async function findAll({
     .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
   const [vehicles, payments] = await Promise.all([
     vehicleIds.length
-      ? Vehicle.find({ _id: { $in: vehicleIds } }).lean()
+      ? Vehicle.find(tenantFilter(ctx, { _id: { $in: vehicleIds } })).lean()
       : [],
     paymentIds.length
-      ? Payment.find({ _id: { $in: paymentIds } }).lean()
+      ? Payment.find(tenantFilter(ctx, { _id: { $in: paymentIds } })).lean()
       : [],
   ]);
   const vByIdMap = new Map(vehicles.map((v) => [String(v._id), v]));
@@ -109,28 +122,31 @@ export async function createMany(docs: Array<Record<string, unknown>>) {
   );
 }
 
-export async function getPendingSummary(vehicleId?: string) {
-  const match: Record<string, unknown> = { status: "PENDING" };
-  if (vehicleId) match.vehicleId = new mongoose.Types.ObjectId(vehicleId);
+export async function getPendingSummary(
+  ctx: ScopedContext,
+  vehicleId?: string,
+) {
+  const extras: Record<string, unknown> = { status: "PENDING" };
+  if (vehicleId) extras.vehicleId = new mongoose.Types.ObjectId(vehicleId);
   const agg = await Challan.aggregate([
-    { $match: match },
+    { $match: tenantFilter(ctx, extras) },
     { $group: { _id: null, sum: { $sum: "$amount" }, count: { $sum: 1 } } },
   ]);
   const row = agg[0] ?? { count: 0, sum: 0 };
   return { pendingCount: row.count, pendingAmount: row.sum ?? 0 };
 }
 
-export async function getStats() {
+export async function getStats(ctx: ScopedContext) {
   const [pending, paid, total] = await Promise.all([
     Challan.aggregate([
-      { $match: { status: "PENDING" } },
+      { $match: tenantFilter(ctx, { status: "PENDING" }) },
       { $group: { _id: null, sum: { $sum: "$amount" }, count: { $sum: 1 } } },
     ]),
     Challan.aggregate([
-      { $match: { status: "PAID" } },
+      { $match: tenantFilter(ctx, { status: "PAID" }) },
       { $group: { _id: null, sum: { $sum: "$amount" }, count: { $sum: 1 } } },
     ]),
-    Challan.countDocuments(),
+    Challan.countDocuments(tenantFilter(ctx)),
   ]);
   return {
     total,

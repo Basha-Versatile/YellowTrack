@@ -1,18 +1,19 @@
 import "server-only";
 import { User } from "@/models";
+import { type ScopedContext, tenantFilter } from "@/lib/auth/tenant-context";
 import * as repo from "../repositories/notification.repository";
 
 export type CreateNotificationInput = {
-  userId?: string; // if omitted, broadcast to all ADMIN users
+  userId?: string; // if omitted, broadcast to all ADMIN users in the tenant
   type: string;
   title: string;
   message: string;
   entityId?: string;
 };
 
-export async function create(input: CreateNotificationInput) {
+export async function create(ctx: ScopedContext, input: CreateNotificationInput) {
   if (input.userId) {
-    return repo.create({
+    return repo.create(ctx, {
       userId: input.userId,
       type: input.type,
       title: input.title,
@@ -21,10 +22,13 @@ export async function create(input: CreateNotificationInput) {
     });
   }
 
-  // broadcast to all admin users
-  const admins = await User.find({ role: "ADMIN" }).select("_id").lean();
+  // broadcast to all admin users in this tenant
+  const admins = await User.find(tenantFilter(ctx, { role: "ADMIN" }))
+    .select("_id")
+    .lean();
   if (admins.length === 0) return [];
   return repo.createMany(
+    ctx,
     admins.map((u) => ({
       userId: String(u._id),
       type: input.type,
@@ -36,20 +40,25 @@ export async function create(input: CreateNotificationInput) {
 }
 
 export async function getByUserId(
+  ctx: ScopedContext,
   userId: string,
   query: { page?: number; limit?: number; unreadOnly?: boolean },
 ) {
-  return repo.findByUserId(userId, query);
+  return repo.findByUserId(ctx, userId, query);
 }
 
-export async function markAsRead(id: string, userId: string) {
-  return repo.markAsRead(id, userId);
+export async function markAsRead(
+  ctx: ScopedContext,
+  id: string,
+  userId: string,
+) {
+  return repo.markAsRead(ctx, id, userId);
 }
 
-export async function markAllAsRead(userId: string) {
-  return repo.markAllAsRead(userId);
+export async function markAllAsRead(ctx: ScopedContext, userId: string) {
+  return repo.markAllAsRead(ctx, userId);
 }
 
-export async function getUnreadCount(userId: string) {
-  return repo.getUnreadCount(userId);
+export async function getUnreadCount(ctx: ScopedContext, userId: string) {
+  return repo.getUnreadCount(ctx, userId);
 }

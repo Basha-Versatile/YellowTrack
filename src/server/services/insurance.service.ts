@@ -1,5 +1,10 @@
 import "server-only";
 import { AppError, BadRequestError, NotFoundError } from "@/lib/errors";
+import {
+  type ScopedContext,
+  tokenScopedTenantOf,
+} from "@/lib/auth/tenant-context";
+import { Tenant } from "@/models";
 import * as insuranceRepo from "../repositories/insurance.repository";
 import * as vehicleRepo from "../repositories/vehicle.repository";
 import { extractFromPDF } from "./insurance/pdfParser.service";
@@ -17,17 +22,18 @@ function computeStatus(expiryDate: Date | string | null | undefined) {
 }
 
 export async function uploadAndExtract(
+  ctx: ScopedContext,
   vehicleId: string,
   source: Buffer | string,
   documentUrl: string,
 ) {
-  const vehicle = await vehicleRepo.findById(vehicleId);
+  const vehicle = await vehicleRepo.findById(ctx, vehicleId);
   if (!vehicle) throw new NotFoundError("Vehicle not found");
 
   const extracted = await extractFromPDF(source);
   const status = computeStatus(extracted.expiryDate);
 
-  const policy = await insuranceRepo.create({
+  const policy = await insuranceRepo.create(ctx, {
     vehicleId,
     policyNumber: extracted.policyNumber,
     insurer:
@@ -60,13 +66,13 @@ type SavePolicyInput = {
   documentUrl?: string | null;
 };
 
-export async function savePolicy(data: SavePolicyInput) {
-  const vehicle = await vehicleRepo.findById(data.vehicleId);
+export async function savePolicy(ctx: ScopedContext, data: SavePolicyInput) {
+  const vehicle = await vehicleRepo.findById(ctx, data.vehicleId);
   if (!vehicle) throw new NotFoundError("Vehicle not found");
 
   const status = computeStatus(data.expiryDate);
 
-  return insuranceRepo.create({
+  return insuranceRepo.create(ctx, {
     vehicleId: data.vehicleId,
     policyNumber: data.policyNumber ?? null,
     insurer: data.insurer ?? null,
@@ -82,11 +88,11 @@ export async function savePolicy(data: SavePolicyInput) {
   });
 }
 
-export async function getPlans(vehicleId: string) {
-  const vehicle = await vehicleRepo.findById(vehicleId);
+export async function getPlans(ctx: ScopedContext, vehicleId: string) {
+  const vehicle = await vehicleRepo.findById(ctx, vehicleId);
   if (!vehicle) throw new NotFoundError("Vehicle not found");
 
-  const existing = await insuranceRepo.findActiveByVehicleId(vehicleId);
+  const existing = await insuranceRepo.findActiveByVehicleId(ctx, vehicleId);
   const previousInsurer =
     (existing as { insurer?: string | null } | null)?.insurer ?? null;
 
@@ -125,8 +131,12 @@ type PurchaseInput = {
   paymentMethod?: string;
 };
 
-export async function purchase(vehicleId: string, planData: PurchaseInput) {
-  const vehicle = await vehicleRepo.findById(vehicleId);
+export async function purchase(
+  ctx: ScopedContext,
+  vehicleId: string,
+  planData: PurchaseInput,
+) {
+  const vehicle = await vehicleRepo.findById(ctx, vehicleId);
   if (!vehicle) throw new NotFoundError("Vehicle not found");
 
   const paymentSuccess = Math.random() > 0.05;
@@ -136,11 +146,11 @@ export async function purchase(vehicleId: string, planData: PurchaseInput) {
     throw new AppError("Payment failed. Please try again.", 402);
   }
 
-  const existingPolicies = await insuranceRepo.findByVehicleId(vehicleId);
+  const existingPolicies = await insuranceRepo.findByVehicleId(ctx, vehicleId);
   for (const p of existingPolicies) {
     const status = (p as { status?: string }).status;
     if (status === "ACTIVE" || status === "EXPIRING" || status === "EXPIRED") {
-      await insuranceRepo.update(String(p._id), { status: "RENEWED" });
+      await insuranceRepo.update(ctx, String(p._id), { status: "RENEWED" });
     }
   }
 
@@ -148,7 +158,7 @@ export async function purchase(vehicleId: string, planData: PurchaseInput) {
   const expiryDate = new Date();
   expiryDate.setFullYear(expiryDate.getFullYear() + 1);
 
-  const policy = await insuranceRepo.create({
+  const policy = await insuranceRepo.create(ctx, {
     vehicleId,
     policyNumber: `POL-${Date.now().toString().slice(-10)}`,
     insurer: planData.provider,
@@ -171,8 +181,8 @@ export async function purchase(vehicleId: string, planData: PurchaseInput) {
   };
 }
 
-export async function checkExpiring() {
-  const policies = await insuranceRepo.findAllActive();
+async function checkExpiringForTenant(ctx: ScopedContext) {
+  const policies = await insuranceRepo.findAllActive(ctx);
   let updated = 0;
   let alerts = 0;
 
@@ -189,14 +199,14 @@ export async function checkExpiring() {
 
     const current = (policy as { status?: string }).status;
     if (newStatus !== current) {
-      await insuranceRepo.update(String(policy._id), { status: newStatus });
+      await insuranceRepo.update(ctx, String(policy._id), { status: newStatus });
       updated++;
     }
 
     const vehicle = (policy as { vehicle?: { registrationNumber?: string } }).vehicle;
     if ((newStatus === "EXPIRING" || newStatus === "EXPIRED") && vehicle) {
       try {
-        await createNotification({
+        await createNotification(ctx, {
           type: "INSURANCE_EXPIRY",
           title: `Insurance ${
             newStatus === "EXPIRED" ? "Expired" : "Expiring"
@@ -218,26 +228,60 @@ export async function checkExpiring() {
   return { updated, alerts };
 }
 
-export async function getAll(query: insuranceRepo.InsuranceListQuery) {
-  return insuranceRepo.findAll(query);
+/**
+ * Cross-tenant cron entrypoint: walk every active tenant and run the per-tenant
+ * expiry check with that tenant's scoped ctx.
+ */
+export async function checkExpiring() {
+  const tenants = await Tenant.find({ status: "ACTIVE" })
+    .select("_id")
+    .lean();
+
+  let updated = 0;
+  let alerts = 0;
+  for (const tenant of tenants) {
+    const ctx = tokenScopedTenantOf(String(tenant._id));
+    try {
+      const r = await checkExpiringForTenant(ctx);
+      updated += r.updated;
+      alerts += r.alerts;
+    } catch (err) {
+      console.error(
+        `[CRON_INSURANCE] tenant ${String(tenant._id)} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return { updated, alerts };
 }
 
-export async function getById(id: string) {
-  const p = await insuranceRepo.findById(id);
+export async function getAll(
+  ctx: ScopedContext,
+  query: insuranceRepo.InsuranceListQuery,
+) {
+  return insuranceRepo.findAll(ctx, query);
+}
+
+export async function getById(ctx: ScopedContext, id: string) {
+  const p = await insuranceRepo.findById(ctx, id);
   if (!p) throw new NotFoundError("Policy not found");
   return p;
 }
 
-export async function getByVehicle(vehicleId: string) {
-  return insuranceRepo.findByVehicleId(vehicleId);
+export async function getByVehicle(ctx: ScopedContext, vehicleId: string) {
+  return insuranceRepo.findByVehicleId(ctx, vehicleId);
 }
 
-export async function getStats() {
-  return insuranceRepo.getStats();
+export async function getStats(ctx: ScopedContext) {
+  return insuranceRepo.getStats(ctx);
 }
 
 // re-export for Wave 6 cron guard
-export async function assertVehicleExists(vehicleId: string) {
-  const vehicle = await vehicleRepo.findById(vehicleId);
+export async function assertVehicleExists(
+  ctx: ScopedContext,
+  vehicleId: string,
+) {
+  const vehicle = await vehicleRepo.findById(ctx, vehicleId);
   if (!vehicle) throw new BadRequestError("Vehicle not found");
 }

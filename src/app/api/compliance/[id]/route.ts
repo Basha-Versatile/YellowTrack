@@ -1,5 +1,6 @@
 import { withRoute, parseJson } from "@/lib/api-handler";
 import { success } from "@/lib/http";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { uploadComplianceDocSchema } from "@/validations/document.schema";
 import * as complianceRepo from "@/server/repositories/compliance.repository";
 import { calculateComplianceStatus } from "@/server/services/compliance.service";
@@ -7,7 +8,8 @@ import { calculateComplianceStatus } from "@/server/services/compliance.service"
 export const runtime = "nodejs";
 
 export const PUT = withRoute<{ id: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const input = await parseJson(req, uploadComplianceDocSchema);
     const rawExpiry = input.lifetime ? null : (input.expiryDate as Date | string | null | undefined);
     const finalExpiry: Date | null = !rawExpiry
@@ -16,15 +18,16 @@ export const PUT = withRoute<{ id: string }>(
         ? rawExpiry
         : new Date(rawExpiry);
     const status = calculateComplianceStatus(finalExpiry);
-    const doc = await complianceRepo.updateExpiry(params.id, finalExpiry, status);
+    const doc = await complianceRepo.updateExpiry(ctx, params.id, finalExpiry, status);
     return success(doc, "Compliance document updated successfully");
   },
   { auth: true },
 );
 
 export const DELETE = withRoute<{ id: string }>(
-  async ({ params }) => {
-    const removed = await complianceRepo.removeById(params.id);
+  async ({ params, session }) => {
+    const ctx = tenantOf(session);
+    const removed = await complianceRepo.removeById(ctx, params.id);
     return success(removed, "Compliance document removed");
   },
   { auth: true },

@@ -23,6 +23,7 @@ const fieldDiffSchema = new Schema(
 
 const driverChangeSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     driverId: { type: Schema.Types.ObjectId, ref: "Driver", required: true, index: true },
     changeType: { type: String, enum: DRIVER_CHANGE_TYPES, required: true },
     fields: { type: [fieldDiffSchema], default: [] },

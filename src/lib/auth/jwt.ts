@@ -7,6 +7,8 @@ export type AccessTokenPayload = {
   id: string;
   email: string;
   role: string;
+  // null = SUPERADMIN (no tenant scope). Set = scoped to that tenant.
+  tenantId: string | null;
 };
 
 export function signAccessToken(payload: AccessTokenPayload): string {

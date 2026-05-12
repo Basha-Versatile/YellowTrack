@@ -6,6 +6,8 @@ export type PublicUser = {
   email: string;
   name: string;
   role: string;
+  tenantId: string | null;
+  mustResetPassword: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 };
@@ -15,6 +17,8 @@ type UserLike = {
   email: string;
   name: string;
   role: string;
+  tenantId?: unknown;
+  mustResetPassword?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   toObject?: () => Record<string, unknown>;
@@ -26,11 +30,16 @@ export function toPublicUser(user: unknown): PublicUser {
     ? u.toObject()
     : (u as unknown as Record<string, unknown>);
 
+  const tenantIdRaw = (raw.tenantId ?? u.tenantId) as unknown;
+  const tenantId = tenantIdRaw ? String(tenantIdRaw) : null;
+
   return {
     id: String(raw._id ?? u._id),
     email: (raw.email as string) ?? u.email,
     name: (raw.name as string) ?? u.name,
     role: (raw.role as string) ?? u.role,
+    tenantId,
+    mustResetPassword: Boolean(raw.mustResetPassword ?? u.mustResetPassword ?? false),
     createdAt: (raw.createdAt as Date | undefined) ?? u.createdAt,
     updatedAt: (raw.updatedAt as Date | undefined) ?? u.updatedAt,
   };

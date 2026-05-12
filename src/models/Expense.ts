@@ -10,6 +10,7 @@ export const EXPENSE_CATEGORIES = [
 
 const expenseSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     category: { type: String, enum: EXPENSE_CATEGORIES, required: true, index: true },
     title: { type: String, required: true },

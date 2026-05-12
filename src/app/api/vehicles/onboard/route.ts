@@ -1,5 +1,6 @@
 import { withRoute } from "@/lib/api-handler";
 import { created } from "@/lib/http";
+import { tenantOf } from "@/lib/auth/tenant-context";
 import { onboardVehicleSchema } from "@/validations/vehicle.schema";
 import { parseMultipart, manyFiles, firstString } from "@/lib/upload";
 import { onboardVehicle } from "@/server/services/vehicle.service";
@@ -8,7 +9,8 @@ import { getRequestOrigin } from "@/lib/request-origin";
 export const runtime = "nodejs";
 
 export const POST = withRoute(
-  async ({ req }) => {
+  async ({ req, session }) => {
+    const ctx = tenantOf(session);
     const { fields, files } = await parseMultipart(req);
     const input = onboardVehicleSchema.parse({
       registrationNumber: firstString(fields, "registrationNumber"),
@@ -18,6 +20,7 @@ export const POST = withRoute(
 
     const images = manyFiles(files, "vehicleImages").map((f) => f.url);
     const vehicle = await onboardVehicle(
+      ctx,
       input.registrationNumber,
       images,
       input.groupId ?? null,

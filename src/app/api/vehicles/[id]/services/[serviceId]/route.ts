@@ -3,16 +3,20 @@ import { success } from "@/lib/http";
 import { NotFoundError } from "@/lib/errors";
 import { ServiceRecord } from "@/models";
 import { parseMultipart } from "@/lib/upload";
+import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
 
 export const runtime = "nodejs";
 
 export const PUT = withRoute<{ id: string; serviceId: string }>(
-  async ({ req, params }) => {
+  async ({ req, params, session }) => {
+    const ctx = tenantOf(session);
     const { fields, files } = await parseMultipart(req);
     const val = (k: string) =>
       Array.isArray(fields[k]) ? (fields[k] as string[])[0] : (fields[k] as string | undefined);
 
-    const existing = await ServiceRecord.findById(params.serviceId);
+    const existing = await ServiceRecord.findOne(
+      tenantFilter(ctx, { _id: params.serviceId }),
+    );
     if (!existing) throw new NotFoundError("Service record not found");
 
     const fileMap: Record<string, string> = {};
@@ -64,19 +68,26 @@ export const PUT = withRoute<{ id: string; serviceId: string }>(
       update.nextDueKm = val("nextDueKm") ? parseInt(val("nextDueKm")!, 10) : null;
     if (val("status")) update.status = val("status");
 
-    const updated = await ServiceRecord.findByIdAndUpdate(params.serviceId, update, {
-      new: true,
-    });
+    const updated = await ServiceRecord.findOneAndUpdate(
+      tenantFilter(ctx, { _id: params.serviceId }),
+      update,
+      { new: true },
+    );
     return success(updated, "Service record updated");
   },
   { auth: true },
 );
 
 export const DELETE = withRoute<{ id: string; serviceId: string }>(
-  async ({ params }) => {
-    const existing = await ServiceRecord.findById(params.serviceId);
+  async ({ params, session }) => {
+    const ctx = tenantOf(session);
+    const existing = await ServiceRecord.findOne(
+      tenantFilter(ctx, { _id: params.serviceId }),
+    );
     if (!existing) throw new NotFoundError("Service record not found");
-    await ServiceRecord.findByIdAndDelete(params.serviceId);
+    await ServiceRecord.findOneAndDelete(
+      tenantFilter(ctx, { _id: params.serviceId }),
+    );
     return success(null, "Service record deleted");
   },
   { auth: true },
