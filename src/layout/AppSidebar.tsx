@@ -64,12 +64,6 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    icon: <Lightbulb className="h-5 w-5" />,
-    name: "Feedback",
-    path: "/suggest-feature",
-    new: true,
-  },
-  {
     icon: <UsersRound className="h-5 w-5" />,
     name: "Users",
     path: "/settings/users",
@@ -80,6 +74,12 @@ const navItems: NavItem[] = [
     name: "Roles & permissions",
     path: "/settings/roles",
     perm: "settings.roles:manage",
+  },
+  {
+    icon: <Lightbulb className="h-5 w-5" />,
+    name: "Feedback",
+    path: "/suggest-feature",
+    new: true,
   },
   // {
   //   icon: <TaskIcon />,

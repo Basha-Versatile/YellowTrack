@@ -247,7 +247,7 @@ export default function UsersPage() {
       </div>
 
       {/* Users list */}
-      <div className="rounded-2xl border border-gray-200/80 bg-white overflow-hidden dark:border-gray-800 dark:bg-white/[0.02]">
+      <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
         {loading ? (
           <UserListSkeleton />
         ) : filtered.length === 0 ? (
@@ -326,7 +326,19 @@ function UserItem({
   onAction: (action: "edit" | "reset" | "suspend" | "resume" | "delete") => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openUp, setOpenUp] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+
+  const toggleMenu = () => {
+    if (!menuOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // dropdown is ~250px tall when all actions visible; flip if cramped.
+      setOpenUp(spaceBelow < 250);
+    }
+    setMenuOpen((v) => !v);
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -418,14 +430,19 @@ function UserItem({
       {/* Actions menu */}
       <div className="relative flex-shrink-0" ref={menuRef}>
         <button
-          onClick={() => setMenuOpen((v) => !v)}
+          ref={buttonRef}
+          onClick={toggleMenu}
           className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-800 transition-colors"
           aria-label="Actions"
         >
           <MoreVertical className="w-4 h-4" />
         </button>
         {menuOpen && (
-          <div className="absolute right-0 top-full mt-1 w-56 rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 py-1 z-50">
+          <div
+            className={`absolute right-0 w-56 rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 py-1 z-50 ${
+              openUp ? "bottom-full mb-1" : "top-full mt-1"
+            }`}
+          >
             <MenuItem
               Icon={Pencil}
               label="Edit name & role"
