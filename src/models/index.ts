@@ -4,8 +4,13 @@ export {
   Tenant,
   type TenantAttrs,
   TENANT_STATUS,
-  TENANT_PLANS,
+  SUBSCRIPTION_STATUS,
 } from "./Tenant";
+export { Plan, type PlanAttrs } from "./Plan";
+export {
+  PlatformSettings,
+  type PlatformSettingsAttrs,
+} from "./PlatformSettings";
 export { Role, type RoleAttrs } from "./Role";
 export {
   User,

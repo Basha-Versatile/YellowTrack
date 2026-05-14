@@ -20,11 +20,13 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+type SubStatus = "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
+
 type TopTenant = {
   tenantId: string;
   name: string;
   slug: string;
-  plan: "FREE" | "PRO" | "ENTERPRISE";
+  subscriptionStatus: SubStatus;
   status: "ACTIVE" | "SUSPENDED" | "DELETED";
   vehicles: number;
   drivers: number;
@@ -34,7 +36,7 @@ type RecentTenant = {
   id: string;
   name: string;
   slug: string;
-  plan: string;
+  subscriptionStatus: SubStatus;
   status: string;
   createdAt: string;
 };
@@ -46,7 +48,12 @@ type Stats = {
   vehicles: number;
   drivers: number;
   growth7d: { tenants: number; users: number; vehicles: number; drivers: number };
-  plans: { FREE: number; PRO: number; ENTERPRISE: number };
+  subscriptions: {
+    TRIAL: number;
+    ACTIVE: number;
+    EXPIRED: number;
+    CANCELLED: number;
+  };
   statuses: { ACTIVE: number; SUSPENDED: number; DELETED: number };
   topTenants: TopTenant[];
   recentTenants: RecentTenant[];
@@ -138,7 +145,10 @@ export default function SuperadminDashboardPage() {
       {/* Top tenants + plan donut */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <TopTenantsLeaderboard tenants={stats.topTenants} />
-        <PlanBreakdown plans={stats.plans} statuses={stats.statuses} />
+        <SubscriptionBreakdown
+          subscriptions={stats.subscriptions}
+          statuses={stats.statuses}
+        />
       </div>
 
       {/* Recent activity + system health */}
@@ -334,8 +344,18 @@ function TopTenantsLeaderboard({ tenants }: { tenants: TopTenant[] }) {
                       <p className="text-sm font-semibold text-gray-900 dark:text-white truncate group-hover:text-yellow-600 dark:group-hover:text-yellow-400 transition-colors">
                         {t.name}
                       </p>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                        {t.plan}
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+                          t.subscriptionStatus === "ACTIVE"
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                            : t.subscriptionStatus === "TRIAL"
+                              ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"
+                              : t.subscriptionStatus === "EXPIRED"
+                                ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+                                : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                        }`}
+                      >
+                        {t.subscriptionStatus}
                       </span>
                       {t.status === "SUSPENDED" && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
@@ -374,28 +394,38 @@ function TopTenantsLeaderboard({ tenants }: { tenants: TopTenant[] }) {
   );
 }
 
-// ── Plan donut + status breakdown ───────────────────────────────────────────
-function PlanBreakdown({
-  plans,
+// ── Subscription donut + status breakdown ──────────────────────────────────
+function SubscriptionBreakdown({
+  subscriptions,
   statuses,
 }: {
-  plans: { FREE: number; PRO: number; ENTERPRISE: number };
+  subscriptions: {
+    TRIAL: number;
+    ACTIVE: number;
+    EXPIRED: number;
+    CANCELLED: number;
+  };
   statuses: { ACTIVE: number; SUSPENDED: number; DELETED: number };
 }) {
-  const total = plans.FREE + plans.PRO + plans.ENTERPRISE;
+  const total =
+    subscriptions.TRIAL +
+    subscriptions.ACTIVE +
+    subscriptions.EXPIRED +
+    subscriptions.CANCELLED;
   const segments = [
-    { label: "ENTERPRISE", value: plans.ENTERPRISE, color: "#ca8a04" }, // brand-500
-    { label: "PRO", value: plans.PRO, color: "#facc15" }, // brand-300
-    { label: "FREE", value: plans.FREE, color: "#fde68a" }, // amber-200
+    { label: "ACTIVE", value: subscriptions.ACTIVE, color: "#10b981" }, // emerald-500
+    { label: "TRIAL", value: subscriptions.TRIAL, color: "#3b82f6" }, // blue-500
+    { label: "EXPIRED", value: subscriptions.EXPIRED, color: "#ef4444" }, // red-500
+    { label: "CANCELLED", value: subscriptions.CANCELLED, color: "#9ca3af" }, // gray-400
   ];
 
   return (
     <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
       <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-1">
-        Plans
+        Subscriptions
       </h2>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
-        Active tenant breakdown
+        Tenant subscription breakdown
       </p>
 
       <div className="flex items-center justify-center mb-5">
@@ -567,7 +597,7 @@ function RecentTenants({
                     </span>
                   </div>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    <span className="font-semibold">{t.plan}</span> · {timeAgo(t.createdAt)}
+                    <span className="font-semibold">{t.subscriptionStatus}</span> · {timeAgo(t.createdAt)}
                   </p>
                 </div>
                 <ArrowUpRight className="w-4 h-4 text-gray-300 group-hover:text-yellow-500 transition-colors" />

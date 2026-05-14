@@ -19,27 +19,38 @@ import {
   XCircle,
 } from "lucide-react";
 
+type SubStatus = "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
+
 type Tenant = {
   id: string;
   name: string;
   slug: string;
   status: "ACTIVE" | "SUSPENDED" | "DELETED";
-  plan: "FREE" | "PRO" | "ENTERPRISE";
+  subscriptionStatus: SubStatus;
+  subscriptionEnd?: string | null;
+  plan?: {
+    name: string;
+    price: number;
+    currency: string;
+    durationDays: number;
+  } | null;
   billingEmail?: string | null;
   userCount: number;
   createdAt: string;
 };
 
-const PLAN_LABEL: Record<Tenant["plan"], string> = {
-  FREE: "Free",
-  PRO: "Pro",
-  ENTERPRISE: "Enterprise",
+const SUB_TINT: Record<SubStatus, string> = {
+  TRIAL: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+  ACTIVE: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+  EXPIRED: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  CANCELLED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
 };
 
-const PLAN_TINT: Record<Tenant["plan"], string> = {
-  FREE: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-  PRO: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-  ENTERPRISE: "bg-gradient-to-r from-yellow-400 to-yellow-500 text-white",
+const SUB_LABEL: Record<SubStatus, string> = {
+  TRIAL: "Trial",
+  ACTIVE: "Active",
+  EXPIRED: "Expired",
+  CANCELLED: "Cancelled",
 };
 
 function timeAgo(date: string | Date): string {
@@ -64,7 +75,7 @@ export default function TenantsListPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "SUSPENDED">("ALL");
-  const [planFilter, setPlanFilter] = useState<"ALL" | "FREE" | "PRO" | "ENTERPRISE">("ALL");
+  const [subFilter, setSubFilter] = useState<"ALL" | SubStatus>("ALL");
   const [busy, setBusy] = useState<string | null>(null);
   const [view, setView] = useViewMode("superadmin.tenants.view", "grid");
 
@@ -74,7 +85,7 @@ export default function TenantsListPage() {
       const res = await superadminAPI.listTenants({
         search: search || undefined,
         status: statusFilter === "ALL" ? undefined : statusFilter,
-        plan: planFilter === "ALL" ? undefined : planFilter,
+        subscriptionStatus: subFilter === "ALL" ? undefined : subFilter,
       });
       setTenants(res.data.data.tenants as Tenant[]);
     } catch (err) {
@@ -93,7 +104,7 @@ export default function TenantsListPage() {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, planFilter]);
+  }, [search, statusFilter, subFilter]);
 
   const toggleSuspend = async (t: Tenant) => {
     setBusy(t.id);
@@ -174,15 +185,16 @@ export default function TenantsListPage() {
             onChange={(v) => setStatusFilter(v as typeof statusFilter)}
           />
           <FilterChipGroup
-            label="Plan"
+            label="Subscription"
             options={[
               { value: "ALL", label: "All" },
-              { value: "FREE", label: "Free" },
-              { value: "PRO", label: "Pro" },
-              { value: "ENTERPRISE", label: "Enterprise" },
+              { value: "TRIAL", label: "Trial" },
+              { value: "ACTIVE", label: "Active" },
+              { value: "EXPIRED", label: "Expired" },
+              { value: "CANCELLED", label: "Cancelled" },
             ]}
-            value={planFilter}
-            onChange={(v) => setPlanFilter(v as typeof planFilter)}
+            value={subFilter}
+            onChange={(v) => setSubFilter(v as typeof subFilter)}
           />
           <ViewToggle value={view} onChange={setView} />
         </div>
@@ -296,13 +308,26 @@ function TenantCard({
           </div>
           <div className="flex flex-col items-end gap-1">
             <span
-              className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${PLAN_TINT[t.plan]}`}
+              className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${SUB_TINT[t.subscriptionStatus]}`}
             >
-              {PLAN_LABEL[t.plan]}
+              {SUB_LABEL[t.subscriptionStatus]}
             </span>
             <StatusBadge status={t.status} />
           </div>
         </div>
+
+        {t.plan && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-3">
+            <span className="font-semibold text-gray-700 dark:text-gray-300">
+              {t.plan.name}
+            </span>{" "}
+            ·{" "}
+            {t.plan.currency === "INR"
+              ? `₹${t.plan.price.toLocaleString("en-IN")}`
+              : `${t.plan.currency} ${t.plan.price}`}{" "}
+            / {t.plan.durationDays}d
+          </p>
+        )}
 
         <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-4">
           <span className="flex items-center gap-1">
@@ -405,9 +430,9 @@ function TenantRow({
       </Link>
 
       <span
-        className={`hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${PLAN_TINT[t.plan]}`}
+        className={`hidden md:inline-flex text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${SUB_TINT[t.subscriptionStatus]}`}
       >
-        {PLAN_LABEL[t.plan]}
+        {SUB_LABEL[t.subscriptionStatus]}
       </span>
       <div className="hidden md:block">
         <StatusBadge status={t.status} />

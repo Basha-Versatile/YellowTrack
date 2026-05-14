@@ -13,6 +13,7 @@ import {
 } from "./compliance.service";
 import { triggerVehicleAlert } from "./alert.service";
 import { generateQRCodeForVehicle } from "./qr.service";
+import { assertQuota } from "./quota.service";
 import { fetchChallans } from "./mock/challan.mock";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -99,6 +100,9 @@ export async function onboardVehicle(
   vehicleUsage?: "PRIVATE" | "COMMERCIAL" | null,
 ) {
   const stamp = tenantStamp(ctx);
+
+  // Plan-level quota guard — block before any external API spend.
+  await assertQuota(stamp.tenantId, "vehicle");
 
   // No group selected during onboarding → assign to the default "Others" group
   if (!groupId) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { superadminAPI } from "@/lib/api";
@@ -15,31 +15,25 @@ import {
   Key,
   Sparkles,
   AlertCircle,
+  Clock,
 } from "lucide-react";
 
-type Plan = "FREE" | "PRO" | "ENTERPRISE";
-
-const PLAN_DESCRIPTORS: Record<
-  Plan,
-  { name: string; tagline: string; limits: string; recommended?: boolean }
-> = {
-  FREE: {
-    name: "Free",
-    tagline: "Pilot and small fleets",
-    limits: "Up to 50 vehicles · 50 drivers",
-  },
-  PRO: {
-    name: "Pro",
-    tagline: "Growing operators",
-    limits: "Up to 500 vehicles · unlimited drivers",
-    recommended: true,
-  },
-  ENTERPRISE: {
-    name: "Enterprise",
-    tagline: "Large-scale logistics",
-    limits: "Unlimited usage, priority support",
-  },
+type Plan = {
+  id: string;
+  _id?: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  currency: string;
+  durationDays: number;
+  isActive: boolean;
 };
+
+function formatPrice(amount: number, currency: string): string {
+  if (currency === "INR") return `₹${amount.toLocaleString("en-IN")}`;
+  if (currency === "USD") return `$${amount.toLocaleString("en-US")}`;
+  return `${currency} ${amount.toLocaleString()}`;
+}
 
 function slugify(s: string): string {
   return s
@@ -53,7 +47,10 @@ export default function NewTenantPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [plan, setPlan] = useState<Plan>("PRO");
+  const [planId, setPlanId] = useState<string>("");
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [trialDays, setTrialDays] = useState<number>(15);
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
@@ -66,6 +63,26 @@ export default function NewTenantPage() {
     tempPassword: string;
   } | null>(null);
   const [copied, setCopied] = useState<"email" | "password" | null>(null);
+
+  useEffect(() => {
+    setPlansLoading(true);
+    Promise.all([superadminAPI.listPlans(), superadminAPI.getSettings()])
+      .then(([planRes, settingsRes]) => {
+        const list = (planRes.data.data as Array<Plan & { _id?: string }>).map(
+          (p) => ({ ...p, id: String(p.id ?? p._id) }),
+        );
+        setPlans(list.filter((p) => p.isActive));
+        const days = (settingsRes.data.data?.trialDays as number) ?? 15;
+        setTrialDays(days);
+      })
+      .catch(console.error)
+      .finally(() => setPlansLoading(false));
+  }, []);
+
+  const selectedPlan = useMemo(
+    () => plans.find((p) => p.id === planId),
+    [plans, planId],
+  );
 
   const handleNameChange = (v: string) => {
     setName(v);
@@ -90,7 +107,7 @@ export default function NewTenantPage() {
       const res = await superadminAPI.createTenant({
         name,
         slug,
-        plan,
+        planId: planId || null,
         billingEmail: billingEmail || null,
         admin: { name: adminName, email: adminEmail },
       });
@@ -340,53 +357,73 @@ export default function NewTenantPage() {
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="w-4 h-4 text-yellow-500" />
               <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
-                Plan
+                Subscription
               </h2>
             </div>
-            <div className="space-y-2.5">
-              {(Object.keys(PLAN_DESCRIPTORS) as Plan[]).map((p) => {
-                const d = PLAN_DESCRIPTORS[p];
-                const active = plan === p;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPlan(p)}
-                    className={`relative w-full text-left rounded-xl border-2 p-3.5 transition-all ${
-                      active
-                        ? "border-yellow-400 bg-yellow-50/50 shadow-md shadow-yellow-500/10 dark:border-yellow-400 dark:bg-yellow-500/[0.06]"
-                        : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800/50"
-                    }`}
+
+            {plansLoading ? (
+              <div className="space-y-2">
+                <div className="h-10 rounded-lg bg-gray-200/70 dark:bg-gray-700/40 animate-pulse" />
+                <div className="h-20 rounded-lg bg-gray-200/70 dark:bg-gray-700/40 animate-pulse" />
+              </div>
+            ) : plans.length === 0 ? (
+              <>
+                <div className="rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/40 p-4 mb-3 dark:border-amber-500/20 dark:bg-amber-500/[0.06]">
+                  <p className="text-xs font-bold text-amber-800 dark:text-amber-400 mb-1">
+                    No plans defined yet
+                  </p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400/80 mb-2">
+                    This tenant will get a {trialDays}-day free trial. Create plans on the
+                    Plans page to offer paid subscriptions.
+                  </p>
+                  <Link
+                    href="/superadmin/plans"
+                    className="text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
                   >
-                    {d.recommended && (
-                      <span className="absolute -top-2 right-3 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-gradient-to-r from-yellow-400 to-yellow-500 text-white shadow-sm">
-                        Popular
-                      </span>
-                    )}
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-bold text-gray-900 dark:text-white">
-                        {d.name}
-                      </span>
-                      <span
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                          active
-                            ? "border-yellow-500 bg-yellow-500"
-                            : "border-gray-300 dark:border-gray-600"
-                        }`}
-                      >
-                        {active && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                      {d.tagline}
-                    </p>
-                    <p className="text-[11px] text-gray-500 dark:text-gray-500">
-                      {d.limits}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
+                    Go to Plans
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+                <PlanSummary
+                  isTrial
+                  text={`${trialDays}-day free trial`}
+                  subText="Tenant can use the app freely. Assign a paid plan later from the tenant detail page."
+                />
+              </>
+            ) : (
+              <>
+                <label className="block mb-2">
+                  <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                    Plan
+                  </span>
+                  <select
+                    value={planId}
+                    onChange={(e) => setPlanId(e.target.value)}
+                    className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-800 focus:border-yellow-400 focus:outline-none focus:ring-3 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  >
+                    <option value="">— {trialDays}-day free trial —</option>
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} · {formatPrice(p.price, p.currency)} / {p.durationDays}d
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {selectedPlan ? (
+                  <PlanSummary
+                    text={`${formatPrice(selectedPlan.price, selectedPlan.currency)} / ${selectedPlan.durationDays} days`}
+                    subText={selectedPlan.description || selectedPlan.name}
+                  />
+                ) : (
+                  <PlanSummary
+                    isTrial
+                    text={`${trialDays}-day free trial`}
+                    subText={`No plan selected. Tenant gets free access for ${trialDays} days; assign a paid plan later.`}
+                  />
+                )}
+              </>
+            )}
           </div>
         </div>
       </form>
@@ -414,6 +451,44 @@ export default function NewTenantPage() {
           box-shadow: 0 0 0 3px rgb(234 179 8 / 0.1);
         }
       `}</style>
+    </div>
+  );
+}
+
+function PlanSummary({
+  isTrial,
+  text,
+  subText,
+}: {
+  isTrial?: boolean;
+  text: string;
+  subText?: string;
+}) {
+  return (
+    <div
+      className={`rounded-xl border-2 p-3.5 ${
+        isTrial
+          ? "border-blue-200 bg-blue-50/40 dark:border-blue-500/20 dark:bg-blue-500/[0.06]"
+          : "border-yellow-300 bg-yellow-50/40 dark:border-yellow-500/30 dark:bg-yellow-500/[0.06]"
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Clock
+          className={`w-3.5 h-3.5 ${isTrial ? "text-blue-600 dark:text-blue-400" : "text-yellow-700 dark:text-yellow-400"}`}
+        />
+        <p
+          className={`text-sm font-bold ${isTrial ? "text-blue-900 dark:text-blue-300" : "text-yellow-900 dark:text-yellow-400"}`}
+        >
+          {text}
+        </p>
+      </div>
+      {subText && (
+        <p
+          className={`text-[11px] ${isTrial ? "text-blue-800 dark:text-blue-400/80" : "text-yellow-800 dark:text-yellow-400/80"}`}
+        >
+          {subText}
+        </p>
+      )}
     </div>
   );
 }

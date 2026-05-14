@@ -19,7 +19,7 @@ import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 interface VehicleBasic { id: string; registrationNumber: string; make: string; model: string; }
-interface ExpenseItem { source: string; date: string; vehicleId: string; vehicle: VehicleBasic | null; title: string; amount: number; proofUrl: string | null; category: string; }
+interface ExpenseItem { source: string; date: string; vehicleId: string; vehicle: VehicleBasic | null; title: string; amount: number; handlingCharges?: number; proofUrl: string | null; category: string; }
 interface ReportData {
   summary: { totalSpent: number; breakdown: Record<string, number> };
   timeline: Array<{ period: string; [key: string]: string | number }>;
@@ -76,7 +76,7 @@ function VehicleExpensesContent() {
 
   const [showModal, setShowModal] = useState(false);
   const [expVehicleId, setExpVehicleId] = useState("");
-  const [expForm, setExpForm] = useState({ category: "COMPLIANCE", title: "", amount: "", expenseDate: new Date().toISOString().split("T")[0], description: "" });
+  const [expForm, setExpForm] = useState({ category: "COMPLIANCE", title: "", amount: "", handlingCharges: "", expenseDate: new Date().toISOString().split("T")[0], description: "" });
   const [expProof, setExpProof] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
@@ -113,11 +113,12 @@ function VehicleExpensesContent() {
     try {
       const fd = new FormData();
       fd.append("category", expForm.category); fd.append("title", expForm.title); fd.append("amount", expForm.amount); fd.append("expenseDate", expForm.expenseDate);
+      if (expForm.handlingCharges) fd.append("handlingCharges", expForm.handlingCharges);
       if (expForm.description) fd.append("description", expForm.description);
       if (expProof) fd.append("proof", expProof);
       await vehicleAPI.createExpense(expVehicleId, fd);
       toast.success("Expense Logged", "Expense recorded successfully");
-      setShowModal(false); setExpForm({ category: "COMPLIANCE", title: "", amount: "", expenseDate: new Date().toISOString().split("T")[0], description: "" }); setExpProof(null);
+      setShowModal(false); setExpForm({ category: "COMPLIANCE", title: "", amount: "", handlingCharges: "", expenseDate: new Date().toISOString().split("T")[0], description: "" }); setExpProof(null);
       fetchReport();
     } catch { toast.error("Error", "Failed to log expense"); }
     finally { setSaving(false); }
@@ -152,8 +153,11 @@ function VehicleExpensesContent() {
   const downloadCSV = () => {
     if (!report) return;
     const filtered = getFilteredExpenses();
-    const headers = ["Date", "Vehicle", "Category", "Source", "Title", "Amount"];
-    const rows = filtered.map((e) => [new Date(e.date).toLocaleDateString("en-IN"), e.vehicle?.registrationNumber || "", CATEGORY_LABELS[e.category] || e.category, e.source, e.title, e.amount.toString()]);
+    const headers = ["Date", "Vehicle", "Category", "Source", "Title", "Amount", "Handling", "Total"];
+    const rows = filtered.map((e) => {
+      const handling = e.handlingCharges ?? 0;
+      return [new Date(e.date).toLocaleDateString("en-IN"), e.vehicle?.registrationNumber || "", CATEGORY_LABELS[e.category] || e.category, e.source, e.title, e.amount.toString(), handling.toString(), (e.amount + handling).toString()];
+    });
     const csv = [headers.join(","), ...rows.map((r) => r.map((c) => `"${c}"`).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -175,11 +179,18 @@ function VehicleExpensesContent() {
     const grouped: Record<string, ExpenseItem[]> = {};
     for (const exp of filtered) { const cat = exp.category; if (!grouped[cat]) grouped[cat] = []; grouped[cat].push(exp); }
 
+    const lineTotal = (e: ExpenseItem) => e.amount + (e.handlingCharges ?? 0);
     const catSectionsHTML = Object.entries(grouped).map(([cat, items]) => {
       const color = CATEGORY_COLORS_HEX[cat] || "#6b7280";
       const label = CATEGORY_LABELS[cat] || cat;
-      const catTotal = items.reduce((s, e) => s + e.amount, 0);
-      return `<div style="margin-bottom:24px"><div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-left:4px solid ${color};background:${color}10;border-radius:0 10px 10px 0;margin-bottom:8px"><div><span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;background:${color}18;color:${color}">${label}</span><span style="font-size:10px;color:#9ca3af;margin-left:8px">${items.length} txn${items.length > 1 ? "s" : ""}</span></div><div style="font-size:18px;font-weight:800;color:${color}">\u20B9${catTotal.toLocaleString("en-IN")}</div></div><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="text-align:left;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Date</th><th style="text-align:left;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Vehicle</th><th style="text-align:left;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Description</th><th style="text-align:right;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Amount</th></tr></thead><tbody>${items.map((e) => `<tr><td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#374151">${new Date(e.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td><td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-weight:600;color:#1f2937;font-family:monospace;font-size:11px">${e.vehicle?.registrationNumber || "\u2014"}</td><td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#374151">${e.title}</td><td style="text-align:right;padding:8px 12px;border-bottom:1px solid #f3f4f6;font-weight:700;color:#1f2937">\u20B9${e.amount.toLocaleString("en-IN")}</td></tr>`).join("")}</tbody></table></div>`;
+      const catTotal = items.reduce((s, e) => s + lineTotal(e), 0);
+      return `<div style="margin-bottom:24px"><div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-left:4px solid ${color};background:${color}10;border-radius:0 10px 10px 0;margin-bottom:8px"><div><span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;background:${color}18;color:${color}">${label}</span><span style="font-size:10px;color:#9ca3af;margin-left:8px">${items.length} txn${items.length > 1 ? "s" : ""}</span></div><div style="font-size:18px;font-weight:800;color:${color}">\u20B9${catTotal.toLocaleString("en-IN")}</div></div><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="text-align:left;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Date</th><th style="text-align:left;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Vehicle</th><th style="text-align:left;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Description</th><th style="text-align:right;padding:8px 12px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Amount</th></tr></thead><tbody>${items.map((e) => {
+        const handling = e.handlingCharges ?? 0;
+        const amtCell = handling > 0
+          ? `\u20B9${lineTotal(e).toLocaleString("en-IN")}<div style="font-size:9px;font-weight:400;color:#9ca3af;margin-top:2px">incl. \u20B9${handling.toLocaleString("en-IN")} handling</div>`
+          : `\u20B9${e.amount.toLocaleString("en-IN")}`;
+        return `<tr><td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#374151">${new Date(e.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td><td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-weight:600;color:#1f2937;font-family:monospace;font-size:11px">${e.vehicle?.registrationNumber || "\u2014"}</td><td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#374151">${e.title}</td><td style="text-align:right;padding:8px 12px;border-bottom:1px solid #f3f4f6;font-weight:700;color:#1f2937">${amtCell}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
     }).join("");
 
     // Build HTML in a hidden container
@@ -201,7 +212,7 @@ function VehicleExpensesContent() {
       if (!exp.vehicle) continue;
       const key = exp.vehicle.registrationNumber;
       if (!vehicleSpendMap.has(key)) vehicleSpendMap.set(key, { reg: key, make: exp.vehicle.make, model: exp.vehicle.model, total: 0 });
-      vehicleSpendMap.get(key)!.total += exp.amount;
+      vehicleSpendMap.get(key)!.total += lineTotal(exp);
     }
     const topVehicles = [...vehicleSpendMap.values()].sort((a, b) => b.total - a.total).slice(0, 5);
 
@@ -577,7 +588,16 @@ function VehicleExpensesContent() {
                             </span>
                           </td>
                           <td className="px-5 py-3.5 text-gray-700 dark:text-gray-300 max-w-[200px] truncate">{exp.title}</td>
-                          <td className="px-5 py-3.5 text-right font-black text-gray-900 dark:text-white whitespace-nowrap">&#8377;{exp.amount.toLocaleString("en-IN")}</td>
+                          <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                            <div className="font-black text-gray-900 dark:text-white">
+                              &#8377;{(exp.amount + (exp.handlingCharges ?? 0)).toLocaleString("en-IN")}
+                            </div>
+                            {(exp.handlingCharges ?? 0) > 0 && (
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-normal">
+                                incl. &#8377;{(exp.handlingCharges ?? 0).toLocaleString("en-IN")} handling
+                              </div>
+                            )}
+                          </td>
                           <td className="px-5 py-3.5 text-center">
                             {exp.proofUrl ? (
                               <a href={resolveImageUrl(exp.proofUrl) ?? "#"} target="_blank" rel="noreferrer" className="w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center text-brand-500 hover:text-brand-600 mx-auto transition-colors">
@@ -625,15 +645,26 @@ function VehicleExpensesContent() {
                   </select>
                 </div>
               </div>
-              {/* Row 2: Title + Amount */}
-              <div className="grid grid-cols-3 gap-2.5">
-                <div className="col-span-2">
-                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Title *</label>
-                  <input type="text" placeholder="e.g. RC Renewal, Diesel Fill" value={expForm.title} onChange={(e) => setExpForm({ ...expForm, title: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                </div>
+              {/* Row 2: Title */}
+              <div>
+                <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Title *</label>
+                <input type="text" placeholder="e.g. RC Renewal, Diesel Fill" value={expForm.title} onChange={(e) => setExpForm({ ...expForm, title: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+              </div>
+              {/* Row 3: Amount + Handling = Total */}
+              <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2.5">
                 <div>
                   <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Amount (&#8377;) *</label>
-                  <input type="number" placeholder="0" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                  <input type="number" min="0" placeholder="0" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Handling (&#8377;)</label>
+                  <input type="number" min="0" placeholder="0" value={expForm.handlingCharges} onChange={(e) => setExpForm({ ...expForm, handlingCharges: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                </div>
+                <div className="h-9 flex items-center px-3 rounded-lg bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200/70 dark:border-yellow-500/20">
+                  <span className="text-[9px] font-semibold text-yellow-700/80 dark:text-yellow-400/80 uppercase tracking-wider mr-1.5">Total</span>
+                  <span className="text-xs font-black text-yellow-700 dark:text-yellow-400 font-mono">
+                    &#8377;{((Number(expForm.amount) || 0) + (Number(expForm.handlingCharges) || 0)).toLocaleString("en-IN")}
+                  </span>
                 </div>
               </div>
               {/* Row 3: Date + Proof */}

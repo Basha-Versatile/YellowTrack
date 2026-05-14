@@ -27,6 +27,7 @@ type UnifiedExpense = {
   vehicle: unknown;
   title: string;
   amount: number;
+  handlingCharges: number;
   proofUrl: string | null;
   category: string;
 };
@@ -124,6 +125,7 @@ export const GET = withRoute(
         vehicle: vehicleById.get(String(c.vehicleId)) ?? null,
         title: c.violation || `Challan ${c.challanNumber ?? ""}`,
         amount: amt,
+        handlingCharges: 0,
         proofUrl: c.proofImageUrl ?? null,
         category: "challans",
       });
@@ -137,6 +139,7 @@ export const GET = withRoute(
         vehicle: vehicleById.get(String(s.vehicleId)) ?? null,
         title: s.title,
         amount: s.totalCost ?? 0,
+        handlingCharges: 0,
         proofUrl: (s.receiptUrls as string[])?.[0] ?? null,
         category: "services",
       });
@@ -152,6 +155,7 @@ export const GET = withRoute(
         vehicle: vehicleById.get(String(ins.vehicleId)) ?? null,
         title: `${ins.insurer ?? "Insurance"} — ${ins.planName ?? ins.policyNumber ?? ""}`,
         amount: amt,
+        handlingCharges: 0,
         proofUrl: ins.documentUrl ?? null,
         category: "compliance",
       });
@@ -167,18 +171,22 @@ export const GET = withRoute(
         vehicle: vId ? vehicleById.get(String(vId)) ?? null : null,
         title: t.description || `Toll — ${t.tollPlaza ?? ""}`,
         amount: t.amount,
+        handlingCharges: 0,
         proofUrl: null,
         category: "fastag",
       });
     }
-    // Manual expense entries map directly to one of the four buckets
+    // Manual expense entries map directly to one of the four buckets.
+    // Total expense = base amount + optional handling charges.
     for (const e of expenses) {
       const catKey: ExpenseCategoryKey =
         e.category === "CHALLAN" ? "challans" :
         e.category === "SERVICE" ? "services" :
         e.category === "FASTAG" ? "fastag" :
         "compliance"; // COMPLIANCE + any legacy values fall back here
-      breakdown[catKey] = (breakdown[catKey] ?? 0) + e.amount;
+      const handling = Number(e.handlingCharges ?? 0) || 0;
+      const total = (e.amount ?? 0) + handling;
+      breakdown[catKey] = (breakdown[catKey] ?? 0) + total;
       allExpenses.push({
         source: "EXPENSE",
         date: e.expenseDate,
@@ -186,6 +194,7 @@ export const GET = withRoute(
         vehicle: vehicleById.get(String(e.vehicleId)) ?? null,
         title: e.title,
         amount: e.amount,
+        handlingCharges: handling,
         proofUrl: e.proofUrl ?? null,
         category: catKey,
       });
@@ -206,8 +215,9 @@ export const GET = withRoute(
         };
       }
       const bucket = timelineMap[month];
-      bucket[exp.category] = ((bucket[exp.category] as number) ?? 0) + exp.amount;
-      bucket.total = (bucket.total as number) + exp.amount;
+      const lineTotal = exp.amount + exp.handlingCharges;
+      bucket[exp.category] = ((bucket[exp.category] as number) ?? 0) + lineTotal;
+      bucket.total = (bucket.total as number) + lineTotal;
     }
     const timeline = Object.values(timelineMap).sort((a, b) =>
       (a.period as string).localeCompare(b.period as string),

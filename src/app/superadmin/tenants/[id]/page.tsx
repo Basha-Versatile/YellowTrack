@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { superadminAPI } from "@/lib/api";
 import { TenantDetailSkeleton } from "../../skeletons";
 import {
   ArrowLeft,
-  Truck,
-  UserCircle,
   Building2,
   Mail,
   Calendar,
@@ -18,9 +16,19 @@ import {
   Pause,
   Play,
   Trash2,
-  Users,
   Shield,
-  Gauge,
+  Sparkles,
+  RefreshCw,
+  Clock,
+  Ban,
+  Edit3,
+  AlertCircle,
+  X,
+  Truck,
+  IdCard,
+  Users,
+  ShieldCheck,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 
 type Tenant = {
@@ -28,32 +36,85 @@ type Tenant = {
   name: string;
   slug: string;
   status: "ACTIVE" | "SUSPENDED" | "DELETED";
-  plan: "FREE" | "PRO" | "ENTERPRISE";
+  planId?: string | null;
+  subscriptionStart?: string | null;
+  subscriptionEnd?: string | null;
+  subscriptionStatus: "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
   billingEmail?: string | null;
-  limits?: { maxVehicles?: number; maxDrivers?: number; maxUsers?: number };
   ownerUserId?: string | null;
   createdAt: string;
   suspendedAt?: string | null;
 };
 
-const PLAN_TINT: Record<Tenant["plan"], string> = {
-  FREE: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-  PRO: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-  ENTERPRISE: "bg-gradient-to-r from-yellow-400 to-yellow-500 text-white",
+type Plan = {
+  id: string;
+  _id?: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  currency: string;
+  durationDays: number;
+  isActive: boolean;
+  maxVehicles?: number | null;
+  maxDrivers?: number | null;
+  maxUsers?: number | null;
+  maxRoles?: number | null;
+};
+
+type QuotaResource = "vehicle" | "driver" | "user" | "role";
+type QuotaUsage = {
+  resource: QuotaResource;
+  used: number;
+  limit: number | null;
+};
+
+function formatPrice(amount: number, currency: string): string {
+  if (currency === "INR") return `₹${amount.toLocaleString("en-IN")}`;
+  if (currency === "USD") return `$${amount.toLocaleString("en-US")}`;
+  return `${currency} ${amount.toLocaleString()}`;
+}
+
+function daysBetween(future: Date | string): number {
+  return Math.ceil(
+    (new Date(future).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+  );
+}
+
+const SUB_STATUS_TINT: Record<Tenant["subscriptionStatus"], string> = {
+  TRIAL: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+  ACTIVE: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+  EXPIRED: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  CANCELLED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
 };
 
 export default function TenantDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [quota, setQuota] = useState<QuotaUsage[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [changePlanOpen, setChangePlanOpen] = useState(false);
+  const [toast, setToast] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await superadminAPI.getTenant(params.id);
-      setTenant(res.data.data as Tenant);
+      const [tRes, pRes, qRes] = await Promise.all([
+        superadminAPI.getTenant(params.id),
+        superadminAPI.listPlans(),
+        superadminAPI.getTenantQuota(params.id),
+      ]);
+      setTenant(tRes.data.data as Tenant);
+      const list = (pRes.data.data as Array<Plan & { _id?: string }>).map(
+        (p) => ({ ...p, id: String(p.id ?? p._id) }),
+      );
+      setPlans(list.filter((p) => p.isActive));
+      setQuota((qRes.data.data as QuotaUsage[]) ?? []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -65,6 +126,17 @@ export default function TenantDetailPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const currentPlan = useMemo(
+    () => (tenant?.planId ? plans.find((p) => p.id === String(tenant.planId)) : null),
+    [tenant, plans],
+  );
 
   const onSuspendToggle = async () => {
     if (!tenant) return;
@@ -85,7 +157,7 @@ export default function TenantDetailPage() {
     if (!tenant) return;
     if (
       !confirm(
-        `Soft-delete "${tenant.name}"? Records remain in the database but the tenant becomes inaccessible. This cannot be undone from the UI.`,
+        `Soft-delete "${tenant.name}"? Records remain in the database but the tenant becomes inaccessible.`,
       )
     )
       return;
@@ -93,6 +165,46 @@ export default function TenantDetailPage() {
     try {
       await superadminAPI.deleteTenant(tenant.id);
       router.push("/superadmin/tenants");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRenew = async () => {
+    if (!tenant) return;
+    setBusy(true);
+    try {
+      await superadminAPI.renewTenantSubscription(tenant.id);
+      setToast({ type: "success", message: "Subscription renewed" });
+      await load();
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        "Renewal failed";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onCancel = async () => {
+    if (!tenant) return;
+    if (
+      !confirm(
+        `Cancel subscription for "${tenant.name}"? Tenant keeps access until the current end date, then gets blocked.`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await superadminAPI.cancelTenantSubscription(tenant.id);
+      setToast({ type: "success", message: "Subscription cancelled" });
+      await load();
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        "Cancellation failed";
+      setToast({ type: "error", message: msg });
     } finally {
       setBusy(false);
     }
@@ -119,9 +231,16 @@ export default function TenantDetailPage() {
   const isSuspended = tenant.status === "SUSPENDED";
   const isDeleted = tenant.status === "DELETED";
 
+  const subEnd = tenant.subscriptionEnd
+    ? new Date(tenant.subscriptionEnd)
+    : null;
+  const daysLeft = subEnd ? daysBetween(subEnd) : null;
+  const expired =
+    tenant.subscriptionStatus === "EXPIRED" ||
+    (subEnd ? subEnd.getTime() < Date.now() : false);
+
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
       <Link
         href="/superadmin/tenants"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
@@ -152,17 +271,13 @@ export default function TenantDetailPage() {
               {initial}
             </div>
             <div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-yellow-700/70 dark:text-yellow-400">
                   Tenant detail
                 </span>
                 <span className="hidden sm:inline-block h-1 w-1 rounded-full bg-yellow-500/50" />
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${PLAN_TINT[tenant.plan]}`}
-                >
-                  {tenant.plan}
-                </span>
                 <StatusBadge status={tenant.status} />
+                <SubscriptionBadge status={tenant.subscriptionStatus} />
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
                 {tenant.name}
@@ -208,87 +323,188 @@ export default function TenantDetailPage() {
         </div>
       </div>
 
-      {/* Suspended banner */}
+      {/* Banners */}
       {isSuspended && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 flex items-start gap-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-amber-900 dark:text-amber-300">
-              This tenant is currently suspended
-            </p>
-            <p className="text-xs text-amber-800 dark:text-amber-400/80 mt-0.5">
-              {tenant.suspendedAt
-                ? `Suspended ${new Date(tenant.suspendedAt).toLocaleString("en-IN")}.`
-                : "Suspended."} Users in this tenant can&apos;t access the app until resumed.
-            </p>
-          </div>
-        </div>
+        <Banner
+          icon={<AlertTriangle className="w-5 h-5" />}
+          tone="amber"
+          title="This tenant is currently suspended"
+          body={
+            tenant.suspendedAt
+              ? `Suspended ${new Date(tenant.suspendedAt).toLocaleString("en-IN")}. Users can't access the app until resumed.`
+              : "Users can't access the app until resumed."
+          }
+        />
       )}
+      {expired && !isDeleted && !isSuspended && (
+        <Banner
+          icon={<XCircle className="w-5 h-5" />}
+          tone="red"
+          title="Subscription expired"
+          body={`Subscription ended ${subEnd ? new Date(subEnd).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""}. Renew or change the plan to restore access.`}
+        />
+      )}
+      {!expired &&
+        !isDeleted &&
+        !isSuspended &&
+        tenant.subscriptionStatus === "TRIAL" &&
+        currentPlan && (
+          <Banner
+            icon={<Sparkles className="w-5 h-5" />}
+            tone="amber"
+            title={`${currentPlan.name} is queued for this tenant`}
+            body={`Trial runs until ${subEnd ? new Date(subEnd).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""}. On that day the plan auto-activates for ${currentPlan.durationDays} days (${formatPrice(currentPlan.price, currentPlan.currency)}).`}
+          />
+        )}
 
-      {/* Stat tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile
-          Icon={Truck}
-          label="Vehicles cap"
-          value={tenant.limits?.maxVehicles ?? "—"}
-          tint="text-blue-600 bg-blue-100 dark:bg-blue-500/15 dark:text-blue-400"
-        />
-        <StatTile
-          Icon={UserCircle}
-          label="Drivers cap"
-          value={tenant.limits?.maxDrivers ?? "—"}
-          tint="text-emerald-600 bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-400"
-        />
-        <StatTile
-          Icon={Users}
-          label="Users cap"
-          value={tenant.limits?.maxUsers ?? "—"}
-          tint="text-purple-600 bg-purple-100 dark:bg-purple-500/15 dark:text-purple-400"
-        />
-        <StatTile
-          Icon={Gauge}
-          label="Plan"
-          value={tenant.plan}
-          tint="text-yellow-600 bg-yellow-100 dark:bg-yellow-500/15 dark:text-yellow-400"
-        />
-      </div>
-
-      {/* Detail panels */}
+      {/* Subscription + General + Danger */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* General */}
+        {/* Subscription */}
         <div className="lg:col-span-2 rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
-          <div className="flex items-center gap-2 mb-5">
-            <Building2 className="w-4 h-4 text-yellow-500" />
-            <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
-              General
-            </h2>
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-yellow-500" />
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Subscription
+              </h2>
+            </div>
+            {!isDeleted && (
+              <div className="flex gap-2">
+                {tenant.planId && tenant.subscriptionStatus !== "CANCELLED" && (
+                  <button
+                    onClick={onRenew}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/15 disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Renew
+                  </button>
+                )}
+                <button
+                  onClick={() => setChangePlanOpen(true)}
+                  disabled={busy || plans.length === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-yellow-50 hover:bg-yellow-100 px-3 py-1.5 text-xs font-semibold text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400 dark:hover:bg-yellow-500/15 disabled:opacity-50"
+                  title={plans.length === 0 ? "No plans available" : undefined}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  {tenant.planId ? "Change plan" : "Assign plan"}
+                </button>
+                {tenant.planId && tenant.subscriptionStatus !== "CANCELLED" && (
+                  <button
+                    onClick={onCancel}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/15 disabled:opacity-50"
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    Cancel
+                  </button>
+                )}
+              </div>
+            )}
           </div>
+
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-            <Row label="Name" value={tenant.name} />
-            <Row label="Slug" value={tenant.slug} mono />
-            <Row label="Status" valueNode={<StatusBadge status={tenant.status} />} />
-            <Row label="Plan" valueNode={
-              <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${PLAN_TINT[tenant.plan]}`}>
-                {tenant.plan}
-              </span>
-            } />
+            <Row
+              label="Current plan"
+              valueNode={
+                currentPlan ? (
+                  <span className="text-sm font-bold text-gray-900 dark:text-white inline-flex items-center gap-2">
+                    {currentPlan.name}{" "}
+                    <span className="text-gray-500 font-normal">
+                      · {formatPrice(currentPlan.price, currentPlan.currency)} / {currentPlan.durationDays}d
+                    </span>
+                    {tenant.subscriptionStatus === "TRIAL" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                        Queued
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-sm text-blue-700 dark:text-blue-400 font-semibold">
+                    Free trial
+                  </span>
+                )
+              }
+            />
+            <Row
+              label="Status"
+              valueNode={<SubscriptionBadge status={tenant.subscriptionStatus} />}
+            />
+            <Row
+              label="Start date"
+              value={
+                tenant.subscriptionStart
+                  ? new Date(tenant.subscriptionStart).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "—"
+              }
+              icon={<Calendar className="w-3.5 h-3.5" />}
+            />
+            <Row
+              label="End date"
+              value={
+                subEnd
+                  ? subEnd.toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "—"
+              }
+              icon={<Calendar className="w-3.5 h-3.5" />}
+            />
+            <Row
+              label="Days remaining"
+              valueNode={
+                daysLeft === null ? (
+                  <span className="text-sm text-gray-400">—</span>
+                ) : daysLeft <= 0 ? (
+                  <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                    Expired
+                  </span>
+                ) : (
+                  <span
+                    className={`text-sm font-bold ${
+                      daysLeft <= 7
+                        ? "text-amber-700 dark:text-amber-400"
+                        : "text-gray-900 dark:text-white"
+                    }`}
+                  >
+                    {daysLeft} day{daysLeft !== 1 ? "s" : ""}
+                  </span>
+                )
+              }
+              icon={<Clock className="w-3.5 h-3.5" />}
+            />
             <Row
               label="Billing email"
               value={tenant.billingEmail ?? "—"}
-              icon={tenant.billingEmail ? <Mail className="w-3.5 h-3.5" /> : undefined}
-            />
-            <Row
-              label="Created"
-              value={new Date(tenant.createdAt).toLocaleString("en-IN", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-              icon={<Calendar className="w-3.5 h-3.5" />}
+              icon={
+                tenant.billingEmail ? <Mail className="w-3.5 h-3.5" /> : undefined
+              }
             />
           </dl>
+
+          <div className="mt-6 pt-5 border-t border-gray-100 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Resource usage
+              </h3>
+              {!tenant.planId && (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                  All unlimited (no plan)
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {quota.map((q) => (
+                <QuotaUsageCard key={q.resource} usage={q} />
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Danger zone */}
@@ -300,8 +516,8 @@ export default function TenantDetailPage() {
             </h2>
           </div>
           <p className="text-xs text-red-800/80 dark:text-red-400/70 mb-5">
-            Suspending blocks all users in this tenant immediately. Deletion is a
-            soft-delete — data is retained but the tenant becomes inaccessible.
+            Suspending blocks all users immediately. Deletion is a soft-delete
+            — data is retained but the tenant becomes inaccessible.
           </p>
           {isDeleted ? (
             <div className="rounded-xl bg-red-100 dark:bg-red-500/15 px-4 py-3 flex items-center gap-2">
@@ -341,35 +557,206 @@ export default function TenantDetailPage() {
           )}
         </div>
       </div>
+
+      {/* General info */}
+      <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+        <div className="flex items-center gap-2 mb-5">
+          <Building2 className="w-4 h-4 text-yellow-500" />
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+            General
+          </h2>
+        </div>
+        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-5">
+          <Row label="Name" value={tenant.name} />
+          <Row label="Slug" value={tenant.slug} mono />
+          <Row
+            label="Created"
+            value={new Date(tenant.createdAt).toLocaleString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+            icon={<Calendar className="w-3.5 h-3.5" />}
+          />
+        </dl>
+      </div>
+
+      {/* Change plan modal */}
+      {changePlanOpen && tenant && (
+        <ChangePlanModal
+          tenantName={tenant.name}
+          currentPlanId={tenant.planId ?? null}
+          plans={plans}
+          onClose={() => setChangePlanOpen(false)}
+          onChange={async (planId) => {
+            setChangePlanOpen(false);
+            setBusy(true);
+            try {
+              await superadminAPI.changeTenantPlan(tenant.id, planId);
+              setToast({ type: "success", message: "Plan changed" });
+              await load();
+            } catch (err) {
+              const msg =
+                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                "Failed to change plan";
+              setToast({ type: "error", message: msg });
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      )}
+
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
     </div>
   );
 }
 
-function StatTile({
-  Icon,
-  label,
-  value,
-  tint,
+function ChangePlanModal({
+  tenantName,
+  currentPlanId,
+  plans,
+  onClose,
+  onChange,
 }: {
-  Icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-  tint: string;
+  tenantName: string;
+  currentPlanId: string | null;
+  plans: Plan[];
+  onClose: () => void;
+  onChange: (planId: string) => void;
+}) {
+  const [selected, setSelected] = useState<string>(currentPlanId ?? "");
+
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 px-6 py-5">
+          <h2 className="text-lg font-bold text-white">Change plan</h2>
+          <p className="text-white/80 text-xs mt-0.5 truncate">{tenantName}</p>
+        </div>
+        <div className="p-6 space-y-2 max-h-[60vh] overflow-y-auto">
+          {plans.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
+              No active plans available. Create one on the Plans page first.
+            </p>
+          ) : (
+            plans.map((p) => {
+              const active = selected === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelected(p.id)}
+                  className={`relative w-full text-left rounded-xl border-2 p-3.5 transition-all ${
+                    active
+                      ? "border-yellow-400 bg-yellow-50/50 dark:border-yellow-400 dark:bg-yellow-500/[0.06]"
+                      : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                      {p.name}
+                    </span>
+                    <span className="text-sm font-bold text-yellow-700 dark:text-yellow-400">
+                      {formatPrice(p.price, p.currency)} / {p.durationDays}d
+                    </span>
+                  </div>
+                  {p.description && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {p.description}
+                    </p>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+          <button
+            type="button"
+            onClick={() => selected && onChange(selected)}
+            disabled={!selected || plans.length === 0}
+            className="flex-1 h-11 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg disabled:opacity-50"
+          >
+            Apply plan
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 px-5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Banner({
+  icon,
+  tone,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  tone: "amber" | "red";
+  title: string;
+  body: string;
+}) {
+  const cls =
+    tone === "amber"
+      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400"
+      : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400";
+  return (
+    <div
+      className={`rounded-2xl border px-5 py-4 flex items-start gap-3 ${cls}`}
+    >
+      <span className="flex-shrink-0 mt-0.5">{icon}</span>
+      <div>
+        <p className="text-sm font-bold">{title}</p>
+        <p className="text-xs opacity-80 mt-0.5">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function Toast({
+  type,
+  message,
+  onClose,
+}: {
+  type: "success" | "error";
+  message: string;
+  onClose: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200/80 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.02]">
-      <div className="flex items-center gap-3">
-        <div className={`flex items-center justify-center w-10 h-10 rounded-xl ${tint}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-            {label}
-          </p>
-          <p className="text-lg font-black text-gray-900 dark:text-white truncate">
-            {value}
-          </p>
-        </div>
+    <div className="fixed bottom-6 right-6 z-[100000] max-w-sm">
+      <div
+        className={`flex items-center gap-3 rounded-xl border px-4 py-3 shadow-2xl ${
+          type === "success"
+            ? "border-emerald-200 bg-white text-emerald-700 dark:border-emerald-500/30 dark:bg-gray-900 dark:text-emerald-400"
+            : "border-red-200 bg-white text-red-700 dark:border-red-500/30 dark:bg-gray-900 dark:text-red-400"
+        }`}
+      >
+        {type === "success" ? (
+          <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+        ) : (
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        )}
+        <p className="text-sm font-medium">{message}</p>
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );
@@ -422,6 +809,101 @@ function StatusBadge({ status }: { status: Tenant["status"] }) {
     <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400">
       <XCircle className="w-3 h-3" />
       Deleted
+    </span>
+  );
+}
+
+const QUOTA_ICONS: Record<QuotaResource, React.ReactNode> = {
+  vehicle: <Truck className="w-3.5 h-3.5" />,
+  driver: <IdCard className="w-3.5 h-3.5" />,
+  user: <Users className="w-3.5 h-3.5" />,
+  role: <ShieldCheck className="w-3.5 h-3.5" />,
+};
+const QUOTA_LABEL: Record<QuotaResource, string> = {
+  vehicle: "Vehicles",
+  driver: "Drivers",
+  user: "Users",
+  role: "Roles",
+};
+
+function QuotaUsageCard({ usage }: { usage: QuotaUsage }) {
+  const limit = usage.limit;
+  const unlimited = limit === null;
+  const pct = unlimited
+    ? 0
+    : limit === 0
+      ? 100
+      : Math.min(100, Math.round((usage.used / limit) * 100));
+  const nearLimit = !unlimited && pct >= 80;
+  const atLimit = !unlimited && usage.used >= (limit ?? 0);
+  return (
+    <div
+      className={`rounded-xl border p-3 ${
+        atLimit
+          ? "border-red-200 bg-red-50/50 dark:border-red-500/30 dark:bg-red-500/[0.05]"
+          : nearLimit
+            ? "border-amber-200 bg-amber-50/50 dark:border-amber-500/30 dark:bg-amber-500/[0.05]"
+            : "border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]"
+      }`}
+    >
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5">
+        {QUOTA_ICONS[usage.resource]}
+        {QUOTA_LABEL[usage.resource]}
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span
+          className={`text-lg font-black tracking-tight ${
+            atLimit
+              ? "text-red-700 dark:text-red-400"
+              : nearLimit
+                ? "text-amber-700 dark:text-amber-400"
+                : "text-gray-900 dark:text-white"
+          }`}
+        >
+          {usage.used}
+        </span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">/</span>
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 inline-flex items-center">
+          {unlimited ? <InfinityIcon className="w-3.5 h-3.5" /> : usage.limit}
+        </span>
+      </div>
+      {!unlimited && (
+        <div className="mt-2 h-1 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${
+              atLimit
+                ? "bg-red-500"
+                : nearLimit
+                  ? "bg-amber-500"
+                  : "bg-emerald-500"
+            }`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubscriptionBadge({
+  status,
+}: {
+  status: Tenant["subscriptionStatus"];
+}) {
+  const label =
+    status === "TRIAL"
+      ? "Trial"
+      : status === "ACTIVE"
+        ? "Subscription active"
+        : status === "EXPIRED"
+          ? "Expired"
+          : "Cancelled";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${SUB_STATUS_TINT[status]}`}
+    >
+      <Sparkles className="w-3 h-3" />
+      {label}
     </span>
   );
 }

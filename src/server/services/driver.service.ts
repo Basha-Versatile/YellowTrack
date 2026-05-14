@@ -6,7 +6,8 @@ import {
   ConflictError,
   NotFoundError,
 } from "@/lib/errors";
-import type { ScopedContext } from "@/lib/auth/tenant-context";
+import { type ScopedContext, tenantStamp } from "@/lib/auth/tenant-context";
+import { assertQuota } from "./quota.service";
 import * as driverRepo from "../repositories/driver.repository";
 import * as docChangeRepo from "../repositories/driverDocumentChange.repository";
 import * as driverChangeRepo from "../repositories/driverChange.repository";
@@ -62,6 +63,8 @@ export async function createDriver(
   ctx: ScopedContext,
   data: Record<string, unknown>,
 ) {
+  await assertQuota(tenantStamp(ctx).tenantId, "driver");
+
   const existing = await driverRepo.findByLicenseNumber(
     ctx,
     String(data.licenseNumber),

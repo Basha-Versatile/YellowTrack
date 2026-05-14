@@ -47,8 +47,21 @@ export const POST = withRoute<{ id: string }>(
     const title = val("title");
     const amount = val("amount");
     const expenseDate = val("expenseDate");
+    const handlingChargesRaw = val("handlingCharges");
     if (!category || !title || !amount || !expenseDate) {
       throw new BadRequestError("Category, title, amount, and date are required");
+    }
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      throw new BadRequestError("Amount must be a non-negative number");
+    }
+    let handlingCharges = 0;
+    if (handlingChargesRaw !== undefined && handlingChargesRaw !== "") {
+      const n = parseFloat(handlingChargesRaw);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new BadRequestError("Handling charges must be a non-negative number");
+      }
+      handlingCharges = n;
     }
 
     const proof = firstFile(files, "proof");
@@ -57,7 +70,8 @@ export const POST = withRoute<{ id: string }>(
       vehicleId: params.id,
       category,
       title,
-      amount: parseFloat(amount),
+      amount: parsedAmount,
+      handlingCharges,
       expenseDate: new Date(expenseDate),
       description: val("description") ?? null,
       proofUrl: proof?.url ?? null,

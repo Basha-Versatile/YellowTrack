@@ -8,16 +8,12 @@ import {
 } from "mongoose";
 
 export const TENANT_STATUS = ["ACTIVE", "SUSPENDED", "DELETED"] as const;
-export const TENANT_PLANS = ["FREE", "PRO", "ENTERPRISE"] as const;
-
-const tenantLimitsSchema = new Schema(
-  {
-    maxVehicles: { type: Number, default: 50 },
-    maxDrivers: { type: Number, default: 50 },
-    maxUsers: { type: Number, default: 5 },
-  },
-  { _id: false },
-);
+export const SUBSCRIPTION_STATUS = [
+  "TRIAL", // free trial period (no paid plan attached)
+  "ACTIVE", // paid plan, within validity
+  "EXPIRED", // subscription end date passed
+  "CANCELLED", // superadmin manually cancelled
+] as const;
 
 const tenantSchema = new Schema(
   {
@@ -37,8 +33,19 @@ const tenantSchema = new Schema(
       default: "ACTIVE",
       index: true,
     },
-    plan: { type: String, enum: TENANT_PLANS, default: "FREE" },
-    limits: { type: tenantLimitsSchema, default: () => ({}) },
+
+    // Subscription — defined by the superadmin via the Plan model. Plans are
+    // time-based only; no quota / limit fields.
+    planId: { type: Schema.Types.ObjectId, ref: "Plan", default: null },
+    subscriptionStart: { type: Date },
+    subscriptionEnd: { type: Date, index: true },
+    subscriptionStatus: {
+      type: String,
+      enum: SUBSCRIPTION_STATUS,
+      default: "TRIAL",
+      index: true,
+    },
+
     ownerUserId: { type: Schema.Types.ObjectId, ref: "User" },
     billingEmail: { type: String, lowercase: true, trim: true },
     suspendedAt: { type: Date },

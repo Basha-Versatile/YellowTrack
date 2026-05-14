@@ -22,6 +22,7 @@ import {
   userInviteEmail,
 } from "@/lib/email";
 import { Role, Tenant, User } from "@/models";
+import { assertQuota } from "./quota.service";
 import * as roleRepo from "../repositories/role.repository";
 
 function generateTempPassword(): string {
@@ -80,6 +81,7 @@ export async function createRole(
       `"Admin" is reserved for the workspace owner — pick a different name.`,
     );
   }
+  await assertQuota(tenantStamp(ctx).tenantId, "role");
   const dup = await roleRepo.findByName(ctx, name);
   if (dup) throw new ConflictError("A role with this name already exists");
   const perms = validatePermissions(input.permissions ?? []);
@@ -197,6 +199,8 @@ export async function inviteUser(
   const email = input.email.toLowerCase().trim();
   if (!name) throw new BadRequestError("Name is required");
   if (!email) throw new BadRequestError("Email is required");
+
+  await assertQuota(tenantStamp(ctx).tenantId, "user");
 
   const existing = await User.findOne({ email });
   if (existing) {

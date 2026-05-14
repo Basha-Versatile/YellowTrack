@@ -187,20 +187,19 @@ export const superadminAPI = {
     limit?: number;
     search?: string;
     status?: "ACTIVE" | "SUSPENDED" | "DELETED";
-    plan?: "FREE" | "PRO" | "ENTERPRISE";
+    subscriptionStatus?: "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
   }) => api.get("/superadmin/tenants", { params }),
   getTenant: (id: string) => api.get(`/superadmin/tenants/${id}`),
   createTenant: (data: {
     name: string;
     slug: string;
-    plan?: "FREE" | "PRO" | "ENTERPRISE";
+    planId?: string | null;
     billingEmail?: string | null;
-    limits?: { maxVehicles?: number; maxDrivers?: number; maxUsers?: number };
     admin: { name: string; email: string };
   }) => api.post("/superadmin/tenants", data),
   updateTenant: (
     id: string,
-    data: { name?: string; plan?: string; billingEmail?: string | null; limits?: unknown },
+    data: { name?: string; billingEmail?: string | null },
   ) => api.patch(`/superadmin/tenants/${id}`, data),
   suspendTenant: (id: string) => api.post(`/superadmin/tenants/${id}/suspend`),
   resumeTenant: (id: string) => api.delete(`/superadmin/tenants/${id}/suspend`),
@@ -214,6 +213,57 @@ export const superadminAPI = {
   }) => api.get("/superadmin/vehicles", { params }),
   listDrivers: (params?: { tenantId?: string }) =>
     api.get("/superadmin/drivers", { params }),
+
+  // Plans
+  listPlans: (params?: { includeInactive?: boolean }) =>
+    api.get("/superadmin/plans", {
+      params: params?.includeInactive ? { includeInactive: "true" } : undefined,
+    }),
+  getPlan: (id: string) => api.get(`/superadmin/plans/${id}`),
+  createPlan: (data: {
+    name: string;
+    description?: string | null;
+    price: number;
+    currency?: string;
+    durationDays: number;
+    isActive?: boolean;
+    maxVehicles?: number | null;
+    maxDrivers?: number | null;
+    maxUsers?: number | null;
+    maxRoles?: number | null;
+  }) => api.post("/superadmin/plans", data),
+  updatePlan: (
+    id: string,
+    data: Partial<{
+      name: string;
+      description: string | null;
+      price: number;
+      currency: string;
+      durationDays: number;
+      isActive: boolean;
+      maxVehicles: number | null;
+      maxDrivers: number | null;
+      maxUsers: number | null;
+      maxRoles: number | null;
+    }>,
+  ) => api.patch(`/superadmin/plans/${id}`, data),
+  deactivatePlan: (id: string) => api.delete(`/superadmin/plans/${id}`),
+  reactivatePlan: (id: string) => api.post(`/superadmin/plans/${id}`),
+
+  // Tenant subscription actions
+  getTenantQuota: (tenantId: string) =>
+    api.get(`/superadmin/tenants/${tenantId}/quota`),
+  changeTenantPlan: (tenantId: string, planId: string) =>
+    api.patch(`/superadmin/tenants/${tenantId}/plan`, { planId }),
+  renewTenantSubscription: (tenantId: string) =>
+    api.post(`/superadmin/tenants/${tenantId}/renew`),
+  cancelTenantSubscription: (tenantId: string) =>
+    api.delete(`/superadmin/tenants/${tenantId}/renew`),
+
+  // Platform settings (singleton)
+  getSettings: () => api.get("/superadmin/settings"),
+  updateSettings: (data: { trialDays?: number }) =>
+    api.patch("/superadmin/settings", data),
 };
 
 // ── Vehicles ────────────────────────────────────────────────

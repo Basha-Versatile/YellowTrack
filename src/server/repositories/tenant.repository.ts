@@ -1,12 +1,12 @@
 import "server-only";
-import { Driver, Tenant, User, Vehicle } from "@/models";
+import { Driver, Plan, Tenant, User, Vehicle } from "@/models";
 
 export type TenantListQuery = {
   page?: number;
   limit?: number;
   search?: string;
   status?: "ACTIVE" | "SUSPENDED" | "DELETED";
-  plan?: "FREE" | "PRO" | "ENTERPRISE";
+  subscriptionStatus?: "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
 };
 
 export async function findAll({
@@ -14,14 +14,14 @@ export async function findAll({
   limit = 20,
   search,
   status,
-  plan,
+  subscriptionStatus,
 }: TenantListQuery = {}) {
   const skip = (page - 1) * limit;
   const filter: Record<string, unknown> = {};
 
   if (status) filter.status = status;
   else filter.status = { $ne: "DELETED" };
-  if (plan) filter.plan = plan;
+  if (subscriptionStatus) filter.subscriptionStatus = subscriptionStatus;
   if (search) {
     filter.$or = [
       { name: { $regex: search, $options: "i" } },
@@ -39,22 +39,29 @@ export async function findAll({
     Tenant.countDocuments(filter),
   ]);
 
-  // Enrich with user counts per tenant.
+  // Enrich with user counts + plan info.
   const tenantIds = tenants.map((t) => t._id);
-  const userCounts =
+  const planIds = Array.from(
+    new Set(tenants.map((t) => t.planId).filter(Boolean) as unknown[]),
+  );
+  const [userCounts, plans] = await Promise.all([
     tenantIds.length > 0
-      ? await User.aggregate([
+      ? User.aggregate([
           { $match: { tenantId: { $in: tenantIds } } },
           { $group: { _id: "$tenantId", count: { $sum: 1 } } },
         ])
-      : [];
+      : [],
+    planIds.length > 0 ? Plan.find({ _id: { $in: planIds } }).lean() : [],
+  ]);
   const userCountMap = new Map<string, number>(
     userCounts.map((u) => [String(u._id), u.count as number]),
   );
+  const planMap = new Map(plans.map((p) => [String(p._id), p]));
 
   const enriched = tenants.map((t) => ({
     ...t,
     userCount: userCountMap.get(String(t._id)) ?? 0,
+    plan: t.planId ? planMap.get(String(t.planId)) ?? null : null,
   }));
 
   return {
@@ -121,7 +128,7 @@ export async function getGlobalStats() {
     newUsers7d,
     newVehicles7d,
     newDrivers7d,
-    planAgg,
+    subscriptionAgg,
     statusAgg,
   ] = await Promise.all([
     Tenant.countDocuments({ status: { $ne: "DELETED" } }),
@@ -141,7 +148,7 @@ export async function getGlobalStats() {
     Driver.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
     Tenant.aggregate([
       { $match: { status: { $ne: "DELETED" } } },
-      { $group: { _id: "$plan", count: { $sum: 1 } } },
+      { $group: { _id: "$subscriptionStatus", count: { $sum: 1 } } },
     ]),
     Tenant.aggregate([
       { $match: { status: { $ne: "DELETED" } } },
@@ -149,10 +156,16 @@ export async function getGlobalStats() {
     ]),
   ]);
 
-  const planBuckets = { FREE: 0, PRO: 0, ENTERPRISE: 0 };
-  for (const p of planAgg) {
-    if (p._id && p._id in planBuckets) {
-      planBuckets[p._id as keyof typeof planBuckets] = p.count as number;
+  const subscriptionBuckets = {
+    TRIAL: 0,
+    ACTIVE: 0,
+    EXPIRED: 0,
+    CANCELLED: 0,
+  };
+  for (const s of subscriptionAgg) {
+    if (s._id && s._id in subscriptionBuckets) {
+      subscriptionBuckets[s._id as keyof typeof subscriptionBuckets] =
+        s.count as number;
     }
   }
   const statusBuckets = { ACTIVE: 0, SUSPENDED: 0, DELETED: 0 };
@@ -174,7 +187,7 @@ export async function getGlobalStats() {
       vehicles: newVehicles7d,
       drivers: newDrivers7d,
     },
-    plans: planBuckets,
+    subscriptions: subscriptionBuckets,
     statuses: statusBuckets,
   };
 }
@@ -199,7 +212,7 @@ export async function getTopTenantsByFleet(limit = 5) {
         tenantId: "$_id",
         name: "$tenant.name",
         slug: "$tenant.slug",
-        plan: "$tenant.plan",
+        subscriptionStatus: "$tenant.subscriptionStatus",
         status: "$tenant.status",
         vehicles: 1,
       },
