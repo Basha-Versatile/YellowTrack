@@ -43,7 +43,7 @@ const STATUS_OPTIONS = [
 const STATUS_TINT: Record<Vehicle["overallStatus"], string> = {
   GREEN: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
   YELLOW: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-  ORANGE: "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
+  ORANGE: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 animate-blink",
   RED: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
 };
 

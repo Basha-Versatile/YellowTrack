@@ -52,6 +52,7 @@ const navItems: NavItem[] = [
       { name: "FASTag", path: "/fastag", perm: "fastag:read" },
       { name: "Service Costs", path: "/vehicles/services", perm: "services:read" },
       { name: "Expenses", path: "/vehicles/expenses", perm: "expenses:read" },
+      { name: "EMI Tracker", path: "/vehicles/emi", perm: "emi:read" },
     ],
   },
   {

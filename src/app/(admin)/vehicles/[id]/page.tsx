@@ -20,8 +20,9 @@ import { useToast } from "@/context/ToastContext";
 import Badge from "@/components/ui/badge/Badge";
 import { VehicleDetailSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
+import VehicleEmiPanel from "@/components/vehicles/VehicleEmiPanel";
 import Link from "next/link";
-import { AlertTriangle, Calendar, Car, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, CreditCard, Download, ExternalLink, FileText, ImageIcon, Pencil, Plus, Printer, RefreshCw, ShieldCheck, Trash2, Upload, User, Wrench, X } from "lucide-react";
+import { AlertTriangle, Calendar, Car, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, CreditCard, Download, ExternalLink, FileText, ImageIcon, Pencil, Plus, Printer, RefreshCw, Share2, ShieldCheck, Trash2, Upload, User, Wrench, X } from "lucide-react";
 import { GiCarWheel } from "react-icons/gi";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
@@ -103,6 +104,7 @@ interface Vehicle {
     id: string;
     position: string;
     size: string | null;
+    brand?: string | null;
   }>;
   activeDriver: { id: string; name: string; licenseNumber: string } | null;
   driverMappings: Array<{
@@ -116,7 +118,7 @@ interface Vehicle {
 const STATUS_THEME: Record<string, { badge: "success" | "warning" | "error"; gradient: string; text: string; ring: string }> = {
   GREEN: { badge: "success", gradient: "from-emerald-500 to-green-600", text: "text-emerald-600 dark:text-emerald-400", ring: "ring-emerald-500/20" },
   YELLOW: { badge: "warning", gradient: "from-amber-500 to-amber-600", text: "text-amber-600 dark:text-amber-400", ring: "ring-amber-500/20" },
-  ORANGE: { badge: "warning", gradient: "from-orange-500 to-orange-600", text: "text-orange-600 dark:text-orange-400", ring: "ring-orange-500/20" },
+  ORANGE: { badge: "error", gradient: "from-red-500 to-rose-600", text: "text-red-600 dark:text-red-400 animate-blink", ring: "ring-red-500/30" },
   RED: { badge: "error", gradient: "from-red-500 to-rose-600", text: "text-red-600 dark:text-red-400", ring: "ring-red-500/20" },
 };
 
@@ -137,6 +139,11 @@ const DOC_ICONS: Record<string, string> = {
   FITNESS: "M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z",
   TAX: "M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z",
 };
+
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const TYRE_POSITIONS: Record<number, string[]> = {
   3: ["FL", "FR", "R"],
@@ -174,7 +181,7 @@ export default function VehicleDetailPage() {
   // Tyre profile (size-only; one tyre selected at a time via the SVG diagram)
   const [editingTyres, setEditingTyres] = useState(false);
   const [editTyreCount, setEditTyreCount] = useState(4);
-  const [tyreForm, setTyreForm] = useState<Array<{ position: string; size: string }>>([]);
+  const [tyreForm, setTyreForm] = useState<Array<{ position: string; size: string; brand: string }>>([]);
   const [selectedTyrePosition, setSelectedTyrePosition] = useState<string | null>(null);
   const [savingTyres, setSavingTyres] = useState(false);
 
@@ -188,7 +195,11 @@ export default function VehicleDetailPage() {
         const existingForm = prev.find((t) => t.position === pos);
         if (existingForm) return existingForm;
         const existingDoc = vehicle?.tyres.find((t) => t.position === pos);
-        return { position: pos, size: existingDoc?.size || "" };
+        return {
+          position: pos,
+          size: existingDoc?.size || "",
+          brand: existingDoc?.brand || "",
+        };
       }),
     );
     setSelectedTyrePosition((prev) =>
@@ -349,7 +360,7 @@ export default function VehicleDetailPage() {
     const firstAvailable = (Object.keys(DOC_LABELS) as string[]).find((t) => !usedTypes.has(t));
     setAddType(firstAvailable ?? "OTHER");
     setAddCustomLabel("");
-    setAddExpiry("");
+    setAddExpiry(todayISO());
     setAddLifetime(false);
     setAddFile(null);
     setAddingCompliance(true);
@@ -425,7 +436,11 @@ export default function VehicleDetailPage() {
     setTyreForm(
       positions.map((pos) => {
         const existing = vehicle.tyres.find((t) => t.position === pos);
-        return { position: pos, size: existing?.size || "" };
+        return {
+          position: pos,
+          size: existing?.size || "",
+          brand: existing?.brand || "",
+        };
       }),
     );
     setSelectedTyrePosition(positions[0] ?? null);
@@ -437,8 +452,12 @@ export default function VehicleDetailPage() {
     setSavingTyres(true);
     try {
       const tyresData = tyreForm
-        .filter((t) => t.size.trim())
-        .map((t) => ({ position: t.position, size: t.size.trim() }));
+        .filter((t) => t.size.trim() || t.brand.trim())
+        .map((t) => ({
+          position: t.position,
+          size: t.size.trim(),
+          brand: t.brand.trim() || null,
+        }));
       await vehicleAPI.upsertTyres(vehicle.id, tyresData, editTyreCount);
       const res = await vehicleAPI.getById(vehicle.id);
       setVehicle(res.data.data);
@@ -453,6 +472,42 @@ export default function VehicleDetailPage() {
 
   const handleDeleteImage = (imageUrl: string) => {
     setImageToDelete(imageUrl);
+  };
+
+  const handleShareImage = async (imageUrl: string, idx: number) => {
+    const url = resolveImageUrl(imageUrl);
+    if (!url) {
+      toast.error("Share Failed", "Image URL could not be resolved");
+      return;
+    }
+    const absoluteUrl = url.startsWith("http")
+      ? url
+      : `${window.location.origin}${url}`;
+    const title = `${vehicle?.registrationNumber ?? "Vehicle"} — photo ${idx + 1}`;
+
+    // 1) Try Web Share API (mobile + most modern browsers)
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title, url: absoluteUrl });
+        return;
+      } catch (err) {
+        // AbortError = user cancelled — silent. Anything else falls through to clipboard.
+        const name = (err as { name?: string })?.name;
+        if (name === "AbortError") return;
+      }
+    }
+
+    // 2) Fallback: copy link to clipboard
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(absoluteUrl);
+        toast.success("Link Copied", "Image URL copied to clipboard");
+      } else {
+        window.prompt("Copy this image link:", absoluteUrl);
+      }
+    } catch {
+      toast.error("Share Failed", "Could not copy the image link");
+    }
   };
 
   const handleConfirmDeleteImage = async () => {
@@ -712,10 +767,25 @@ export default function VehicleDetailPage() {
                         className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg" title="Delete photo">
                         <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
                       </button>
-                      <a href={(resolveImageUrl(img) ?? "")} target="_blank" rel="noopener noreferrer"
-                        className="absolute bottom-2 left-2 w-7 h-7 rounded-lg bg-white/80 hover:bg-white text-gray-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg">
-                        <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
-                      </a>
+                      <div className="absolute bottom-2 left-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                        <a
+                          href={(resolveImageUrl(img) ?? "")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-7 h-7 rounded-lg bg-white/80 hover:bg-white text-gray-700 flex items-center justify-center shadow-lg"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleShareImage(img, i)}
+                          className="w-7 h-7 rounded-lg bg-white/80 hover:bg-white text-gray-700 flex items-center justify-center shadow-lg"
+                          title="Share photo"
+                        >
+                          <Share2 className="w-3.5 h-3.5" strokeWidth={2} />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -773,7 +843,7 @@ export default function VehicleDetailPage() {
                         : doc.status === "YELLOW"
                         ? "border-amber-200 bg-amber-50/50 dark:border-amber-500/20 dark:bg-amber-500/5"
                         : doc.status === "ORANGE"
-                        ? "border-orange-200 bg-orange-50/50 dark:border-orange-500/20 dark:bg-orange-500/5"
+                        ? "border-red-300 bg-red-50/60 dark:border-red-500/30 dark:bg-red-500/[0.07]"
                         : "border-red-200 bg-red-50/50 dark:border-red-500/20 dark:bg-red-500/5"
                     }`}
                   >
@@ -783,7 +853,7 @@ export default function VehicleDetailPage() {
                     <div className="flex items-start justify-between ml-2">
                       <div className="flex items-start gap-3">
                         <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          doc.status === "GREEN" ? "bg-emerald-100 dark:bg-emerald-500/20" : doc.status === "YELLOW" ? "bg-amber-100 dark:bg-amber-500/20" : doc.status === "ORANGE" ? "bg-orange-100 dark:bg-orange-500/20" : "bg-red-100 dark:bg-red-500/20"
+                          doc.status === "GREEN" ? "bg-emerald-100 dark:bg-emerald-500/20" : doc.status === "YELLOW" ? "bg-amber-100 dark:bg-amber-500/20" : doc.status === "ORANGE" ? "bg-red-100 dark:bg-red-500/20 animate-blink" : "bg-red-100 dark:bg-red-500/20"
                         }`}>
                           <svg className={`w-4 h-4 ${dt.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
@@ -796,7 +866,7 @@ export default function VehicleDetailPage() {
                               ? <>Exp: {new Date(doc.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</>
                               : <span className="text-emerald-600 dark:text-emerald-400 font-medium">Lifetime</span>}
                             <button
-                              onClick={() => { setEditingExpiry(doc.id); setEditLifetime(!doc.expiryDate); setExpiryValue(doc.expiryDate ? new Date(doc.expiryDate).toISOString().split("T")[0] : ""); }}
+                              onClick={() => { setEditingExpiry(doc.id); setEditLifetime(!doc.expiryDate); setExpiryValue(doc.expiryDate ? new Date(doc.expiryDate).toISOString().split("T")[0] : todayISO()); }}
                               className="text-brand-500 hover:text-brand-600 transition-colors"
                               title="Edit expiry date"
                             >
@@ -830,7 +900,7 @@ export default function VehicleDetailPage() {
                       {doc.documentUrl ? (
                         <>
                           <span className="text-gray-300 dark:text-gray-600">|</span>
-                          <button onClick={() => { setRenewingDoc(renewingDoc === doc.id ? null : doc.id); setRenewExpiry(""); setRenewFile(null); }}
+                          <button onClick={() => { setRenewingDoc(renewingDoc === doc.id ? null : doc.id); setRenewExpiry(todayISO()); setRenewFile(null); }}
                             className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1 transition-colors">
                             <RefreshCw className="w-3 h-3" strokeWidth={2} />
                             Renew
@@ -986,6 +1056,14 @@ export default function VehicleDetailPage() {
               </div>
             )}
           </div>
+
+          {/* EMI Tracker */}
+          <VehicleEmiPanel
+            vehicleId={vehicle.id}
+            vehicleRegistration={vehicle.registrationNumber}
+            vehicleMake={vehicle.make}
+            vehicleModel={vehicle.model}
+          />
         </div>
 
         {/* RIGHT COL */}
@@ -1343,9 +1421,16 @@ export default function VehicleDetailPage() {
                     <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-12 flex-shrink-0">
                       {tyre.position}
                     </span>
-                    <span className="text-xs font-mono text-gray-800 dark:text-gray-200 truncate">
-                      {tyre.size || "—"}
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-gray-800 dark:text-gray-200 truncate">
+                        {tyre.size || "—"}
+                      </p>
+                      {tyre.brand && (
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                          {tyre.brand}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1590,7 +1675,7 @@ export default function VehicleDetailPage() {
               {!editLifetime && (
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">New Expiry Date</label>
-                  <DatePicker value={expiryValue} onChange={setExpiryValue} placeholder="Select expiry date" />
+                  <DatePicker key={`edit-${editingExpiry}`} value={expiryValue} onChange={setExpiryValue} placeholder="Select expiry date" />
                 </div>
               )}
               <div className="flex gap-3">
@@ -1884,11 +1969,11 @@ export default function VehicleDetailPage() {
                     {TYRE_POSITION_LABELS[selected.position] || selected.position} <span className="text-gray-400 font-mono">· {selected.position}</span>
                   </span>
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="grid grid-cols-[1.4fr_1fr_auto] items-stretch gap-2">
                   <input
                     autoFocus
                     type="text"
-                    placeholder="Tyre size (e.g. 215/60 R16)"
+                    placeholder="Size (e.g. 215/60 R16)"
                     value={selected.size}
                     onChange={(e) => {
                       const n = [...tyreForm];
@@ -1896,14 +1981,27 @@ export default function VehicleDetailPage() {
                       setTyreForm(n);
                     }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); goNext(); } }}
-                    className="flex-1 h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Brand (e.g. MRF, CEAT)"
+                    value={selected.brand}
+                    onChange={(e) => {
+                      const n = [...tyreForm];
+                      n[selectedIdx] = { ...n[selectedIdx], brand: e.target.value };
+                      setTyreForm(n);
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); goNext(); } }}
+                    maxLength={80}
+                    className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                   />
                   <button type="button" onClick={goNext}
                     className="h-10 px-3 rounded-md bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold flex items-center gap-1">
                     Next <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1.5">Press Enter or click Next to move to the next tyre.</p>
+                <p className="text-[10px] text-gray-400 mt-1.5">Press Enter or click Next to move to the next tyre. Brand is optional.</p>
               </div>
             );
           })()}

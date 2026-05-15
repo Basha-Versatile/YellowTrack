@@ -18,7 +18,8 @@ type ExpenseCategoryKey =
   | "challans"
   | "services"
   | "compliance"
-  | "fastag";
+  | "fastag"
+  | "emi";
 
 type UnifiedExpense = {
   source: "CHALLAN" | "SERVICE" | "INSURANCE" | "TOLL" | "EXPENSE";
@@ -111,7 +112,7 @@ export const GET = withRoute(
       : tolls;
 
     const breakdown: Record<ExpenseCategoryKey, number> = {
-      challans: 0, services: 0, compliance: 0, fastag: 0,
+      challans: 0, services: 0, compliance: 0, fastag: 0, emi: 0,
     };
     const allExpenses: UnifiedExpense[] = [];
 
@@ -183,6 +184,7 @@ export const GET = withRoute(
         e.category === "CHALLAN" ? "challans" :
         e.category === "SERVICE" ? "services" :
         e.category === "FASTAG" ? "fastag" :
+        e.category === "EMI" ? "emi" :
         "compliance"; // COMPLIANCE + any legacy values fall back here
       const handling = Number(e.handlingCharges ?? 0) || 0;
       const total = (e.amount ?? 0) + handling;
@@ -211,7 +213,7 @@ export const GET = withRoute(
       if (!timelineMap[month]) {
         timelineMap[month] = {
           period: month,
-          challans: 0, services: 0, compliance: 0, fastag: 0, total: 0,
+          challans: 0, services: 0, compliance: 0, fastag: 0, emi: 0, total: 0,
         };
       }
       const bucket = timelineMap[month];

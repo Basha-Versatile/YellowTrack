@@ -253,6 +253,10 @@ export const superadminAPI = {
   // Tenant subscription actions
   getTenantQuota: (tenantId: string) =>
     api.get(`/superadmin/tenants/${tenantId}/quota`),
+  getTenantUsers: (tenantId: string) =>
+    api.get(`/superadmin/tenants/${tenantId}/users`),
+  getTenantRoles: (tenantId: string) =>
+    api.get(`/superadmin/tenants/${tenantId}/roles`),
   changeTenantPlan: (tenantId: string, planId: string) =>
     api.patch(`/superadmin/tenants/${tenantId}/plan`, { planId }),
   renewTenantSubscription: (tenantId: string) =>
@@ -328,7 +332,7 @@ export const vehicleAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  upsertTyres: (vehicleId: string, tyres: Array<{ position: string; size?: string }>, tyreCount?: number) =>
+  upsertTyres: (vehicleId: string, tyres: Array<{ position: string; size?: string; brand?: string | null }>, tyreCount?: number) =>
     api.put(`/vehicles/${vehicleId}/tyres`, { tyres, tyreCount }),
   getAccessLog: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/access-log`),
   // Services
@@ -555,6 +559,84 @@ export const notificationAPI = {
   getUnreadCount: () => api.get("/notifications/unread-count"),
   markAsRead: (id: string) => api.put(`/notifications/${id}/read`),
   markAllAsRead: () => api.put("/notifications/read-all"),
+};
+
+// ── EMI tracking ────────────────────────────────────────
+export const emiAPI = {
+  // Cross-vehicle hub for /vehicles/emi
+  getHub: (params?: { status?: string; dueWithin?: number }) =>
+    api.get("/emi", { params }),
+
+  // Vehicle-scoped
+  getForVehicle: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/emi`),
+  create: (
+    vehicleId: string,
+    data: {
+      lenderName: string;
+      lenderType?: "BANK" | "NBFC" | "PARTNER";
+      lenderContactPhone?: string | null;
+      lenderBranch?: string | null;
+      debitBankName?: string | null;
+      debitAccountMasked?: string | null;
+      debitAccountHolder?: string | null;
+      principalAmount?: number | null;
+      emiAmount: number;
+      totalInstallments: number;
+      startDate: string;
+      dueDayOfMonth: number;
+      reminderChannels?: Array<"EMAIL" | "WHATSAPP" | "IN_APP">;
+      reminderLeadDays?: number[];
+      notes?: string | null;
+    },
+  ) => api.post(`/vehicles/${vehicleId}/emi`, data),
+
+  // Per-plan
+  getPlan: (planId: string) => api.get(`/emi/${planId}`),
+  updatePlan: (
+    planId: string,
+    patch: Partial<{
+      lenderName: string;
+      lenderType: "BANK" | "NBFC" | "PARTNER";
+      lenderContactPhone: string | null;
+      lenderBranch: string | null;
+      debitBankName: string | null;
+      debitAccountMasked: string | null;
+      debitAccountHolder: string | null;
+      reminderChannels: Array<"EMAIL" | "WHATSAPP" | "IN_APP">;
+      reminderLeadDays: number[];
+      notes: string | null;
+      status: "ACTIVE" | "PAUSED" | "DEFAULTED" | "CLOSED";
+    }>,
+  ) => api.patch(`/emi/${planId}`, patch),
+
+  // Payments
+  markPaid: (
+    planId: string,
+    paymentId: string,
+    data: {
+      paidDate?: string;
+      paidAmount?: number;
+      lateFee?: number;
+      transactionRef?: string | null;
+      proofUrl?: string | null;
+      notes?: string | null;
+    },
+  ) =>
+    api.post(`/emi/${planId}/payments/${paymentId}`, {
+      action: "mark-paid",
+      ...data,
+    }),
+  markPaymentStatus: (
+    planId: string,
+    paymentId: string,
+    status: "BOUNCED" | "SKIPPED" | "OVERDUE",
+    notes?: string | null,
+  ) =>
+    api.post(`/emi/${planId}/payments/${paymentId}`, {
+      action: "mark-status",
+      status,
+      notes: notes ?? null,
+    }),
 };
 
 // ── Public (no auth) ────────────────────────────────────────

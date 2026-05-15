@@ -69,3 +69,15 @@ export {
   type NotificationAttrs,
   NOTIFICATION_TYPES,
 } from "./Notification";
+export {
+  EMIPlan,
+  type EMIPlanAttrs,
+  EMI_STATUSES,
+  LENDER_TYPES,
+  REMINDER_CHANNELS,
+} from "./EMIPlan";
+export {
+  EMIPayment,
+  type EMIPaymentAttrs,
+  EMI_PAYMENT_STATUSES,
+} from "./EMIPayment";

@@ -7,6 +7,7 @@ const tyreSchema = new Schema(
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
     position: { type: String, required: true },
     size: { type: String },
+    brand: { type: String, trim: true, maxlength: 80, default: null },
   },
   { timestamps: true },
 );

@@ -170,7 +170,7 @@ export default function ComplianceOverviewPage() {
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl">
           {(["ALL", "RED", "ORANGE", "YELLOW", "GREEN"] as const).map((status) => {
             const isActive = filter === status;
-            const dotColor = status === "RED" ? "bg-red-500" : status === "ORANGE" ? "bg-orange-500" : status === "YELLOW" ? "bg-amber-500" : status === "GREEN" ? "bg-emerald-500" : "";
+            const dotColor = status === "RED" ? "bg-red-500" : status === "ORANGE" ? "bg-red-500 animate-blink" : status === "YELLOW" ? "bg-amber-500" : status === "GREEN" ? "bg-emerald-500" : "";
             return (
               <button
                 key={status}
@@ -224,7 +224,7 @@ export default function ComplianceOverviewPage() {
             const vGreen = vehicle.complianceDocuments.filter((d) => d.status === "GREEN").length;
             const vTotal = vehicle.complianceDocuments.length;
             const vScore = vTotal > 0 ? Math.round((vGreen / vTotal) * 100) : 0;
-            const grad = vehicle.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : vehicle.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : vehicle.overallStatus === "ORANGE" ? "from-orange-500 to-orange-600" : "from-red-500 to-rose-600";
+            const grad = vehicle.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : vehicle.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : vehicle.overallStatus === "ORANGE" ? "from-red-500 to-rose-600" : "from-red-500 to-rose-600";
 
             return (
               <Link
@@ -252,7 +252,7 @@ export default function ComplianceOverviewPage() {
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white font-mono tracking-wider group-hover:text-brand-500 transition-colors">
                       {vehicle.registrationNumber}
                     </h3>
-                    <Badge color={vehicle.overallStatus === "GREEN" ? "success" : vehicle.overallStatus === "YELLOW" ? "warning" : vehicle.overallStatus === "ORANGE" ? "orange" : "error"} variant="light" size="sm">
+                    <Badge color={vehicle.overallStatus === "GREEN" ? "success" : vehicle.overallStatus === "YELLOW" ? "warning" : vehicle.overallStatus === "ORANGE" ? "error" : "error"} variant="light" size="sm">
                       {vScore}%
                     </Badge>
                   </div>
@@ -267,18 +267,19 @@ export default function ComplianceOverviewPage() {
                 {/* Doc dots */}
                 <div className="hidden sm:flex items-center gap-3">
                   {vehicle.complianceDocuments.map((doc) => {
-                    const days = Math.ceil((new Date(doc.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                     return (
                       <div key={`${doc.type}-${doc.expiryDate}`} className="text-center">
                         <p className={`text-[9px] font-bold ${
-                          doc.status === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-600 dark:text-amber-400" : doc.status === "ORANGE" ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"
+                          doc.status === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-600 dark:text-amber-400" : doc.status === "ORANGE" ? "text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400"
                         }`}>
                           {DOC_LABELS[doc.type] || doc.type.slice(0, 3)}
                         </p>
                         <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${
-                          doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-orange-500" : "bg-red-500"
+                          doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"
                         }`} />
+                        {/* Days/Exp label intentionally hidden — uncomment to restore:
                         <p className="text-[8px] text-gray-400 mt-0.5">{days <= 0 ? "Exp" : `${days}d`}</p>
+                        */}
                       </div>
                     );
                   })}
@@ -292,7 +293,7 @@ export default function ComplianceOverviewPage() {
                     const days = Math.ceil((new Date(nearest.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                     return (
                       <span className={`text-[10px] px-2 py-1 rounded-md font-semibold ${
-                        nearest.status === "GREEN" ? "bg-emerald-100 text-emerald-700" : nearest.status === "YELLOW" ? "bg-amber-100 text-amber-700" : nearest.status === "ORANGE" ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"
+                        nearest.status === "GREEN" ? "bg-emerald-100 text-emerald-700" : nearest.status === "YELLOW" ? "bg-amber-100 text-amber-700" : nearest.status === "ORANGE" ? "bg-red-100 text-red-700 animate-blink" : "bg-red-100 text-red-700"
                       }`}>
                         {DOC_FULL[nearest.type] || nearest.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}: {days <= 0 ? "Exp" : `${days}d`}
                       </span>
@@ -354,12 +355,12 @@ export default function ComplianceOverviewPage() {
                       <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
                         <circle cx="18" cy="18" r="15.5" fill="none" className="stroke-gray-100 dark:stroke-gray-800" strokeWidth="3" />
                         <circle cx="18" cy="18" r="15.5" fill="none"
-                          className={vehicle.overallStatus === "GREEN" ? "stroke-emerald-500" : vehicle.overallStatus === "YELLOW" ? "stroke-amber-500" : vehicle.overallStatus === "ORANGE" ? "stroke-orange-500" : "stroke-red-500"}
+                          className={vehicle.overallStatus === "GREEN" ? "stroke-emerald-500" : vehicle.overallStatus === "YELLOW" ? "stroke-amber-500" : vehicle.overallStatus === "ORANGE" ? "stroke-red-500" : "stroke-red-500"}
                           strokeWidth="3" strokeLinecap="round" strokeDasharray={`${vScore * 0.975} 100`}
                         />
                       </svg>
                       <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${
-                        vehicle.overallStatus === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : vehicle.overallStatus === "YELLOW" ? "text-amber-600 dark:text-amber-400" : vehicle.overallStatus === "ORANGE" ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"
+                        vehicle.overallStatus === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : vehicle.overallStatus === "YELLOW" ? "text-amber-600 dark:text-amber-400" : vehicle.overallStatus === "ORANGE" ? "text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400"
                       }`}>{vScore}%</span>
                     </div>
                   </div>
@@ -369,13 +370,13 @@ export default function ComplianceOverviewPage() {
                       const days = Math.ceil((new Date(doc.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                       return (
                         <div key={`${doc.type}-${doc.expiryDate}`} className={`relative rounded-lg p-2 text-center ${
-                          doc.status === "GREEN" ? "bg-emerald-50 dark:bg-emerald-500/10" : doc.status === "YELLOW" ? "bg-amber-50 dark:bg-amber-500/10" : doc.status === "ORANGE" ? "bg-orange-50 dark:bg-orange-500/10" : "bg-red-50 dark:bg-red-500/10"
+                          doc.status === "GREEN" ? "bg-emerald-50 dark:bg-emerald-500/10" : doc.status === "YELLOW" ? "bg-amber-50 dark:bg-amber-500/10" : doc.status === "ORANGE" ? "bg-red-50 dark:bg-red-500/10" : "bg-red-50 dark:bg-red-500/10"
                         }`}>
-                          <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-orange-500" : "bg-red-500"}`} />
-                          <p className={`text-[10px] font-bold ${doc.status === "GREEN" ? "text-emerald-700 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-700 dark:text-amber-400" : doc.status === "ORANGE" ? "text-orange-700 dark:text-orange-400" : "text-red-700 dark:text-red-400"}`}>
+                          <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"}`} />
+                          <p className={`text-[10px] font-bold ${doc.status === "GREEN" ? "text-emerald-700 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-700 dark:text-amber-400" : doc.status === "ORANGE" ? "text-red-700 dark:text-red-400" : "text-red-700 dark:text-red-400"}`}>
                             {DOC_LABELS[doc.type] || doc.type}
                           </p>
-                          <p className={`text-[9px] mt-0.5 ${doc.status === "GREEN" ? "text-emerald-600/60" : doc.status === "YELLOW" ? "text-amber-600/60" : doc.status === "ORANGE" ? "text-orange-600/60" : "text-red-600/60"}`}>
+                          <p className={`text-[9px] mt-0.5 ${doc.status === "GREEN" ? "text-emerald-600/60" : doc.status === "YELLOW" ? "text-amber-600/60" : doc.status === "ORANGE" ? "text-red-600/60" : "text-red-600/60"}`}>
                             {days <= 0 ? "Expired" : `${days}d`}
                           </p>
                         </div>
@@ -390,7 +391,7 @@ export default function ComplianceOverviewPage() {
                         <span key={`${doc.type}-${doc.expiryDate}`} className={`text-[10px] px-2 py-0.5 rounded-md font-medium ${
                           doc.status === "GREEN" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
                           : doc.status === "YELLOW" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
-                          : doc.status === "ORANGE" ? "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400"
+                          : doc.status === "ORANGE" ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400 animate-blink"
                           : "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400"
                         }`}>
                           {DOC_FULL[doc.type] || doc.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}: {days <= 0 ? "Expired" : `${days}d`}

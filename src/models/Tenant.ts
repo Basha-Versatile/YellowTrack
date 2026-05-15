@@ -48,6 +48,9 @@ const tenantSchema = new Schema(
 
     ownerUserId: { type: Schema.Types.ObjectId, ref: "User" },
     billingEmail: { type: String, lowercase: true, trim: true },
+    // IANA timezone (e.g. "Asia/Kolkata"). Per-tenant cron schedulers use this
+    // to compute "today" in tenant-local time for EMI reminders, etc.
+    timezone: { type: String, default: "Asia/Kolkata", trim: true },
     suspendedAt: { type: Date },
     deletedAt: { type: Date },
   },

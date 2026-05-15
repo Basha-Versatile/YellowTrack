@@ -29,6 +29,8 @@ import {
   Users,
   ShieldCheck,
   Infinity as InfinityIcon,
+  UserCheck,
+  KeyRound,
 } from "lucide-react";
 
 type Tenant = {
@@ -68,6 +70,28 @@ type QuotaUsage = {
   limit: number | null;
 };
 
+type TenantUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "OPERATOR" | "SUPERADMIN";
+  roleId: string | null;
+  status: "ACTIVE" | "SUSPENDED";
+  mustResetPassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  isOwner: boolean;
+};
+
+type TenantRole = {
+  id: string;
+  name: string;
+  description?: string | null;
+  permissions: string[];
+  isSystem: boolean;
+  memberCount?: number;
+};
+
 function formatPrice(amount: number, currency: string): string {
   if (currency === "INR") return `₹${amount.toLocaleString("en-IN")}`;
   if (currency === "USD") return `$${amount.toLocaleString("en-US")}`;
@@ -93,6 +117,8 @@ export default function TenantDetailPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [quota, setQuota] = useState<QuotaUsage[]>([]);
+  const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
+  const [tenantRoles, setTenantRoles] = useState<TenantRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [changePlanOpen, setChangePlanOpen] = useState(false);
@@ -104,10 +130,12 @@ export default function TenantDetailPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [tRes, pRes, qRes] = await Promise.all([
+      const [tRes, pRes, qRes, uRes, rRes] = await Promise.all([
         superadminAPI.getTenant(params.id),
         superadminAPI.listPlans(),
         superadminAPI.getTenantQuota(params.id),
+        superadminAPI.getTenantUsers(params.id),
+        superadminAPI.getTenantRoles(params.id),
       ]);
       setTenant(tRes.data.data as Tenant);
       const list = (pRes.data.data as Array<Plan & { _id?: string }>).map(
@@ -115,6 +143,8 @@ export default function TenantDetailPage() {
       );
       setPlans(list.filter((p) => p.isActive));
       setQuota((qRes.data.data as QuotaUsage[]) ?? []);
+      setTenantUsers((uRes.data.data as TenantUser[]) ?? []);
+      setTenantRoles((rRes.data.data as TenantRole[]) ?? []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -583,6 +613,12 @@ export default function TenantDetailPage() {
         </dl>
       </div>
 
+      {/* Members (users + roles) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TenantUsersCard users={tenantUsers} />
+        <TenantRolesCard roles={tenantRoles} />
+      </div>
+
       {/* Change plan modal */}
       {changePlanOpen && tenant && (
         <ChangePlanModal
@@ -880,6 +916,174 @@ function QuotaUsageCard({ usage }: { usage: QuotaUsage }) {
             style={{ width: `${pct}%` }}
           />
         </div>
+      )}
+    </div>
+  );
+}
+
+function formatRelativeDate(d: string | null): string {
+  if (!d) return "—";
+  const ms = Date.now() - new Date(d).getTime();
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(d).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function TenantUsersCard({ users }: { users: TenantUser[] }) {
+  return (
+    <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <UserCheck className="w-4 h-4 text-yellow-500" />
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+            Users
+          </h2>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            {users.length}
+          </span>
+        </div>
+      </div>
+
+      {users.length === 0 ? (
+        <p className="text-xs text-gray-500 dark:text-gray-400 py-3 text-center">
+          No users yet
+        </p>
+      ) : (
+        <ul className="divide-y divide-gray-100/70 dark:divide-gray-800">
+          {users.map((u) => (
+            <li
+              key={u.id}
+              className="py-2.5 flex items-center gap-3 first:pt-0 last:pb-0"
+            >
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold uppercase ${
+                  u.role === "ADMIN"
+                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400"
+                    : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                }`}
+                title={u.name}
+              >
+                {u.name?.slice(0, 2) || "?"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
+                    {u.name}
+                  </p>
+                  {u.isOwner && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400">
+                      Owner
+                    </span>
+                  )}
+                  {u.role === "ADMIN" ? (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
+                      Admin
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                      Operator
+                    </span>
+                  )}
+                  {u.status === "SUSPENDED" && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400">
+                      Suspended
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                  {u.email}
+                </p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">
+                  Last login
+                </p>
+                <p className="text-[11px] text-gray-700 dark:text-gray-300 mt-0.5">
+                  {formatRelativeDate(u.lastLoginAt)}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function TenantRolesCard({ roles }: { roles: TenantRole[] }) {
+  return (
+    <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <KeyRound className="w-4 h-4 text-yellow-500" />
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+            Roles
+          </h2>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            {roles.length}
+          </span>
+        </div>
+      </div>
+
+      {roles.length === 0 ? (
+        <p className="text-xs text-gray-500 dark:text-gray-400 py-3 text-center">
+          No custom roles defined
+        </p>
+      ) : (
+        <ul className="divide-y divide-gray-100/70 dark:divide-gray-800">
+          {roles.map((r) => (
+            <li
+              key={r.id}
+              className="py-2.5 flex items-start gap-3 first:pt-0 last:pb-0"
+            >
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-400 flex-shrink-0">
+                <ShieldCheck className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-[13px] font-semibold text-gray-900 dark:text-white">
+                    {r.name}
+                  </p>
+                  {r.isSystem && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                      System
+                    </span>
+                  )}
+                </div>
+                {r.description && (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                    {r.description}
+                  </p>
+                )}
+              </div>
+              <div className="text-right flex-shrink-0 space-y-0.5">
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">
+                  Members
+                </p>
+                <p className="text-[13px] font-bold text-gray-900 dark:text-white">
+                  {r.memberCount ?? 0}
+                </p>
+              </div>
+              <div className="text-right flex-shrink-0 min-w-[60px]">
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">
+                  Perms
+                </p>
+                <p className="text-[13px] font-bold text-gray-700 dark:text-gray-300">
+                  {r.permissions?.length ?? 0}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

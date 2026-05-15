@@ -196,7 +196,7 @@ export default function DriversPage() {
           {(["ALL", "GREEN", "YELLOW", "ORANGE", "RED"] as const).map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
-              {s !== "ALL" && <span className={`w-1.5 h-1.5 rounded-full ${s === "GREEN" ? "bg-emerald-500" : s === "YELLOW" ? "bg-amber-500" : s === "ORANGE" ? "bg-orange-500" : "bg-red-500"}`} />}
+              {s !== "ALL" && <span className={`w-1.5 h-1.5 rounded-full ${s === "GREEN" ? "bg-emerald-500" : s === "YELLOW" ? "bg-amber-500" : s === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"}`} />}
               {s === "ALL" ? "All" : s === "GREEN" ? "Active" : s === "YELLOW" ? "Expiring" : s === "ORANGE" ? "Critical" : "Expired"}
             </button>
           ))}
@@ -227,11 +227,11 @@ export default function DriversPage() {
           {paginatedItems.map((driver) => {
             const daysToExpiry = Math.ceil((new Date(driver.licenseExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
             const ls = driver.licenseStatus;
-            const grad = ls === "RED" ? "from-red-500 to-rose-600" : ls === "ORANGE" ? "from-orange-500 to-orange-600" : ls === "YELLOW" ? "from-amber-500 to-yellow-600" : "from-emerald-500 to-green-600";
-            const avatarCls = ls === "RED" ? "bg-gradient-to-br from-red-400 to-red-600" : ls === "ORANGE" ? "bg-gradient-to-br from-orange-400 to-orange-600" : ls === "YELLOW" ? "bg-gradient-to-br from-yellow-400 to-yellow-500" : "bg-gradient-to-br from-brand-400 to-brand-600";
-            const badgeColor = ls === "RED" ? "error" : ls === "ORANGE" ? "orange" : ls === "YELLOW" ? "warning" : "success";
+            const grad = ls === "RED" ? "from-red-500 to-rose-600" : ls === "ORANGE" ? "from-red-500 to-rose-600" : ls === "YELLOW" ? "from-amber-500 to-yellow-600" : "from-emerald-500 to-green-600";
+            const avatarCls = ls === "RED" ? "bg-gradient-to-br from-red-400 to-red-600" : ls === "ORANGE" ? "bg-gradient-to-br from-red-400 to-red-600 animate-blink" : ls === "YELLOW" ? "bg-gradient-to-br from-yellow-400 to-yellow-500" : "bg-gradient-to-br from-brand-400 to-brand-600";
+            const badgeColor = ls === "RED" ? "error" : ls === "ORANGE" ? "error" : ls === "YELLOW" ? "warning" : "success";
             const badgeLabel = ls === "RED" ? "Expired" : ls === "ORANGE" ? "Critical" : ls === "YELLOW" ? "Expiring" : "Active";
-            const shadowClr = ls === "RED" ? "shadow-red-500/10" : ls === "ORANGE" ? "shadow-orange-500/10" : ls === "YELLOW" ? "shadow-amber-500/10" : "shadow-emerald-500/10";
+            const shadowClr = ls === "RED" ? "shadow-red-500/10" : ls === "ORANGE" ? "shadow-red-500/10" : ls === "YELLOW" ? "shadow-amber-500/10" : "shadow-emerald-500/10";
             const docCount = driver.documents?.length || 0;
 
             return (
@@ -308,10 +308,10 @@ export default function DriversPage() {
             const daysToExpiry = Math.ceil((new Date(driver.licenseExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
             const ls = driver.licenseStatus;
 
-            const borderCls = ls === "RED" ? "border-red-200/80 dark:border-red-500/20" : ls === "ORANGE" ? "border-orange-200/80 dark:border-orange-500/20" : ls === "YELLOW" ? "border-amber-200/80 dark:border-amber-500/20" : "border-gray-200/80 dark:border-gray-800";
-            const barCls = ls === "RED" ? "bg-gradient-to-r from-red-500 to-rose-500" : ls === "ORANGE" ? "bg-gradient-to-r from-orange-500 to-orange-600" : ls === "YELLOW" ? "bg-gradient-to-r from-amber-500 to-amber-600" : "bg-gradient-to-r from-emerald-500 to-green-500";
-            const avatarCls = ls === "RED" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/20" : ls === "ORANGE" ? "bg-gradient-to-br from-orange-400 to-orange-600 shadow-orange-500/20" : ls === "YELLOW" ? "bg-gradient-to-br from-yellow-400 to-yellow-500 shadow-yellow-500/20" : "bg-gradient-to-br from-brand-400 to-brand-600 shadow-brand-500/20";
-            const badgeColor = ls === "RED" ? "error" : ls === "ORANGE" ? "orange" : ls === "YELLOW" ? "warning" : "success";
+            const borderCls = ls === "RED" ? "border-red-200/80 dark:border-red-500/20" : ls === "ORANGE" ? "border-red-200/80 dark:border-red-500/20" : ls === "YELLOW" ? "border-amber-200/80 dark:border-amber-500/20" : "border-gray-200/80 dark:border-gray-800";
+            const barCls = ls === "RED" ? "bg-gradient-to-r from-red-500 to-rose-500" : ls === "ORANGE" ? "bg-gradient-to-r from-red-500 to-rose-600" : ls === "YELLOW" ? "bg-gradient-to-r from-amber-500 to-amber-600" : "bg-gradient-to-r from-emerald-500 to-green-500";
+            const avatarCls = ls === "RED" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/20" : ls === "ORANGE" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/20 animate-blink" : ls === "YELLOW" ? "bg-gradient-to-br from-yellow-400 to-yellow-500 shadow-yellow-500/20" : "bg-gradient-to-br from-brand-400 to-brand-600 shadow-brand-500/20";
+            const badgeColor = ls === "RED" ? "error" : ls === "ORANGE" ? "error" : ls === "YELLOW" ? "warning" : "success";
             const badgeLabel = ls === "RED" ? "Expired" : ls === "ORANGE" ? "Critical" : ls === "YELLOW" ? "Expiring" : "Active";
 
             return (
@@ -352,7 +352,7 @@ export default function DriversPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
                       <span className="font-mono">{driver.licenseNumber}</span>
                       <span className="text-gray-300 dark:text-gray-600">&bull;</span>
-                      <span className={daysToExpiry <= 0 ? "text-red-600 dark:text-red-400 font-semibold" : daysToExpiry <= 7 ? "text-orange-600 dark:text-orange-400 font-semibold" : daysToExpiry <= 30 ? "text-amber-600 dark:text-amber-400 font-semibold" : ""}>
+                      <span className={daysToExpiry <= 0 ? "text-red-600 dark:text-red-400 font-semibold" : daysToExpiry <= 7 ? "text-red-600 dark:text-red-400 font-semibold animate-blink" : daysToExpiry <= 30 ? "text-amber-600 dark:text-amber-400 font-semibold" : ""}>
                         {daysToExpiry <= 0 ? `Expired ${Math.abs(daysToExpiry)}d ago` : `${daysToExpiry}d to expiry`}
                       </span>
                       {driver.phone && (<><span className="text-gray-300 dark:text-gray-600">&bull;</span><span>{driver.phone}</span></>)}

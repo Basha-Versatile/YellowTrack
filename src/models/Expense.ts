@@ -6,6 +6,7 @@ export const EXPENSE_CATEGORIES = [
   "SERVICE",
   "COMPLIANCE",
   "FASTAG",
+  "EMI",
 ] as const;
 
 const expenseSchema = new Schema(

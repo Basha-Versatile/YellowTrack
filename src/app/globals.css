@@ -922,3 +922,13 @@ pre[class*="language-"] {
 pre[class*="language-"].line-numbers {
   padding-left: 2.8em !important;
 }
+
+/* Compliance urgency: ≤ 7 days. Slower + deeper than animate-pulse so it
+ * reads as alarming without being seizure-inducing. */
+@keyframes compliance-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.animate-blink {
+  animation: compliance-blink 1.1s ease-in-out infinite;
+}

@@ -101,7 +101,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Vehicle Compliance */}
         <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-          <div className="relative bg-gradient-to-r from-yellow-500 via-yellow-400 to-amber-400 px-6 py-5 overflow-hidden">
+          <div className="relative bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 px-6 py-5 overflow-hidden">
             <div className="absolute top-3 right-6 w-24 h-24 rounded-full border border-white/10" />
             <div className="absolute -bottom-4 right-20 w-20 h-20 rounded-full border border-white/5" />
             <div className="relative z-10 flex items-center justify-between">
@@ -138,7 +138,7 @@ export default function DashboardPage() {
 
         {/* Driver Compliance */}
         <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-          <div className="relative bg-gradient-to-r from-yellow-500 via-yellow-400 to-amber-400 px-6 py-5 overflow-hidden">
+          <div className="relative bg-gradient-to-r from-indigo-500 via-indigo-400 to-violet-400 px-6 py-5 overflow-hidden">
             <div className="absolute top-3 right-6 w-24 h-24 rounded-full border border-white/10" />
             <div className="absolute -bottom-4 right-20 w-20 h-20 rounded-full border border-white/5" />
             <div className="relative z-10 flex items-center justify-between">

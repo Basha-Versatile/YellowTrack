@@ -186,7 +186,7 @@ export default function VehiclesPage() {
 
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
           {(["ALL", "GREEN", "YELLOW", "ORANGE", "RED"] as const).map((s) => {
-            const dot = s === "GREEN" ? "bg-emerald-500" : s === "YELLOW" ? "bg-amber-500" : s === "ORANGE" ? "bg-orange-500" : s === "RED" ? "bg-red-500" : "";
+            const dot = s === "GREEN" ? "bg-emerald-500" : s === "YELLOW" ? "bg-amber-500" : s === "ORANGE" ? "bg-red-500 animate-blink" : s === "RED" ? "bg-red-500" : "";
             return (
               <button key={s} onClick={() => { setStatusFilter(s); fetchVehicles(1, { overrideStatus: s }); }}
                 className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
@@ -221,8 +221,8 @@ export default function VehiclesPage() {
         /* ── CARD VIEW ── */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {vehicles.map((v) => {
-            const grad = v.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : v.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : v.overallStatus === "ORANGE" ? "from-orange-500 to-orange-600" : "from-red-500 to-rose-600";
-            const shadowClr = v.overallStatus === "GREEN" ? "shadow-emerald-500/10" : v.overallStatus === "YELLOW" ? "shadow-amber-500/10" : v.overallStatus === "ORANGE" ? "shadow-orange-500/10" : "shadow-red-500/10";
+            const grad = v.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : v.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : v.overallStatus === "ORANGE" ? "from-red-500 to-rose-600" : "from-red-500 to-rose-600";
+            const shadowClr = v.overallStatus === "GREEN" ? "shadow-emerald-500/10" : v.overallStatus === "YELLOW" ? "shadow-amber-500/10" : v.overallStatus === "ORANGE" ? "shadow-red-500/10" : "shadow-red-500/10";
             const greenDocs = v.complianceDocuments.filter((d) => d.status === "GREEN").length;
             const totalDocs = v.complianceDocuments.length;
             const score = totalDocs > 0 ? Math.round((greenDocs / totalDocs) * 100) : 0;
@@ -262,12 +262,12 @@ export default function VehiclesPage() {
                       <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
                         <circle cx="18" cy="18" r="14" fill="none" className="stroke-gray-100 dark:stroke-gray-800" strokeWidth="3" />
                         <circle cx="18" cy="18" r="14" fill="none"
-                          className={v.overallStatus === "GREEN" ? "stroke-emerald-500" : v.overallStatus === "YELLOW" ? "stroke-amber-500" : v.overallStatus === "ORANGE" ? "stroke-orange-500" : "stroke-red-500"}
+                          className={v.overallStatus === "GREEN" ? "stroke-emerald-500" : v.overallStatus === "YELLOW" ? "stroke-amber-500" : v.overallStatus === "ORANGE" ? "stroke-red-500" : "stroke-red-500"}
                           strokeWidth="3" strokeLinecap="round" strokeDasharray={`${score * 0.88} 100`}
                         />
                       </svg>
                       <span className={`absolute inset-0 flex items-center justify-center text-[9px] font-black ${
-                        v.overallStatus === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : v.overallStatus === "YELLOW" ? "text-amber-600 dark:text-amber-400" : v.overallStatus === "ORANGE" ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"
+                        v.overallStatus === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : v.overallStatus === "YELLOW" ? "text-amber-600 dark:text-amber-400" : v.overallStatus === "ORANGE" ? "text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400"
                       }`}>{score}%</span>
                     </div>
                   </div>
@@ -298,7 +298,7 @@ export default function VehiclesPage() {
                       <div key={`${doc.type}-${di}`} className={`rounded-md py-1 text-center text-[9px] font-bold ${
                         doc.status === "GREEN" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
                         : doc.status === "YELLOW" ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
-                        : doc.status === "ORANGE" ? "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400"
+                        : doc.status === "ORANGE" ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 animate-blink"
                         : "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400"
                       }`}>
                         {DOC_ABBR[doc.type] || doc.type}
@@ -322,7 +322,7 @@ export default function VehiclesPage() {
         /* ── LIST VIEW ── */
         <div className="space-y-2">
           {vehicles.map((v) => {
-            const grad = v.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : v.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : v.overallStatus === "ORANGE" ? "from-orange-500 to-orange-600" : "from-red-500 to-rose-600";
+            const grad = v.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : v.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : v.overallStatus === "ORANGE" ? "from-red-500 to-rose-600" : "from-red-500 to-rose-600";
             const activeDriver = v.activeDriver || v.driverMappings?.find((m) => m.isActive)?.driver;
 
             return (
@@ -351,7 +351,7 @@ export default function VehiclesPage() {
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white font-mono tracking-wider group-hover:text-brand-500 transition-colors">
                       {v.registrationNumber}
                     </h3>
-                    <Badge color={v.overallStatus === "GREEN" ? "success" : v.overallStatus === "YELLOW" ? "warning" : v.overallStatus === "ORANGE" ? "orange" : "error"} variant="light" size="sm">
+                    <Badge color={v.overallStatus === "GREEN" ? "success" : v.overallStatus === "YELLOW" ? "warning" : v.overallStatus === "ORANGE" ? "error" : "error"} variant="light" size="sm">
                       {v.overallStatus === "GREEN" ? "OK" : v.overallStatus === "YELLOW" ? "Warn" : v.overallStatus === "ORANGE" ? "Critical" : "Expired"}
                     </Badge>
                   </div>
@@ -379,14 +379,15 @@ export default function VehiclesPage() {
                 {/* Doc pills (desktop) */}
                 <div className="hidden lg:flex items-center gap-2.5">
                   {v.complianceDocuments.slice(0, 6).map((doc) => {
-                    const days = Math.ceil((new Date(doc.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                    const dotColor = doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-orange-500" : "bg-red-500";
-                    const textColor = doc.status === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-600 dark:text-amber-400" : doc.status === "ORANGE" ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400";
+                    const dotColor = doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500";
+                    const textColor = doc.status === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-600 dark:text-amber-400" : doc.status === "ORANGE" ? "text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400";
                     return (
                       <div key={`${doc.type}-pill`} className="flex flex-col items-center gap-0.5">
                         <span className={`text-[9px] font-bold ${textColor}`}>{DOC_ABBR[doc.type] || doc.type}</span>
                         <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
+                        {/* Days/Exp label intentionally hidden — uncomment to restore:
                         <span className={`text-[8px] font-medium ${days <= 0 ? "text-red-500" : "text-gray-400"}`}>{days <= 0 ? "Exp" : `${days}d`}</span>
+                        */}
                       </div>
                     );
                   })}

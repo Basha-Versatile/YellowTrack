@@ -12,6 +12,7 @@ export const runtime = "nodejs";
 const tyreSchema = z.object({
   position: z.string().min(1),
   size: z.string().optional().nullable(),
+  brand: z.string().max(80).optional().nullable(),
 });
 
 const bodySchema = z.object({
@@ -40,6 +41,7 @@ export const PUT = withRoute<{ id: string }>(
           vehicleId: params.id,
           position: t.position,
           size: t.size ?? null,
+          brand: t.brand?.trim() || null,
         })),
       );
     }

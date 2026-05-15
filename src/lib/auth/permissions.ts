@@ -60,6 +60,12 @@ export const PERMISSIONS = [
   "expenses:read",
   "expenses:create",
 
+  // EMI tracking
+  "emi:read",
+  "emi:create",
+  "emi:update",
+  "emi:close",
+
   // Vehicle groups
   "groups:read",
   "groups:manage",
@@ -172,6 +178,17 @@ export const PERMISSION_GROUPS: Array<{
     ],
   },
   {
+    key: "emi",
+    label: "EMI tracking",
+    description: "Vehicle loan EMIs, schedules, payments.",
+    items: [
+      { key: "emi:read", label: "View EMI", description: "View EMI plans and payment schedules." },
+      { key: "emi:create", label: "Add EMI", description: "Create new EMI plans for vehicles." },
+      { key: "emi:update", label: "Mark paid / update", description: "Mark installments paid, update plan details." },
+      { key: "emi:close", label: "Close EMI", description: "Pause, default, or close an EMI plan." },
+    ],
+  },
+  {
     key: "notifications",
     label: "Notifications",
     description: "Alerts and notifications.",
@@ -214,6 +231,7 @@ export const DEFAULT_OPERATOR_PERMISSIONS: Permission[] = [
   "services:create",
   "expenses:read",
   "expenses:create",
+  "emi:read",
   "groups:read",
   "notifications:read",
 ];

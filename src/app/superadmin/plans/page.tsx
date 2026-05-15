@@ -546,7 +546,7 @@ function PlanEditor({
               <div className="col-span-2">
                 <Field label="Price" required>
                   <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none z-10" />
                     <input
                       type="number"
                       step="0.01"
@@ -555,7 +555,7 @@ function PlanEditor({
                       onChange={(e) => setPrice(e.target.value)}
                       required
                       placeholder="999"
-                      className="input pl-9"
+                      className="input !pl-10"
                     />
                   </div>
                 </Field>
@@ -688,11 +688,19 @@ function CompactLimit({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const unlimited = value.trim() === "";
   return (
-    <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 focus-within:border-yellow-400 focus-within:ring-2 focus-within:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800">
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300 min-w-[68px]">
-        {icon}
-        {label}
+    <label className="block rounded-lg border border-gray-200 bg-gray-50/60 px-2.5 py-2 focus-within:border-yellow-400 focus-within:ring-2 focus-within:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800/40">
+      <span className="flex items-center justify-between gap-2 text-[11px] font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
+        <span className="inline-flex items-center gap-1.5">
+          {icon}
+          {label}
+        </span>
+        {unlimited && (
+          <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+            Unlimited
+          </span>
+        )}
       </span>
       <input
         type="number"
@@ -700,7 +708,7 @@ function CompactLimit({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="∞"
-        className="flex-1 h-7 bg-transparent text-sm text-gray-800 dark:text-white text-right font-mono focus:outline-none placeholder:text-gray-400"
+        className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-800 dark:text-white text-center font-mono focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/15 dark:border-gray-700 dark:bg-gray-900 placeholder:text-gray-400"
       />
     </label>
   );

@@ -11,7 +11,7 @@ import { pickValidatedFile } from "@/lib/file-validation";
 import {
   Plus, Download, AlertTriangle, Wrench, Car, CheckCircle2,
   MoreHorizontal, BarChart3, PieChart, FileText,
-  ImageIcon, Upload
+  ImageIcon, Upload, Banknote
 } from "lucide-react";
 import { VehicleAutocomplete } from "@/components/vehicles/VehicleAutocomplete";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
@@ -31,6 +31,7 @@ const CATEGORY_ICONS: Record<string, React.FC<{ className?: string }>> = {
   services: Wrench,
   fastag: Car,
   compliance: CheckCircle2,
+  emi: Banknote,
 };
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string; gradient: string }> = {
@@ -38,6 +39,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string; g
   services: { bg: "bg-blue-500/10", text: "text-blue-400", dot: "#3b82f6", gradient: "from-blue-500 to-blue-600" },
   fastag: { bg: "bg-amber-500/10", text: "text-amber-400", dot: "#f59e0b", gradient: "from-amber-500 to-amber-600" },
   compliance: { bg: "bg-emerald-500/10", text: "text-emerald-400", dot: "#10b981", gradient: "from-emerald-500 to-emerald-600" },
+  emi: { bg: "bg-purple-500/10", text: "text-purple-400", dot: "#a855f7", gradient: "from-purple-500 to-fuchsia-600" },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -45,6 +47,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   services: "Services",
   fastag: "FASTag",
   compliance: "Compliance",
+  emi: "EMI",
 };
 
 const CATEGORY_COLORS_HEX: Record<string, string> = {
@@ -52,6 +55,7 @@ const CATEGORY_COLORS_HEX: Record<string, string> = {
   services: "#3b82f6",
   fastag: "#f59e0b",
   compliance: "#10b981",
+  emi: "#a855f7",
 };
 
 export default function VehicleExpensesPage() {
@@ -642,6 +646,7 @@ function VehicleExpensesContent() {
                     <option value="SERVICE">Services</option>
                     <option value="FASTAG">FASTag</option>
                     <option value="CHALLAN">Challans</option>
+                    <option value="EMI">EMI</option>
                   </select>
                 </div>
               </div>

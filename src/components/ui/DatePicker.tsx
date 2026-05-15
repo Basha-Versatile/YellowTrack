@@ -44,8 +44,11 @@ export default function DatePicker({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (fpRef.current && value) {
+    if (!fpRef.current) return;
+    if (value) {
       fpRef.current.setDate(value, false);
+    } else {
+      fpRef.current.clear();
     }
   }, [value]);
 
