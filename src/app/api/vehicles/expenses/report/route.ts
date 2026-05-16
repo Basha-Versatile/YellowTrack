@@ -29,7 +29,7 @@ type UnifiedExpense = {
   title: string;
   amount: number;
   handlingCharges: number;
-  proofUrl: string | null;
+  proofUrls: string[];
   category: string;
 };
 
@@ -127,7 +127,7 @@ export const GET = withRoute(
         title: c.violation || `Challan ${c.challanNumber ?? ""}`,
         amount: amt,
         handlingCharges: 0,
-        proofUrl: c.proofImageUrl ?? null,
+        proofUrls: c.proofImageUrl ? [c.proofImageUrl] : [],
         category: "challans",
       });
     }
@@ -141,7 +141,7 @@ export const GET = withRoute(
         title: s.title,
         amount: s.totalCost ?? 0,
         handlingCharges: 0,
-        proofUrl: (s.receiptUrls as string[])?.[0] ?? null,
+        proofUrls: ((s.receiptUrls as string[] | undefined) ?? []).slice(),
         category: "services",
       });
     }
@@ -157,7 +157,7 @@ export const GET = withRoute(
         title: `${ins.insurer ?? "Insurance"} — ${ins.planName ?? ins.policyNumber ?? ""}`,
         amount: amt,
         handlingCharges: 0,
-        proofUrl: ins.documentUrl ?? null,
+        proofUrls: ins.documentUrl ? [ins.documentUrl] : [],
         category: "compliance",
       });
     }
@@ -173,7 +173,7 @@ export const GET = withRoute(
         title: t.description || `Toll — ${t.tollPlaza ?? ""}`,
         amount: t.amount,
         handlingCharges: 0,
-        proofUrl: null,
+        proofUrls: [],
         category: "fastag",
       });
     }
@@ -197,7 +197,7 @@ export const GET = withRoute(
         title: e.title,
         amount: e.amount,
         handlingCharges: handling,
-        proofUrl: e.proofUrl ?? null,
+        proofUrls: ((e.proofUrls as string[] | undefined) ?? []).slice(),
         category: catKey,
       });
     }

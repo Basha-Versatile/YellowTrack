@@ -22,6 +22,9 @@ export const publicDriverUpdateSchema = z.object({
   currentAddressLng: z.coerce.number().optional().nullable(),
   permanentAddressLat: z.coerce.number().optional().nullable(),
   permanentAddressLng: z.coerce.number().optional().nullable(),
+  pfAccountNumber: z.string().optional().nullable(),
+  medicalInsuranceName: z.string().optional().nullable(),
+  medicalInsuranceNumber: z.string().optional().nullable(),
 });
 
 export type PublicDriverUpdateInput = z.infer<typeof publicDriverUpdateSchema>;

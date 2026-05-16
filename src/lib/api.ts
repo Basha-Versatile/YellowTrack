@@ -279,7 +279,17 @@ export const vehicleAPI = {
     status?: string;
     groupId?: string;
     vehicleUsage?: "PRIVATE" | "COMMERCIAL";
+    lifecycle?: "ACTIVE" | "SOLD";
   }) => api.get("/vehicles", { params }),
+  getSale: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/sale`),
+  markSold: (vehicleId: string, formData: FormData) =>
+    api.post(`/vehicles/${vehicleId}/sale`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  cancelSale: (vehicleId: string) => api.delete(`/vehicles/${vehicleId}/sale`),
+  requestDeletion: (vehicleId: string) => api.post(`/vehicles/${vehicleId}/deletion/request`),
+  confirmDeletion: (vehicleId: string, otp: string) =>
+    api.post(`/vehicles/${vehicleId}/deletion/confirm`, { otp }),
   getById: (id: string) => api.get(`/vehicles/${id}`),
   updateGroup: (vehicleId: string, groupId: string | null) =>
     api.patch(`/vehicles/${vehicleId}/group`, { groupId }),
@@ -334,6 +344,8 @@ export const vehicleAPI = {
   },
   upsertTyres: (vehicleId: string, tyres: Array<{ position: string; size?: string; brand?: string | null }>, tyreCount?: number) =>
     api.put(`/vehicles/${vehicleId}/tyres`, { tyres, tyreCount }),
+  upsertServiceParts: (vehicleId: string, parts: Array<{ name: string; partNumber?: string | null; notes?: string | null }>) =>
+    api.put(`/vehicles/${vehicleId}/service-parts`, { parts }),
   getAccessLog: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/access-log`),
   // Services
   getAllServices: (params?: { status?: string; vehicleId?: string }) => api.get("/vehicles/services/all", { params }),

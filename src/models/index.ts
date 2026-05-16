@@ -30,6 +30,9 @@ export {
   EXPENSE_CATEGORIES,
 } from "./Expense";
 export { Tyre, type TyreAttrs } from "./Tyre";
+export { ServicePart, type ServicePartAttrs } from "./ServicePart";
+export { VehicleSale, type VehicleSaleAttrs } from "./VehicleSale";
+export { VehicleDeletionOtp, type VehicleDeletionOtpAttrs } from "./VehicleDeletionOtp";
 export {
   InsurancePolicy,
   type InsurancePolicyAttrs,

@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { vehicleAPI, vehicleGroupAPI, complianceAPI, fastagAPI } from "@/lib/api";
 
 // Three.js touches `window` on import — load client-only and skip SSR.
@@ -81,6 +81,7 @@ interface ServiceRecord {
 interface Vehicle {
   id: string;
   registrationNumber: string;
+  ownerName: string | null;
   make: string;
   model: string;
   fuelType: string;
@@ -106,6 +107,25 @@ interface Vehicle {
     size: string | null;
     brand?: string | null;
   }>;
+  serviceParts: Array<{
+    id: string;
+    name: string;
+    partNumber: string | null;
+    notes: string | null;
+  }>;
+  status?: "ACTIVE" | "SOLD";
+  sale?: {
+    id: string;
+    buyerName: string;
+    buyerPhone: string;
+    buyerEmail: string | null;
+    soldPrice: number | null;
+    saleDate: string;
+    pendingChallansCleared: boolean;
+    buyerDocumentUrls: string[];
+    transferDocumentUrls: string[];
+    notes: string | null;
+  } | null;
   activeDriver: { id: string; name: string; licenseNumber: string } | null;
   driverMappings: Array<{
     driver: { id: string; name: string; licenseNumber: string; licenseExpiry: string };
@@ -145,6 +165,13 @@ function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function titleCase(s: string | null | undefined): string {
+  if (!s) return "";
+  return s
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (c) => c.toUpperCase());
+}
+
 const TYRE_POSITIONS: Record<number, string[]> = {
   3: ["FL", "FR", "R"],
   4: ["FL", "FR", "RL", "RR"],
@@ -166,6 +193,7 @@ const getTyrePositions = (tyreCount: number): string[] => {
 
 export default function VehicleDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -184,6 +212,42 @@ export default function VehicleDetailPage() {
   const [tyreForm, setTyreForm] = useState<Array<{ position: string; size: string; brand: string }>>([]);
   const [selectedTyrePosition, setSelectedTyrePosition] = useState<string | null>(null);
   const [savingTyres, setSavingTyres] = useState(false);
+
+  // Service parts profile
+  const [editingParts, setEditingParts] = useState(false);
+  const [partsForm, setPartsForm] = useState<Array<{ name: string; partNumber: string; notes: string }>>([]);
+  const [savingParts, setSavingParts] = useState(false);
+
+  const openPartsEditor = () => {
+    if (!vehicle) return;
+    const initial = vehicle.serviceParts && vehicle.serviceParts.length > 0
+      ? vehicle.serviceParts.map((p) => ({ name: p.name, partNumber: p.partNumber || "", notes: p.notes || "" }))
+      : [{ name: "", partNumber: "", notes: "" }];
+    setPartsForm(initial);
+    setEditingParts(true);
+  };
+
+  const handleSaveParts = async () => {
+    if (!vehicle) return;
+    const cleaned = partsForm
+      .filter((p) => p.name.trim())
+      .map((p) => ({
+        name: p.name.trim(),
+        partNumber: p.partNumber.trim() || null,
+        notes: p.notes.trim() || null,
+      }));
+    setSavingParts(true);
+    try {
+      await vehicleAPI.upsertServiceParts(vehicle.id, cleaned);
+      toast.success("Parts Updated", "Service parts profile saved");
+      setEditingParts(false);
+      fetchVehicle();
+    } catch {
+      toast.error("Save Failed", "Could not save service parts");
+    } finally {
+      setSavingParts(false);
+    }
+  };
 
   // Regenerate position list when count changes inside the editor — preserves
   // sizes that were already entered for positions that still exist.
@@ -205,6 +269,117 @@ export default function VehicleDetailPage() {
     setSelectedTyrePosition((prev) =>
       prev && positions.includes(prev) ? prev : positions[0] ?? null,
     );
+  };
+
+  // Sell vehicle
+  const [showSellModal, setShowSellModal] = useState(false);
+  const [savingSale, setSavingSale] = useState(false);
+  const [cancellingSale, setCancellingSale] = useState(false);
+  const [confirmCancelSale, setConfirmCancelSale] = useState(false);
+  const [saleForm, setSaleForm] = useState({
+    buyerName: "", buyerPhone: "", buyerEmail: "", soldPrice: "",
+    saleDate: todayISO(), pendingChallansCleared: false, notes: "",
+  });
+  const [saleBuyerDocs, setSaleBuyerDocs] = useState<File[]>([]);
+  const [saleTransferDocs, setSaleTransferDocs] = useState<File[]>([]);
+
+  const openSellModal = () => {
+    const existing = vehicle?.sale;
+    setSaleForm({
+      buyerName: existing?.buyerName || "",
+      buyerPhone: existing?.buyerPhone || "",
+      buyerEmail: existing?.buyerEmail || "",
+      soldPrice: existing?.soldPrice != null ? String(existing.soldPrice) : "",
+      saleDate: existing?.saleDate ? existing.saleDate.split("T")[0] : todayISO(),
+      pendingChallansCleared: existing?.pendingChallansCleared ?? false,
+      notes: existing?.notes || "",
+    });
+    setSaleBuyerDocs([]);
+    setSaleTransferDocs([]);
+    setShowSellModal(true);
+  };
+
+  const handleSaveSale = async () => {
+    if (!vehicle) return;
+    if (!saleForm.buyerName.trim() || !saleForm.buyerPhone.trim() || !saleForm.saleDate) {
+      toast.error("Missing fields", "Buyer name, phone and sale date are required");
+      return;
+    }
+    setSavingSale(true);
+    try {
+      const fd = new FormData();
+      fd.append("buyerName", saleForm.buyerName.trim());
+      fd.append("buyerPhone", saleForm.buyerPhone.trim());
+      if (saleForm.buyerEmail.trim()) fd.append("buyerEmail", saleForm.buyerEmail.trim());
+      if (saleForm.soldPrice) fd.append("soldPrice", saleForm.soldPrice);
+      fd.append("saleDate", saleForm.saleDate);
+      fd.append("pendingChallansCleared", saleForm.pendingChallansCleared ? "true" : "false");
+      if (saleForm.notes.trim()) fd.append("notes", saleForm.notes.trim());
+      for (const f of saleBuyerDocs) fd.append("buyerDocs", f);
+      for (const f of saleTransferDocs) fd.append("transferDocs", f);
+      await vehicleAPI.markSold(vehicle.id, fd);
+      toast.success(vehicle.status === "SOLD" ? "Sale Updated" : "Vehicle Sold", "Sale details saved");
+      setShowSellModal(false);
+      fetchVehicle();
+    } catch {
+      toast.error("Save Failed", "Could not save sale details");
+    } finally {
+      setSavingSale(false);
+    }
+  };
+
+  const handleCancelSale = async () => {
+    if (!vehicle) return;
+    setCancellingSale(true);
+    try {
+      await vehicleAPI.cancelSale(vehicle.id);
+      toast.success("Sale Cancelled", "Vehicle is active again");
+      setConfirmCancelSale(false);
+      fetchVehicle();
+    } catch {
+      toast.error("Cancel Failed", "Could not cancel sale");
+    } finally {
+      setCancellingSale(false);
+    }
+  };
+
+  // Vehicle deletion (OTP-gated)
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [requestingDeleteOtp, setRequestingDeleteOtp] = useState(false);
+  const [deleteOtp, setDeleteOtp] = useState<string | null>(null);
+  const [deleteOtpInput, setDeleteOtpInput] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const openDeleteModal = async () => {
+    if (!vehicle) return;
+    setDeleteOtp(null);
+    setDeleteOtpInput("");
+    setShowDeleteModal(true);
+    setRequestingDeleteOtp(true);
+    try {
+      const res = await vehicleAPI.requestDeletion(vehicle.id);
+      setDeleteOtp(res.data.data.otp as string);
+    } catch {
+      toast.error("Failed", "Could not generate OTP. Try again.");
+      setShowDeleteModal(false);
+    } finally {
+      setRequestingDeleteOtp(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!vehicle || !deleteOtpInput.trim()) return;
+    setConfirmingDelete(true);
+    try {
+      await vehicleAPI.confirmDeletion(vehicle.id, deleteOtpInput.trim());
+      toast.success("Vehicle Archived", `${vehicle.registrationNumber} hidden from active lists. Data preserved.`);
+      // Navigate back to the vehicles list — full page nav so the page re-fetches.
+      window.location.href = "/vehicles";
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error("Delete Failed", msg || "Could not delete the vehicle");
+      setConfirmingDelete(false);
+    }
   };
 
   // Service records
@@ -271,15 +446,47 @@ export default function VehicleDetailPage() {
   const [addingLoading, setAddingLoading] = useState(false);
   const [deletingCompliance, setDeletingCompliance] = useState<string | null>(null);
 
-  // History
-  const [historyDoc, setHistoryDoc] = useState<string | null>(null); // doc type
+  // Per-doc history modal
+  const [historyDocType, setHistoryDocType] = useState<string | null>(null);
   const [historyData, setHistoryData] = useState<Array<{ id: string; expiryDate: string | null; documentUrl: string | null; isActive: boolean; createdAt: string; archivedAt: string | null }>>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  const openDocHistory = async (vehicleId: string, docType: string) => {
+    setHistoryDocType(docType);
+    setHistoryLoading(true);
+    setHistoryData([]);
+    try {
+      const res = await complianceAPI.getHistory(vehicleId, docType);
+      setHistoryData(res.data.data || []);
+    } catch {
+      setHistoryData([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const fetchVehicle = () => {
     if (params.id) {
       vehicleAPI.getById(params.id as string)
-        .then((res) => setVehicle(res.data.data))
+        .then((res) => {
+          setVehicle(res.data.data);
+          // Deep-link from list page: open sell modal automatically once
+          if (searchParams.get("action") === "sell" && res.data.data.status !== "SOLD" && !showSellModal) {
+            const existing = res.data.data.sale;
+            setSaleForm({
+              buyerName: existing?.buyerName || "",
+              buyerPhone: existing?.buyerPhone || "",
+              buyerEmail: existing?.buyerEmail || "",
+              soldPrice: existing?.soldPrice != null ? String(existing.soldPrice) : "",
+              saleDate: existing?.saleDate ? existing.saleDate.split("T")[0] : todayISO(),
+              pendingChallansCleared: existing?.pendingChallansCleared ?? false,
+              notes: existing?.notes || "",
+            });
+            setSaleBuyerDocs([]);
+            setSaleTransferDocs([]);
+            setShowSellModal(true);
+          }
+        })
         .catch(console.error)
         .finally(() => setLoading(false));
       vehicleAPI.getServices(params.id as string)
@@ -416,17 +623,6 @@ export default function VehicleDetailPage() {
     } catch (err) { console.error(err); toast.error("Renew Failed", "Could not renew document"); }
     finally { setRenewLoading(false); }
   };
-
-  const handleViewHistory = async (vehicleId: string, docType: string) => {
-    if (historyDoc === docType) { setHistoryDoc(null); return; } // toggle off
-    setHistoryDoc(docType); setHistoryLoading(true);
-    try {
-      const res = await complianceAPI.getHistory(vehicleId, docType);
-      setHistoryData(res.data.data || []);
-    } catch { setHistoryData([]); }
-    finally { setHistoryLoading(false); }
-  };
-
 
   const openTyreEditor = () => {
     if (!vehicle) return;
@@ -618,8 +814,15 @@ export default function VehicleDetailPage() {
                       {vehicle.overallStatus}
                     </span>
                   </div>
-                  <p className="text-white/70 text-sm flex items-center gap-1.5 flex-wrap">
-                    <span>{vehicle.make} {vehicle.model} &bull; {vehicle.fuelType} &bull; {vehicle.permitType}</span>
+                  <p className="text-white/50 text-[11px] uppercase tracking-wider font-semibold">
+                    {titleCase(vehicle.make)}
+                  </p>
+                  <p className="text-white/85 text-sm flex items-center gap-1.5 flex-wrap mt-0.5">
+                    <span className="font-semibold">{titleCase(vehicle.model)}</span>
+                    <span className="text-white/40">&bull;</span>
+                    <span>{titleCase(vehicle.fuelType)}</span>
+                    <span className="text-white/40">&bull;</span>
+                    <span>{vehicle.permitType}</span>
                     {vehicle.vehicleUsage && (
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold backdrop-blur-sm ${vehicle.vehicleUsage === "COMMERCIAL" ? "bg-amber-400/30 text-amber-50" : "bg-emerald-400/30 text-emerald-50"}`}>
                         {vehicle.vehicleUsage === "COMMERCIAL" ? "Commercial" : "Private"}
@@ -636,7 +839,7 @@ export default function VehicleDetailPage() {
               </div>
 
               {/* Quick stats */}
-              <div className="flex gap-4">
+              <div className="flex gap-4 items-stretch">
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 text-center min-w-[80px]">
                   <p className="text-2xl font-bold text-white">{complianceScore}%</p>
                   <p className="text-[10px] text-white/50 uppercase tracking-wider mt-0.5">Compliance</p>
@@ -645,11 +848,102 @@ export default function VehicleDetailPage() {
                   <p className="text-2xl font-bold text-white">&#8377;{vehicle.pendingChallanAmount.toLocaleString("en-IN")}</p>
                   <p className="text-[10px] text-white/50 uppercase tracking-wider mt-0.5">Pending</p>
                 </div>
+                {vehicle.status !== "SOLD" && (
+                  <button
+                    type="button"
+                    onClick={openSellModal}
+                    className="bg-white/15 hover:bg-white/25 backdrop-blur-sm rounded-xl px-4 py-3 text-white text-sm font-semibold transition-colors flex items-center gap-2"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    Sell Vehicle
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={openDeleteModal}
+                  className="bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm rounded-xl px-4 py-3 text-white text-sm font-semibold transition-colors flex items-center gap-2"
+                  title="Delete vehicle (requires OTP)"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Sold banner */}
+      {vehicle.status === "SOLD" && vehicle.sale && (
+        <div className="rounded-2xl border-2 border-gray-900/10 dark:border-gray-100/10 bg-gradient-to-r from-gray-900 to-gray-800 dark:from-gray-100 dark:to-gray-200 p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-white text-gray-900 dark:bg-gray-900 dark:text-white">Sold</span>
+                <p className="text-white dark:text-gray-900 text-sm font-semibold">
+                  Sold on {new Date(vehicle.sale.saleDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <p className="text-white/50 dark:text-gray-500 uppercase tracking-wider font-semibold text-[9px]">Buyer</p>
+                  <p className="text-white dark:text-gray-900 font-semibold mt-0.5 truncate">{vehicle.sale.buyerName}</p>
+                </div>
+                <div>
+                  <p className="text-white/50 dark:text-gray-500 uppercase tracking-wider font-semibold text-[9px]">Phone</p>
+                  <p className="text-white dark:text-gray-900 font-semibold mt-0.5 truncate">+91 {vehicle.sale.buyerPhone}</p>
+                </div>
+                {vehicle.sale.buyerEmail && (
+                  <div>
+                    <p className="text-white/50 dark:text-gray-500 uppercase tracking-wider font-semibold text-[9px]">Email</p>
+                    <p className="text-white dark:text-gray-900 font-semibold mt-0.5 truncate">{vehicle.sale.buyerEmail}</p>
+                  </div>
+                )}
+                {vehicle.sale.soldPrice != null && (
+                  <div>
+                    <p className="text-white/50 dark:text-gray-500 uppercase tracking-wider font-semibold text-[9px]">Sold Price</p>
+                    <p className="text-white dark:text-gray-900 font-semibold mt-0.5 truncate">&#8377;{vehicle.sale.soldPrice.toLocaleString("en-IN")}</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-3 mt-3 flex-wrap">
+                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded ${vehicle.sale.pendingChallansCleared ? "bg-emerald-500/30 text-emerald-50 dark:bg-emerald-500/20 dark:text-emerald-700" : "bg-amber-500/30 text-amber-50 dark:bg-amber-500/20 dark:text-amber-700"}`}>
+                  {vehicle.sale.pendingChallansCleared ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                  {vehicle.sale.pendingChallansCleared ? "Challans Cleared" : "Challans Pending"}
+                </span>
+                {vehicle.sale.buyerDocumentUrls.length > 0 && (
+                  <span className="text-[10px] text-white/70 dark:text-gray-600 font-medium">{vehicle.sale.buyerDocumentUrls.length} buyer doc{vehicle.sale.buyerDocumentUrls.length !== 1 ? "s" : ""}</span>
+                )}
+                {vehicle.sale.transferDocumentUrls.length > 0 && (
+                  <span className="text-[10px] text-white/70 dark:text-gray-600 font-medium">{vehicle.sale.transferDocumentUrls.length} transfer doc{vehicle.sale.transferDocumentUrls.length !== 1 ? "s" : ""}</span>
+                )}
+              </div>
+              {(vehicle.sale.buyerDocumentUrls.length > 0 || vehicle.sale.transferDocumentUrls.length > 0) && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {vehicle.sale.buyerDocumentUrls.map((u, i) => (
+                    <a key={`b-${i}`} href={resolveImageUrl(u) ?? "#"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white/15 hover:bg-white/25 dark:bg-gray-900/10 dark:hover:bg-gray-900/20 text-[10px] font-semibold text-white dark:text-gray-900 transition-colors">
+                      <FileText className="w-3 h-3" /> Buyer #{i + 1}
+                    </a>
+                  ))}
+                  {vehicle.sale.transferDocumentUrls.map((u, i) => (
+                    <a key={`t-${i}`} href={resolveImageUrl(u) ?? "#"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white/15 hover:bg-white/25 dark:bg-gray-900/10 dark:hover:bg-gray-900/20 text-[10px] font-semibold text-white dark:text-gray-900 transition-colors">
+                      <FileText className="w-3 h-3" /> Transfer #{i + 1}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+              <button type="button" onClick={openSellModal} className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 dark:bg-gray-900/10 dark:hover:bg-gray-900/20 text-white dark:text-gray-900 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                <Pencil className="w-3.5 h-3.5" /> Edit Sale
+              </button>
+              <button type="button" onClick={() => setConfirmCancelSale(true)} className="px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-white dark:text-red-700 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                <X className="w-3.5 h-3.5" /> Cancel Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── MAIN GRID ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -700,6 +994,7 @@ export default function VehicleDetailPage() {
                 )}
               </div>
               {[
+                { label: "Owner", value: vehicle.ownerName || "—" },
                 { label: "Chassis No.", value: vehicle.chassisNumber || "—" },
                 { label: "Engine No.", value: vehicle.engineNumber || "—" },
                 { label: "GVW", value: vehicle.gvw ? `${vehicle.gvw} kg` : "—" },
@@ -904,6 +1199,12 @@ export default function VehicleDetailPage() {
                             className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1 transition-colors">
                             <RefreshCw className="w-3 h-3" strokeWidth={2} />
                             Renew
+                          </button>
+                          <span className="text-gray-300 dark:text-gray-600">|</span>
+                          <button onClick={() => openDocHistory(vehicle.id, doc.type)}
+                            className="text-[11px] font-medium text-gray-600 dark:text-gray-300 hover:text-brand-500 flex items-center gap-1 transition-colors">
+                            <Clock className="w-3 h-3" strokeWidth={2} />
+                            History
                           </button>
                         </>
                       ) : (
@@ -1203,7 +1504,7 @@ export default function VehicleDetailPage() {
                       </style></head><body><div class="c">
                         <img src="${qrSrc}" crossorigin="anonymous"/>
                         <div class="r">${vehicle.registrationNumber}</div>
-                        <div class="s">${vehicle.make} ${vehicle.model} &bull; ${vehicle.fuelType}</div>
+                        <div class="s">${titleCase(vehicle.make)} &bull; ${titleCase(vehicle.model)} &bull; ${titleCase(vehicle.fuelType)}</div>
                         <div class="b">Car Affair — Fleet Compliance Management</div>
                       </div><script>setTimeout(()=>window.print(),500)<\/script></body></html>`);
                       w.document.close();
@@ -1322,70 +1623,6 @@ export default function VehicleDetailPage() {
             )}
           </div> */}
 
-          {/* Document History */}
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
-            <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-brand-500" strokeWidth={2} />
-              Document History
-            </h3>
-
-            {/* Doc type filter tabs */}
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {[...new Set(vehicle.complianceDocuments.map((d: { type: string }) => d.type))].map((t) => (
-                <button key={t} onClick={() => handleViewHistory(vehicle.id, t)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${historyDoc === t ? "bg-brand-50 text-brand-600 border border-brand-200 dark:bg-brand-500/10 dark:text-brand-400 dark:border-brand-500/30" : "bg-gray-100 text-gray-500 border border-transparent hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"}`}>
-                  {DOC_LABELS[t] ? (t.length > 5 ? t.slice(0, 3) : t) : t}
-                </button>
-              ))}
-            </div>
-
-            {!historyDoc ? (
-              <p className="text-xs text-gray-400 text-center py-4">Select a document type above to view its history</p>
-            ) : historyLoading ? (
-              <div className="space-y-2 py-2 animate-pulse">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                    <div className="flex items-center gap-2.5"><div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700" /><div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" /></div>
-                    <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
-                  </div>
-                ))}
-              </div>
-            ) : historyData.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">No history for {DOC_LABELS[historyDoc] || historyDoc.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}</p>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">{DOC_LABELS[historyDoc] || historyDoc.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())} &mdash; {historyData.length} record{historyData.length > 1 ? "s" : ""}</p>
-                {historyData.map((h) => (
-                  <div key={h.id} className={`relative flex items-center justify-between p-3 rounded-xl text-xs transition-all ${h.isActive ? "bg-emerald-50 border border-emerald-200 dark:bg-emerald-500/5 dark:border-emerald-500/20" : "bg-gray-50 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700"}`}>
-                    {/* Status dot */}
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${h.isActive ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`} />
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-gray-800 dark:text-gray-200">
-                            {h.expiryDate ? new Date(h.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Lifetime"}
-                          </span>
-                          {h.isActive && <span className="text-[8px] font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-400 px-1.5 py-0.5 rounded-md">CURRENT</span>}
-                        </div>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          Created {new Date(h.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                          {h.archivedAt && <> &middot; Archived {new Date(h.archivedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</>}
-                        </p>
-                      </div>
-                    </div>
-                    {h.documentUrl && (
-                      <a href={(resolveImageUrl(h.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600 flex-shrink-0">
-                        <ExternalLink className="w-3 h-3" strokeWidth={2} />
-                        View
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Tyre Profile — view only; Edit/Set Up opens modal */}
           <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
             <div className="flex items-center justify-between px-5 py-4">
@@ -1429,6 +1666,54 @@ export default function VehicleDetailPage() {
                         <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
                           {tyre.brand}
                         </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Service Parts Profile — view only; Edit/Set Up opens modal */}
+          <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-indigo-500 flex items-center justify-center shadow-sm">
+                  <Wrench className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">Service Parts</h3>
+                  <p className="text-[10px] text-gray-400">{vehicle.serviceParts && vehicle.serviceParts.length > 0 ? `${vehicle.serviceParts.length} tracked` : "Not set up"}</p>
+                </div>
+              </div>
+              <button
+                onClick={openPartsEditor}
+                className="text-[11px] font-semibold text-brand-500 hover:text-brand-600 flex items-center gap-1"
+              >
+                <Pencil className="w-3 h-3" />
+                {vehicle.serviceParts && vehicle.serviceParts.length > 0 ? "Edit" : "Set Up"}
+              </button>
+            </div>
+
+            {!vehicle.serviceParts || vehicle.serviceParts.length === 0 ? (
+              <div className="text-center px-5 pb-5">
+                <div className="py-8 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+                  <Wrench className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                  <p className="text-xs font-medium text-gray-400">No service parts yet</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Add part numbers for Oil Filter, Air Filter, etc.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="px-5 pb-4 grid grid-cols-1 gap-2">
+                {vehicle.serviceParts.map((part) => (
+                  <div key={part.id} className="flex items-start gap-3 p-2.5 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">{part.name}</p>
+                      {part.partNumber && (
+                        <p className="text-[11px] font-mono text-gray-600 dark:text-gray-400 truncate mt-0.5">{part.partNumber}</p>
+                      )}
+                      {part.notes && (
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5">{part.notes}</p>
                       )}
                     </div>
                   </div>
@@ -2025,6 +2310,416 @@ export default function VehicleDetailPage() {
             {savingTyres ? "Saving…" : "Save Tyres"}
           </button>
         </div>
+        </div>
+      </Modal>
+
+      {/* Service Parts Profile Editor Modal */}
+      <Modal
+        isOpen={editingParts}
+        onClose={savingParts ? () => undefined : () => setEditingParts(false)}
+        showCloseButton={!savingParts}
+        className="w-[92%] max-w-[640px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col max-h-[85vh]">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-500 to-indigo-500 flex items-center justify-center">
+              <Wrench className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                {vehicle && vehicle.serviceParts && vehicle.serviceParts.length > 0 ? "Edit Service Parts" : "Set Up Service Parts"}
+              </h3>
+              <p className="text-[11px] text-gray-400">
+                Store part numbers for filters, plugs, belts, etc. — fill what you have
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-2">
+            {partsForm.map((part, idx) => (
+              <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/40 dark:bg-gray-800/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Part {idx + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPartsForm((prev) => prev.filter((_, i) => i !== idx))}
+                    className="text-gray-400 hover:text-red-500 transition-colors"
+                    title="Remove"
+                    disabled={savingParts}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Part Name (e.g. Oil Filter)"
+                    value={part.name}
+                    list={`part-names-${idx}`}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPartsForm((prev) => prev.map((p, i) => (i === idx ? { ...p, name: v } : p)));
+                    }}
+                    className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                  <datalist id={`part-names-${idx}`}>
+                    <option value="Oil Filter" />
+                    <option value="Air Filter" />
+                    <option value="Fuel Filter" />
+                    <option value="AC / Cabin Filter" />
+                    <option value="Brake Pads (Front)" />
+                    <option value="Brake Pads (Rear)" />
+                    <option value="Battery" />
+                    <option value="Spark Plugs" />
+                    <option value="Wiper Blades" />
+                    <option value="Engine Oil" />
+                    <option value="Coolant" />
+                    <option value="Timing Belt" />
+                    <option value="Drive Belt" />
+                  </datalist>
+                  <input
+                    type="text"
+                    placeholder="Part Number"
+                    value={part.partNumber}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPartsForm((prev) => prev.map((p, i) => (i === idx ? { ...p, partNumber: v } : p)));
+                    }}
+                    className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-xs font-mono text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Notes (optional)"
+                  value={part.notes}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPartsForm((prev) => prev.map((p, i) => (i === idx ? { ...p, notes: v } : p)));
+                  }}
+                  className="mt-2 h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                />
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPartsForm((prev) => [...prev, { name: "", partNumber: "", notes: "" }])}
+              disabled={savingParts}
+              className="w-full h-10 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-500 hover:border-brand-400 hover:text-brand-500 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Part
+            </button>
+          </div>
+
+          <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditingParts(false)}
+              disabled={savingParts}
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveParts}
+              disabled={savingParts}
+              className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 shadow-sm transition-colors disabled:opacity-60"
+            >
+              {savingParts ? "Saving…" : "Save Parts"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Sell Vehicle Modal */}
+      <Modal
+        isOpen={showSellModal}
+        onClose={savingSale ? () => undefined : () => setShowSellModal(false)}
+        showCloseButton={!savingSale}
+        className="w-[92%] max-w-[720px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col max-h-[88vh]">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 dark:from-gray-100 dark:to-gray-300 flex items-center justify-center">
+              <CreditCard className="w-5 h-5 text-white dark:text-gray-900" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                {vehicle.status === "SOLD" ? "Edit Sale Details" : "Sell Vehicle"}
+              </h3>
+              <p className="text-[11px] text-gray-400">Record buyer info, upload buyer & transfer documents</p>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+            {/* Buyer details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Buyer Name *</label>
+                <input type="text" value={saleForm.buyerName} onChange={(e) => setSaleForm({ ...saleForm, buyerName: e.target.value })}
+                  className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="Full name" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Buyer Mobile *</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">+91</span>
+                  <input type="tel" maxLength={10} value={saleForm.buyerPhone} onChange={(e) => setSaleForm({ ...saleForm, buyerPhone: e.target.value })}
+                    className="w-full h-10 rounded-lg border border-gray-200 bg-white pl-10 pr-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="9876543210" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Buyer Email <span className="text-gray-400 normal-case">(optional)</span></label>
+                <input type="email" value={saleForm.buyerEmail} onChange={(e) => setSaleForm({ ...saleForm, buyerEmail: e.target.value })}
+                  className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="buyer@example.com" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sold Price (&#8377;) <span className="text-gray-400 normal-case">(optional)</span></label>
+                <input type="number" min="0" value={saleForm.soldPrice} onChange={(e) => setSaleForm({ ...saleForm, soldPrice: e.target.value })}
+                  className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="0" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sale Date *</label>
+                <DatePicker value={saleForm.saleDate} onChange={(v) => setSaleForm({ ...saleForm, saleDate: v })} placeholder="Select date" />
+              </div>
+              <label className="flex items-center gap-2 mt-6 cursor-pointer select-none">
+                <input type="checkbox" checked={saleForm.pendingChallansCleared} onChange={(e) => setSaleForm({ ...saleForm, pendingChallansCleared: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400" />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Pending Challans Cleared</span>
+              </label>
+            </div>
+
+            <div className="h-px bg-gray-100 dark:bg-gray-800" />
+
+            {/* Buyer documents */}
+            <div>
+              <label className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Buyer Documents <span className="text-gray-400 normal-case">(Aadhaar, PAN, DL)</span>
+              </label>
+              <label className="flex items-center gap-2 h-10 px-3 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-brand-400 cursor-pointer transition-colors group">
+                <Upload className="w-4 h-4 text-gray-300 group-hover:text-brand-500" />
+                <span className="text-xs text-gray-400 group-hover:text-brand-600">
+                  {saleBuyerDocs.length === 0 ? "Upload buyer ID documents" : `Add more (${saleBuyerDocs.length} selected)`}
+                </span>
+                <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) setSaleBuyerDocs((prev) => [...prev, ...fs]); }} />
+              </label>
+              {saleBuyerDocs.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {saleBuyerDocs.map((f, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-400 text-[10px] font-medium">
+                      <span className="truncate max-w-[180px]">{f.name}</span>
+                      <button type="button" onClick={() => setSaleBuyerDocs((prev) => prev.filter((_, i) => i !== idx))} className="text-red-500 text-[9px] font-semibold ml-0.5" title="Remove">X</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Transfer documents */}
+            <div>
+              <label className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Transfer Documents <span className="text-gray-400 normal-case">(Form 28, 29, 30, Sale Letter)</span>
+              </label>
+              <label className="flex items-center gap-2 h-10 px-3 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-brand-400 cursor-pointer transition-colors group">
+                <Upload className="w-4 h-4 text-gray-300 group-hover:text-brand-500" />
+                <span className="text-xs text-gray-400 group-hover:text-brand-600">
+                  {saleTransferDocs.length === 0 ? "Upload transfer / RTO forms" : `Add more (${saleTransferDocs.length} selected)`}
+                </span>
+                <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) setSaleTransferDocs((prev) => [...prev, ...fs]); }} />
+              </label>
+              {saleTransferDocs.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {saleTransferDocs.map((f, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-400 text-[10px] font-medium">
+                      <span className="truncate max-w-[180px]">{f.name}</span>
+                      <button type="button" onClick={() => setSaleTransferDocs((prev) => prev.filter((_, i) => i !== idx))} className="text-red-500 text-[9px] font-semibold ml-0.5" title="Remove">X</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes <span className="text-gray-400 normal-case">(optional)</span></label>
+              <textarea value={saleForm.notes} onChange={(e) => setSaleForm({ ...saleForm, notes: e.target.value })} rows={2}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="Any additional sale notes…" />
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setShowSellModal(false)} disabled={savingSale}
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors disabled:opacity-60">Cancel</button>
+            <button type="button" onClick={handleSaveSale} disabled={savingSale}
+              className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 shadow-sm transition-colors disabled:opacity-60">
+              {savingSale ? "Saving…" : vehicle.status === "SOLD" ? "Save Changes" : "Mark as Sold"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmCancelSale}
+        title="Cancel sale?"
+        message="The vehicle will be marked Active again and the recorded sale details (buyer info, attachments) will be removed. This cannot be undone."
+        confirmLabel="Cancel Sale"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={cancellingSale}
+        onConfirm={handleCancelSale}
+        onCancel={() => (cancellingSale ? undefined : setConfirmCancelSale(false))}
+      />
+
+      {/* Delete Vehicle — OTP-gated */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={confirmingDelete ? () => undefined : () => setShowDeleteModal(false)}
+        showCloseButton={!confirmingDelete}
+        className="w-[92%] max-w-[480px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Vehicle</h3>
+              <p className="text-[11px] text-gray-400">
+                {vehicle.registrationNumber} · OTP-gated, recoverable
+              </p>
+            </div>
+          </div>
+          <div className="px-6 py-5 space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5 p-3 text-[12px] text-amber-800 dark:text-amber-400 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold">This vehicle will be archived:</p>
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>Disappears from all lists, dashboards, and reports</li>
+                  <li>Active driver is unassigned automatically</li>
+                  <li>Historical records (challans, services, EMI, etc.) are preserved</li>
+                </ul>
+                <p className="mt-1.5">You can recover it later if needed (data is kept).</p>
+              </div>
+            </div>
+
+            {requestingDeleteOtp ? (
+              <p className="text-xs text-gray-500 text-center py-4">Generating OTP…</p>
+            ) : deleteOtp ? (
+              <>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5 p-3">
+                  <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-1">
+                    Verification OTP (shown here for now — will be emailed in production)
+                  </p>
+                  <p className="text-2xl font-black font-mono tracking-[0.4em] text-amber-700 dark:text-amber-400 text-center py-1">
+                    {deleteOtp}
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Enter OTP to confirm
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={deleteOtpInput}
+                    onChange={(e) => setDeleteOtpInput(e.target.value.replace(/\D/g, ""))}
+                    placeholder="6-digit code"
+                    autoFocus
+                    className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 text-lg font-mono tracking-[0.4em] text-center text-gray-900 focus:border-red-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={confirmingDelete}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDelete}
+              disabled={confirmingDelete || !deleteOtp || deleteOtpInput.length < 4}
+              className="rounded-xl px-5 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-colors disabled:opacity-50"
+            >
+              {confirmingDelete ? "Archiving…" : "Delete Vehicle"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Document history modal — per compliance doc */}
+      <Modal
+        isOpen={historyDocType !== null}
+        onClose={() => setHistoryDocType(null)}
+        className="w-[92%] max-w-[520px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col max-h-[80vh]">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">
+                {historyDocType ? (DOC_LABELS[historyDocType] || historyDocType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())) : ""} History
+              </h3>
+              <p className="text-[11px] text-gray-400">All past versions of this document</p>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
+            {historyLoading ? (
+              <div className="space-y-2 py-2 animate-pulse">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                    <div className="flex items-center gap-2.5"><div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-700" /><div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" /></div>
+                    <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : historyData.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-6">No history yet — this is the first version.</p>
+            ) : (
+              <>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold px-1">{historyData.length} record{historyData.length > 1 ? "s" : ""}</p>
+                {historyData.map((h) => (
+                  <div key={h.id} className={`relative flex items-center justify-between p-3 rounded-xl text-xs transition-all ${h.isActive ? "bg-emerald-50 border border-emerald-200 dark:bg-emerald-500/5 dark:border-emerald-500/20" : "bg-gray-50 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700"}`}>
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${h.isActive ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`} />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-gray-800 dark:text-gray-200">
+                            {h.expiryDate ? new Date(h.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Lifetime"}
+                          </span>
+                          {h.isActive && <span className="text-[8px] font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-400 px-1.5 py-0.5 rounded-md">CURRENT</span>}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          Created {new Date(h.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          {h.archivedAt && <> &middot; Archived {new Date(h.archivedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</>}
+                        </p>
+                      </div>
+                    </div>
+                    {h.documentUrl && (
+                      <a href={(resolveImageUrl(h.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600 flex-shrink-0">
+                        <ExternalLink className="w-3 h-3" strokeWidth={2} />
+                        View
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+            <button type="button" onClick={() => setHistoryDocType(null)} className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors">Close</button>
+          </div>
         </div>
       </Modal>
 

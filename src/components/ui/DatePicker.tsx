@@ -20,6 +20,8 @@ export default function DatePicker({
 }: DatePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const fpRef = useRef<flatpickr.Instance | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     if (!inputRef.current) return;
@@ -33,7 +35,7 @@ export default function DatePicker({
         if (selectedDates.length > 0) {
           const d = selectedDates[0];
           const formatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-          onChange(formatted);
+          onChangeRef.current(formatted);
         }
       },
     });

@@ -2,7 +2,7 @@ import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
 import { NotFoundError } from "@/lib/errors";
 import { Expense } from "@/models";
-import { parseMultipart, firstFile } from "@/lib/upload";
+import { parseMultipart, manyFiles } from "@/lib/upload";
 import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
 
 export const runtime = "nodejs";
@@ -19,9 +19,11 @@ export const PUT = withRoute<{ id: string; expenseId: string }>(
     );
     if (!existing) throw new NotFoundError("Expense not found");
 
-    const proof = firstFile(files, "proof");
+    const newProofs = manyFiles(files, "proof").map((p) => p.url);
+    const replace = val("replaceProofs") === "1";
+    const existingProofs = (existing.proofUrls as string[] | undefined) ?? [];
     const update: Record<string, unknown> = {
-      proofUrl: proof?.url ?? existing.proofUrl,
+      proofUrls: replace ? newProofs : [...existingProofs, ...newProofs],
     };
     if (val("category")) update.category = val("category");
     if (val("title")) update.title = val("title");

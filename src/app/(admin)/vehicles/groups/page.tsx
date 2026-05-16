@@ -209,13 +209,16 @@ export default function VehicleGroupsPage() {
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Icon</label>
                     <div className="grid grid-cols-4 gap-2">
-                      {VEHICLE_TYPE_ICONS.map((item) => (
-                        <button key={item.key} type="button" onClick={() => setFormIcon(item.key)}
-                          className={`flex flex-col items-center gap-1.5 rounded-xl border-2 py-3 transition-all ${formIcon === item.key ? "border-brand-400 bg-brand-50 dark:bg-brand-500/10" : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800"}`}>
-                          <item.component className="w-6 h-6" style={{ color: formColor }} />
-                          <span className="text-[10px] font-semibold text-gray-600 dark:text-gray-400">{item.label}</span>
-                        </button>
-                      ))}
+                      {VEHICLE_TYPE_ICONS.map((item) => {
+                        const isSelected = formIcon === item.key;
+                        return (
+                          <button key={item.key} type="button" onClick={() => setFormIcon(item.key)}
+                            className={`flex flex-col items-center gap-1.5 rounded-xl border-2 py-3 transition-all ${isSelected ? "border-brand-400 bg-brand-50 dark:bg-brand-500/10" : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800"}`}>
+                            <item.component className={`w-6 h-6 ${isSelected ? "" : "text-gray-400 dark:text-gray-500"}`} style={isSelected ? { color: formColor } : undefined} />
+                            <span className="text-[10px] font-semibold text-gray-600 dark:text-gray-400">{item.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   <div>

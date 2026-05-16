@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { ExpensesDashboardSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
-import { pickValidatedFile } from "@/lib/file-validation";
+import { pickValidatedFiles } from "@/lib/file-validation";
 import {
   Plus, Download, AlertTriangle, Wrench, Car, CheckCircle2,
   MoreHorizontal, BarChart3, PieChart, FileText,
@@ -19,7 +19,7 @@ import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 interface VehicleBasic { id: string; registrationNumber: string; make: string; model: string; }
-interface ExpenseItem { source: string; date: string; vehicleId: string; vehicle: VehicleBasic | null; title: string; amount: number; handlingCharges?: number; proofUrl: string | null; category: string; }
+interface ExpenseItem { source: string; date: string; vehicleId: string; vehicle: VehicleBasic | null; title: string; amount: number; handlingCharges?: number; proofUrls: string[]; category: string; }
 interface ReportData {
   summary: { totalSpent: number; breakdown: Record<string, number> };
   timeline: Array<{ period: string; [key: string]: string | number }>;
@@ -81,7 +81,7 @@ function VehicleExpensesContent() {
   const [showModal, setShowModal] = useState(false);
   const [expVehicleId, setExpVehicleId] = useState("");
   const [expForm, setExpForm] = useState({ category: "COMPLIANCE", title: "", amount: "", handlingCharges: "", expenseDate: new Date().toISOString().split("T")[0], description: "" });
-  const [expProof, setExpProof] = useState<File | null>(null);
+  const [expProofs, setExpProofs] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -119,10 +119,10 @@ function VehicleExpensesContent() {
       fd.append("category", expForm.category); fd.append("title", expForm.title); fd.append("amount", expForm.amount); fd.append("expenseDate", expForm.expenseDate);
       if (expForm.handlingCharges) fd.append("handlingCharges", expForm.handlingCharges);
       if (expForm.description) fd.append("description", expForm.description);
-      if (expProof) fd.append("proof", expProof);
+      for (const f of expProofs) fd.append("proof", f);
       await vehicleAPI.createExpense(expVehicleId, fd);
       toast.success("Expense Logged", "Expense recorded successfully");
-      setShowModal(false); setExpForm({ category: "COMPLIANCE", title: "", amount: "", handlingCharges: "", expenseDate: new Date().toISOString().split("T")[0], description: "" }); setExpProof(null);
+      setShowModal(false); setExpForm({ category: "COMPLIANCE", title: "", amount: "", handlingCharges: "", expenseDate: new Date().toISOString().split("T")[0], description: "" }); setExpProofs([]);
       fetchReport();
     } catch { toast.error("Error", "Failed to log expense"); }
     finally { setSaving(false); }
@@ -575,7 +575,7 @@ function VehicleExpensesContent() {
                       <th className="text-left px-5 py-3.5 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Category</th>
                       <th className="text-left px-5 py-3.5 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Title</th>
                       <th className="text-right px-5 py-3.5 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Amount</th>
-                      <th className="text-center px-5 py-3.5 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Proof</th>
+                      <th className="text-center px-5 py-3.5 font-bold text-gray-500 uppercase tracking-wider text-[10px]">Attachments</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100/50 dark:divide-gray-800/50">
@@ -603,10 +603,17 @@ function VehicleExpensesContent() {
                             )}
                           </td>
                           <td className="px-5 py-3.5 text-center">
-                            {exp.proofUrl ? (
-                              <a href={resolveImageUrl(exp.proofUrl) ?? "#"} target="_blank" rel="noreferrer" className="w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center text-brand-500 hover:text-brand-600 mx-auto transition-colors">
-                                <ImageIcon className="w-3.5 h-3.5" />
-                              </a>
+                            {exp.proofUrls.length > 0 ? (
+                              <div className="inline-flex items-center gap-1 justify-center">
+                                {exp.proofUrls.slice(0, 3).map((url, idx) => (
+                                  <a key={idx} href={resolveImageUrl(url) ?? "#"} target="_blank" rel="noreferrer" className="w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center text-brand-500 hover:text-brand-600 transition-colors" title={`Attachment ${idx + 1}`}>
+                                    <ImageIcon className="w-3.5 h-3.5" />
+                                  </a>
+                                ))}
+                                {exp.proofUrls.length > 3 && (
+                                  <span className="text-[10px] font-semibold text-gray-500 ml-0.5">+{exp.proofUrls.length - 3}</span>
+                                )}
+                              </div>
                             ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                           </td>
                         </tr>
@@ -672,28 +679,33 @@ function VehicleExpensesContent() {
                   </span>
                 </div>
               </div>
-              {/* Row 3: Date + Proof */}
+              {/* Row 3: Date + Attachment */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Date *</label>
                   <DatePicker value={expForm.expenseDate} onChange={(v) => setExpForm({ ...expForm, expenseDate: v })} placeholder="Select date" />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Proof</label>
-                  {expProof ? (
-                    <div className="flex items-center gap-1.5 h-9 text-[10px]">
-                      <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 font-medium truncate max-w-[140px]">{expProof.name}</span>
-                      <button type="button" onClick={() => setExpProof(null)} className="text-red-500 text-[9px] font-semibold">X</button>
-                    </div>
-                  ) : (
-                    <label className="flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 cursor-pointer transition-colors group">
-                      <Upload className="w-3.5 h-3.5 text-gray-300 group-hover:text-yellow-500" />
-                      <span className="text-[10px] text-gray-400 group-hover:text-yellow-600">Upload receipt</span>
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m)); if (f) setExpProof(f); }} />
-                    </label>
-                  )}
+                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Attachments</label>
+                  <label className="flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 cursor-pointer transition-colors group">
+                    <Upload className="w-3.5 h-3.5 text-gray-300 group-hover:text-yellow-500" />
+                    <span className="text-[10px] text-gray-400 group-hover:text-yellow-600">
+                      {expProofs.length === 0 ? "Upload receipts" : `Add more (${expProofs.length} selected)`}
+                    </span>
+                    <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) setExpProofs((prev) => [...prev, ...fs]); }} />
+                  </label>
                 </div>
               </div>
+              {expProofs.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {expProofs.map((f, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 text-[10px] font-medium">
+                      <span className="truncate max-w-[140px]">{f.name}</span>
+                      <button type="button" onClick={() => setExpProofs((prev) => prev.filter((_, i) => i !== idx))} className="text-red-500 text-[9px] font-semibold ml-0.5" title="Remove">X</button>
+                    </span>
+                  ))}
+                </div>
+              )}
               {/* Row 4: Notes */}
               <div>
                 <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Notes</label>

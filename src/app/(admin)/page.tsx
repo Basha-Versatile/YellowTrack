@@ -127,6 +127,7 @@ export default function DashboardPage() {
               title="Document Status"
               counts={vc}
               total={totalVDocs}
+              basePath="/compliance"
             />
 
             <Link href="/compliance" className="mt-5 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
@@ -164,6 +165,7 @@ export default function DashboardPage() {
               title="Document Status"
               counts={dAll}
               total={totalDAll}
+              basePath="/drivers/compliance"
             />
 
             <Link href="/drivers/compliance" className="mt-5 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
@@ -244,9 +246,9 @@ function StatCard({ Icon, label, value, sub, href, accent, success }: { Icon: Lu
   );
 }
 
-function StatusTile({ label, sublabel, count, dotColor, bgColor, textColor }: { label: string; sublabel: string; count: number; dotColor: string; bgColor: string; textColor: string }) {
-  return (
-    <div className={`rounded-xl px-4 py-3.5 ${bgColor} transition-all hover:scale-[1.02]`}>
+function StatusTile({ label, sublabel, count, dotColor, bgColor, textColor, href }: { label: string; sublabel: string; count: number; dotColor: string; bgColor: string; textColor: string; href?: string }) {
+  const content = (
+    <div className={`rounded-xl px-4 py-3.5 ${bgColor} transition-all hover:scale-[1.02] ${href ? "cursor-pointer" : ""}`}>
       <div className="flex items-center gap-2 mb-1">
         <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
         <span className={`text-xs font-bold ${textColor}`}>{label}</span>
@@ -255,6 +257,7 @@ function StatusTile({ label, sublabel, count, dotColor, bgColor, textColor }: { 
       <p className="text-[10px] text-gray-400 mt-0.5">{sublabel}</p>
     </div>
   );
+  return href ? <Link href={href} className="block">{content}</Link> : content;
 }
 
 type ComplianceCounts = { green: number; yellow: number; orange: number; red: number };
@@ -264,12 +267,16 @@ function ComplianceSection({
   title,
   counts,
   total,
+  basePath,
 }: {
   icon: React.ReactNode;
   title: string;
   counts: ComplianceCounts;
   total: number;
+  basePath?: string;
 }) {
+  const tileHref = (status: "GREEN" | "YELLOW" | "ORANGE" | "RED") =>
+    basePath ? `${basePath}?status=${status}` : undefined;
   return (
     <div>
       <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -281,16 +288,16 @@ function ComplianceSection({
           <>
             {counts.green > 0 && <div className="bg-emerald-500 transition-all duration-700" style={{ width: `${(counts.green / total) * 100}%` }} />}
             {counts.yellow > 0 && <div className="bg-amber-400 transition-all duration-700" style={{ width: `${(counts.yellow / total) * 100}%` }} />}
-            {counts.orange > 0 && <div className="bg-orange-500 transition-all duration-700" style={{ width: `${(counts.orange / total) * 100}%` }} />}
+            {counts.orange > 0 && <div className="bg-amber-500 animate-blink transition-all duration-700" style={{ width: `${(counts.orange / total) * 100}%` }} />}
             {counts.red > 0 && <div className="bg-red-500 transition-all duration-700" style={{ width: `${(counts.red / total) * 100}%` }} />}
           </>
         )}
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <StatusTile label="Valid" sublabel="> 30 days" count={counts.green} dotColor="bg-emerald-500" bgColor="bg-emerald-50 dark:bg-emerald-500/10" textColor="text-emerald-700 dark:text-emerald-400" />
-        <StatusTile label="Expiring" sublabel="≤ 30 days" count={counts.yellow} dotColor="bg-amber-400" bgColor="bg-amber-50 dark:bg-amber-500/10" textColor="text-amber-700 dark:text-amber-400" />
-        <StatusTile label="Critical" sublabel="≤ 7 days" count={counts.orange} dotColor="bg-orange-500" bgColor="bg-orange-50 dark:bg-orange-500/10" textColor="text-orange-700 dark:text-orange-400" />
-        <StatusTile label="Expired" sublabel="≤ 0 days" count={counts.red} dotColor="bg-red-500" bgColor="bg-red-50 dark:bg-red-500/10" textColor="text-red-700 dark:text-red-400" />
+        <StatusTile label="Valid" sublabel="> 30 days" count={counts.green} dotColor="bg-emerald-500" bgColor="bg-emerald-50 dark:bg-emerald-500/10" textColor="text-emerald-700 dark:text-emerald-400" href={tileHref("GREEN")} />
+        <StatusTile label="Expiring" sublabel="≤ 30 days" count={counts.yellow} dotColor="bg-amber-400" bgColor="bg-amber-50 dark:bg-amber-500/10" textColor="text-amber-700 dark:text-amber-400" href={tileHref("YELLOW")} />
+        <StatusTile label="Critical" sublabel="≤ 7 days" count={counts.orange} dotColor="bg-amber-500 animate-blink" bgColor="bg-amber-50 dark:bg-amber-500/10" textColor="text-amber-700 dark:text-amber-400" href={tileHref("ORANGE")} />
+        <StatusTile label="Expired" sublabel="≤ 0 days" count={counts.red} dotColor="bg-red-500" bgColor="bg-red-50 dark:bg-red-500/10" textColor="text-red-700 dark:text-red-400" href={tileHref("RED")} />
       </div>
     </div>
   );

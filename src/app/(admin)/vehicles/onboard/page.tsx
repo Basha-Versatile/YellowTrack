@@ -195,7 +195,7 @@ export default function OnboardVehiclePage() {
                   <div className="relative inline-flex w-80 p-1 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                     <span
                       aria-hidden
-                      className={`absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-yellow-400 shadow-sm transition-transform duration-300 ease-out ${vehicleUsage === "COMMERCIAL" ? "translate-x-full" : "translate-x-0"}`}
+                      className={`absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-full shadow-sm transition-all duration-300 ease-out ${vehicleUsage === "COMMERCIAL" ? "translate-x-full bg-yellow-400" : "translate-x-0 bg-white dark:bg-gray-200"}`}
                     />
                     {[
                       { val: "PRIVATE" as const, label: "Private", Icon: ShieldCheck },
@@ -393,7 +393,7 @@ export default function OnboardVehiclePage() {
                   <div className="relative inline-flex w-80 p-1 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                     <span
                       aria-hidden
-                      className={`absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-yellow-400 shadow-sm transition-transform duration-300 ease-out ${vehicleUsage === "COMMERCIAL" ? "translate-x-full" : "translate-x-0"}`}
+                      className={`absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-full shadow-sm transition-all duration-300 ease-out ${vehicleUsage === "COMMERCIAL" ? "translate-x-full bg-yellow-400" : "translate-x-0 bg-white dark:bg-gray-200"}`}
                     />
                     {[
                       { val: "PRIVATE" as const, label: "Private", Icon: ShieldCheck },

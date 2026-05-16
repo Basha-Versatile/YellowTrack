@@ -16,9 +16,12 @@ import {
   CreditCard,
   IndianRupee,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
   X,
   FileSpreadsheet,
 } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 
 type VehicleBasic = {
   id: string;
@@ -95,6 +98,11 @@ export default function EmiHubPage() {
   const [creatingFor, setCreatingFor] = useState<VehicleBasic | null>(null);
   const [openCreatePicker, setOpenCreatePicker] = useState(false);
   const [createPickerSelection, setCreatePickerSelection] = useState("");
+  const [calMonth, setCalMonth] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const [calSelectedDay, setCalSelectedDay] = useState<number | null>(null);
 
   // Note: `toast` intentionally excluded from deps — useToast returns a new
   // ref each render and would re-fire this loader on every render.
@@ -170,6 +178,60 @@ export default function EmiHubPage() {
       { outstanding: 0, pendingCount: 0 },
     );
   }, [hub]);
+
+  // EMI calendar — group ACTIVE plans by their due day in the viewed month.
+  // dueDayOfMonth that exceeds the month's length is clamped to the last day.
+  const calendarData = useMemo(() => {
+    const daysInMonth = new Date(calMonth.year, calMonth.month + 1, 0).getDate();
+    const firstWeekday = new Date(calMonth.year, calMonth.month, 1).getDay();
+    const byDay = new Map<number, EmiPlanRow[]>();
+    if (hub) {
+      for (const r of hub.rows) {
+        if (r.status !== "ACTIVE") continue;
+        if (vehicleId && String(r.vehicleId) !== vehicleId) continue;
+        const day = Math.min(r.dueDayOfMonth, daysInMonth);
+        if (!byDay.has(day)) byDay.set(day, []);
+        byDay.get(day)!.push(r);
+      }
+    }
+    let monthTotal = 0;
+    let monthCount = 0;
+    for (const rows of byDay.values()) {
+      for (const r of rows) {
+        monthTotal += r.emiAmount;
+        monthCount += 1;
+      }
+    }
+    return { daysInMonth, firstWeekday, byDay, monthTotal, monthCount };
+  }, [hub, calMonth, vehicleId]);
+
+  const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  const stepMonth = (delta: number) => {
+    setCalMonth((prev) => {
+      const d = new Date(prev.year, prev.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+    setCalSelectedDay(null);
+  };
+  const goToday = () => {
+    const d = new Date();
+    setCalMonth({ year: d.getFullYear(), month: d.getMonth() });
+    setCalSelectedDay(null);
+  };
+
+  const selectedDayPlans = useMemo(() => {
+    if (calSelectedDay == null) return [];
+    return calendarData.byDay.get(calSelectedDay) ?? [];
+  }, [calSelectedDay, calendarData]);
+  const selectedDayTotal = useMemo(
+    () => selectedDayPlans.reduce((s, r) => s + r.emiAmount, 0),
+    [selectedDayPlans],
+  );
+
+  const today = new Date();
+  const isTodayInMonth = today.getFullYear() === calMonth.year && today.getMonth() === calMonth.month;
 
   const openCreate = () => {
     setCreatePickerSelection("");
@@ -252,6 +314,93 @@ export default function EmiHubPage() {
         />
       </div>
 
+      {/* EMI Calendar */}
+      <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
+        <div className="flex items-center justify-between gap-3 flex-wrap px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 flex items-center justify-center">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">EMI Calendar</h3>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                {calendarData.monthCount} EMI{calendarData.monthCount === 1 ? "" : "s"} this month · Total {formatINR(calendarData.monthTotal)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => stepMonth(-1)} className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" title="Previous month">
+              <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            </button>
+            <div className="min-w-[150px] text-center">
+              <p className="text-sm font-bold text-gray-900 dark:text-white">
+                {MONTH_NAMES[calMonth.month]} {calMonth.year}
+              </p>
+            </div>
+            <button type="button" onClick={() => stepMonth(1)} className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" title="Next month">
+              <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            </button>
+            <button type="button" onClick={goToday} className="ml-1 px-3 h-8 rounded-lg border border-gray-200 dark:border-gray-700 text-[11px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              Today
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="grid grid-cols-7 gap-1.5 mb-2">
+            {WEEKDAY_NAMES.map((d) => (
+              <div key={d} className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider text-center py-1">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1.5">
+            {Array.from({ length: calendarData.firstWeekday }).map((_, i) => (
+              <div key={`pad-${i}`} className="min-h-[88px]" />
+            ))}
+            {Array.from({ length: calendarData.daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const rows = calendarData.byDay.get(day) ?? [];
+              const dayTotal = rows.reduce((s, r) => s + r.emiAmount, 0);
+              const isToday = isTodayInMonth && today.getDate() === day;
+              const hasEmi = rows.length > 0;
+              const visibleRegs = rows.slice(0, 2);
+              const remainder = rows.length - visibleRegs.length;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => hasEmi && setCalSelectedDay(day)}
+                  disabled={!hasEmi}
+                  className={`min-h-[88px] rounded-lg border p-1.5 flex flex-col items-start text-left transition-all ${
+                    hasEmi
+                      ? "border-yellow-300/70 bg-yellow-50/60 hover:bg-yellow-100 dark:border-yellow-500/30 dark:bg-yellow-500/5 dark:hover:bg-yellow-500/10 cursor-pointer"
+                      : "border-gray-100 dark:border-gray-800 cursor-default"
+                  } ${isToday ? "ring-2 ring-brand-400" : ""}`}
+                >
+                  <span className={`text-[11px] font-bold ${isToday ? "text-brand-600 dark:text-brand-400" : "text-gray-700 dark:text-gray-300"}`}>
+                    {day}
+                  </span>
+                  {hasEmi && (
+                    <div className="w-full mt-1 space-y-0.5">
+                      <p className="text-[10px] font-black text-yellow-700 dark:text-yellow-400 truncate">
+                        {formatINR(dayTotal)}
+                      </p>
+                      {visibleRegs.map((r) => (
+                        <p key={r.id} className="text-[9px] font-mono font-semibold text-gray-700 dark:text-gray-300 truncate" title={r.vehicle?.registrationNumber ?? ""}>
+                          {r.vehicle?.registrationNumber ?? "—"}
+                        </p>
+                      ))}
+                      {remainder > 0 && (
+                        <p className="text-[9px] text-gray-500 dark:text-gray-400 font-semibold">+{remainder} more</p>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="flex items-center flex-wrap gap-2.5 justify-between">
         <div className="flex items-center flex-wrap gap-1.5">
@@ -303,6 +452,75 @@ export default function EmiHubPage() {
           </div>
         )}
       </div>
+
+      {/* EMI calendar — day details modal */}
+      <Modal
+        isOpen={calSelectedDay != null}
+        onClose={() => setCalSelectedDay(null)}
+        className="w-[92%] max-w-[680px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col max-h-[85vh]">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 flex items-center justify-center">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                EMIs due on {calSelectedDay} {MONTH_NAMES[calMonth.month]} {calMonth.year}
+              </h3>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                {selectedDayPlans.length} EMI{selectedDayPlans.length === 1 ? "" : "s"} · Total {formatINR(selectedDayTotal)}
+              </p>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
+            {selectedDayPlans.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-6">No EMIs scheduled for this day.</p>
+            ) : (
+              selectedDayPlans.map((p) => (
+                <Link
+                  key={p.id}
+                  href={p.vehicle ? `/vehicles/${p.vehicle.id}` : "#"}
+                  onClick={() => setCalSelectedDay(null)}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/40 dark:bg-gray-800/30 hover:bg-yellow-50 dark:hover:bg-yellow-500/5 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 flex items-center justify-center flex-shrink-0">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-gray-900 dark:text-white font-mono">
+                        {p.vehicle?.registrationNumber ?? "—"}
+                      </p>
+                      <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${STATUS_TINT[p.status]}`}>{p.status}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                      <span className="font-medium text-gray-700 dark:text-gray-300">{p.lenderName}</span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span>{p.lenderType}</span>
+                      {p.debitBankName && (
+                        <>
+                          <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                          <span>{p.debitBankName}{p.debitAccountMasked ? ` ${p.debitAccountMasked}` : ""}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-black text-yellow-700 dark:text-yellow-400">{formatINR(p.emiAmount)}</p>
+                    <p className="text-[10px] text-gray-400">
+                      {p.paidInstallments}/{p.totalInstallments} paid
+                    </p>
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
+          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+            <button type="button" onClick={() => setCalSelectedDay(null)} className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors">Close</button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Vehicle picker modal (step 1 of create) */}
       {openCreatePicker && (

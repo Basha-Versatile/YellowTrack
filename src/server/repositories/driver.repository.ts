@@ -128,7 +128,7 @@ export async function update(
   const doc = await Driver.findOneAndUpdate(
     tenantFilter(ctx, { _id: id }),
     data,
-    { new: true },
+    { new: true, strict: false },
   );
   if (!doc) return null;
   return findById(ctx, id);

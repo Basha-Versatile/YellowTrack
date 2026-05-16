@@ -17,6 +17,7 @@ export const getVehiclesQuerySchema = z.object({
   status: z.enum(["GREEN", "YELLOW", "RED"]).optional(),
   groupId: z.string().optional(),
   vehicleUsage: z.enum(["PRIVATE", "COMMERCIAL"]).optional(),
+  lifecycle: z.enum(["ACTIVE", "SOLD"]).optional(),
 });
 
 export const manualOnboardSchema = z

@@ -19,11 +19,22 @@ const BusIcon: React.FC<IconProps> = (props) => (
   </svg>
 );
 
-const CabIcon: React.FC<IconProps> = (props) => (
+const CarIcon: React.FC<IconProps> = (props) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M10 2h4l1 3H9l1-3Z" />
-    <path d="M5 7h14l2 6v5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5l2-6Z" />
-    <path d="M5 13h14" /><circle cx="7.5" cy="16" r="1" /><circle cx="16.5" cy="16" r="1" />
+    <path d="M5 11l2-5h10l2 5" />
+    <path d="M3 11h18v5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5Z" />
+    <circle cx="7.5" cy="14.5" r="1.5" /><circle cx="16.5" cy="14.5" r="1.5" />
+    <path d="M7 9h10" />
+  </svg>
+);
+
+const TwoWheelerIcon: React.FC<IconProps> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="5.5" cy="17.5" r="3.5" />
+    <circle cx="18.5" cy="17.5" r="3.5" />
+    <path d="M15 6h3l-3 6h-5l-3-4H5" />
+    <path d="M5.5 17.5l4.5-7" />
+    <path d="M18.5 17.5L15 6" />
   </svg>
 );
 
@@ -64,8 +75,8 @@ const OthersIcon: React.FC<IconProps> = (props) => (
 );
 
 const ICON_MAP: Record<string, React.FC<IconProps>> = {
-  truck: TruckIcon, bus: BusIcon, cab: CabIcon, auto: AutoIcon,
-  suv: SUVIcon, sedan: SedanIcon, van: VanIcon, others: OthersIcon,
+  truck: TruckIcon, bus: BusIcon, car: CarIcon, cab: CarIcon, auto: AutoIcon,
+  twowheeler: TwoWheelerIcon, suv: SUVIcon, sedan: SedanIcon, van: VanIcon, others: OthersIcon,
 };
 
 export const getVehicleTypeIcon = (iconKey: string): React.FC<IconProps> => ICON_MAP[iconKey] || OthersIcon;
@@ -73,7 +84,8 @@ export const getVehicleTypeIcon = (iconKey: string): React.FC<IconProps> => ICON
 export const VEHICLE_TYPE_ICONS = [
   { key: "truck", label: "Truck", component: TruckIcon },
   { key: "bus", label: "Bus", component: BusIcon },
-  { key: "cab", label: "Cab", component: CabIcon },
+  { key: "car", label: "Car", component: CarIcon },
+  { key: "twowheeler", label: "Two Wheeler", component: TwoWheelerIcon },
   { key: "suv", label: "SUV", component: SUVIcon },
   { key: "sedan", label: "Sedan", component: SedanIcon },
   { key: "van", label: "Van", component: VanIcon },

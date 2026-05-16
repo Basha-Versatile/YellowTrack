@@ -2,7 +2,7 @@ import { withRoute } from "@/lib/api-handler";
 import { success, created } from "@/lib/http";
 import { BadRequestError } from "@/lib/errors";
 import { Expense } from "@/models";
-import { parseMultipart, firstFile } from "@/lib/upload";
+import { parseMultipart, manyFiles } from "@/lib/upload";
 import {
   tenantOf,
   tenantFilter,
@@ -64,7 +64,7 @@ export const POST = withRoute<{ id: string }>(
       handlingCharges = n;
     }
 
-    const proof = firstFile(files, "proof");
+    const proofs = manyFiles(files, "proof");
     const expense = await Expense.create({
       ...tenantStamp(ctx),
       vehicleId: params.id,
@@ -74,7 +74,7 @@ export const POST = withRoute<{ id: string }>(
       handlingCharges,
       expenseDate: new Date(expenseDate),
       description: val("description") ?? null,
-      proofUrl: proof?.url ?? null,
+      proofUrls: proofs.map((p) => p.url),
       referenceId: val("referenceId") ?? null,
     });
     return created(expense, "Expense logged");

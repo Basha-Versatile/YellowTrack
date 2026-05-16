@@ -19,7 +19,7 @@ const expenseSchema = new Schema(
     handlingCharges: { type: Number, min: 0, default: 0 },
     expenseDate: { type: Date, required: true, index: true },
     description: { type: String },
-    proofUrl: { type: String },
+    proofUrls: { type: [String], default: [] },
     referenceId: { type: String },
   },
   { timestamps: true },

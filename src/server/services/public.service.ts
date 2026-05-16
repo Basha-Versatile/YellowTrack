@@ -17,6 +17,9 @@ const PUBLIC_SIMPLE_FIELDS = [
   "bloodGroup",
   "fatherName",
   "motherName",
+  "pfAccountNumber",
+  "medicalInsuranceName",
+  "medicalInsuranceNumber",
 ];
 const PUBLIC_ADDRESS_FIELDS = [
   "currentAddress",
@@ -108,6 +111,9 @@ export async function getDriverByToken(token: string) {
     profilePhoto: d.profilePhoto ?? null,
     selfVerifiedAt: d.selfVerifiedAt ?? null,
     adminVerified: d.adminVerified ?? false,
+    pfAccountNumber: d.pfAccountNumber ?? null,
+    medicalInsuranceName: d.medicalInsuranceName ?? null,
+    medicalInsuranceNumber: d.medicalInsuranceNumber ?? null,
   };
 }
 

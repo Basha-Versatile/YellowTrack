@@ -392,6 +392,9 @@ const SIMPLE_FIELDS = [
   "bloodGroup",
   "fatherName",
   "motherName",
+  "pfAccountNumber",
+  "medicalInsuranceName",
+  "medicalInsuranceNumber",
 ];
 const ADDRESS_FIELDS = [
   "currentAddress",

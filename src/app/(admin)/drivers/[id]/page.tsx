@@ -85,6 +85,9 @@ const FIELD_LABELS: Record<string, string> = {
   profilePhoto: "Profile Photo",
   currentAddressPhotos: "Current Address Photo",
   permanentAddressPhotos: "Permanent Address Photo",
+  pfAccountNumber: "PF Account Number",
+  medicalInsuranceName: "Medical Insurance Provider",
+  medicalInsuranceNumber: "Medical Insurance Policy/Account",
 };
 
 type DriverChangeEntry = {
@@ -214,6 +217,9 @@ interface Driver {
   permanentAddressLng: number | null;
   selfVerifiedAt: string | null;
   adminVerified: boolean;
+  pfAccountNumber: string | null;
+  medicalInsuranceName: string | null;
+  medicalInsuranceNumber: string | null;
   createdAt: string;
   documents: DriverDoc[];
 }
@@ -289,6 +295,7 @@ export default function DriverDetailPage() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editForm, setEditForm] = useState({
     phone: "", aadhaarLast4: "", bloodGroup: "", fatherName: "", motherName: "",
+    pfAccountNumber: "", medicalInsuranceName: "", medicalInsuranceNumber: "",
   });
   const [currentAddr, setCurrentAddr] = useState<AddressValue>({ address: "", lat: null, lng: null });
   const [permanentAddr, setPermanentAddr] = useState<AddressValue>({ address: "", lat: null, lng: null });
@@ -322,6 +329,9 @@ export default function DriverDetailPage() {
       bloodGroup: driver.bloodGroup || "",
       fatherName: driver.fatherName || "",
       motherName: driver.motherName || "",
+      pfAccountNumber: driver.pfAccountNumber || "",
+      medicalInsuranceName: driver.medicalInsuranceName || "",
+      medicalInsuranceNumber: driver.medicalInsuranceNumber || "",
     });
     setCurrentAddr({
       address: driver.currentAddress || "",
@@ -759,6 +769,25 @@ export default function DriverDetailPage() {
             )}
           </div>
 
+          {/* Benefits & Insurance Card */}
+          <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-yellow-500" />
+                Benefits & Insurance
+              </h3>
+              <button onClick={openEditProfile} className="text-xs font-semibold text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 flex items-center gap-1">
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            </div>
+            <div className="p-6 space-y-0">
+              <InfoRow icon="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" label="PF Account Number" value={driver.pfAccountNumber || "Not provided"} highlight={!!driver.pfAccountNumber} />
+              <InfoRow icon="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" label="Medical Insurance" value={driver.medicalInsuranceName || "Not provided"} highlight={!!driver.medicalInsuranceName} />
+              <InfoRow icon="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5H4.5a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" label="Policy / Account No." value={driver.medicalInsuranceNumber || "Not provided"} />
+            </div>
+          </div>
+
         </div>
 
         {/* Right Column — Documents + Address */}
@@ -1137,6 +1166,21 @@ export default function DriverDetailPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div><label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Father&apos;s Name</label><input type="text" placeholder="Father's full name" value={editForm.fatherName} onChange={(e) => setEditForm({ ...editForm, fatherName: e.target.value })} className={inputClass} /></div>
                   <div><label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Mother&apos;s Name</label><input type="text" placeholder="Mother's full name" value={editForm.motherName} onChange={(e) => setEditForm({ ...editForm, motherName: e.target.value })} className={inputClass} /></div>
+                </div>
+              </div>
+
+              <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent dark:via-gray-700" />
+
+              {/* Benefits & Insurance */}
+              <div>
+                <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-yellow-100 dark:bg-yellow-500/20 flex items-center justify-center"><CreditCard className="w-3 h-3 text-yellow-600" /></span>
+                  Benefits & Insurance
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2"><label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">PF Account Number</label><input type="text" placeholder="e.g. AB/CDE/1234567/000/1234567" value={editForm.pfAccountNumber} onChange={(e) => setEditForm({ ...editForm, pfAccountNumber: e.target.value })} className={inputClass} /></div>
+                  <div><label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Medical Insurance Provider</label><input type="text" placeholder="e.g. ESIC, Star Health" value={editForm.medicalInsuranceName} onChange={(e) => setEditForm({ ...editForm, medicalInsuranceName: e.target.value })} className={inputClass} /></div>
+                  <div><label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Policy / Account Number</label><input type="text" placeholder="e.g. ESIC IP / Policy No." value={editForm.medicalInsuranceNumber} onChange={(e) => setEditForm({ ...editForm, medicalInsuranceNumber: e.target.value })} className={inputClass} /></div>
                 </div>
               </div>
 

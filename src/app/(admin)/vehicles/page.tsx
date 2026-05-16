@@ -3,10 +3,11 @@ import React, { useEffect, useState, useRef } from "react";
 import { vehicleAPI, vehicleGroupAPI } from "@/lib/api";
 import Badge from "@/components/ui/badge/Badge";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { VehiclesListSkeleton } from "@/components/ui/Skeleton";
 import Pagination from "@/components/ui/Pagination";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
-import { Plus, Truck, LayoutGrid, List, ChevronRight, User } from "lucide-react";
+import { Plus, Truck, LayoutGrid, List, ChevronRight, User, CreditCard } from "lucide-react";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
@@ -26,6 +27,7 @@ interface Vehicle {
   fuelType: string;
   permitType: string;
   vehicleUsage: "PRIVATE" | "COMMERCIAL" | null;
+  status?: "ACTIVE" | "SOLD";
   qrCodeUrl: string | null;
   profileImage: string | null;
   overallStatus: string;
@@ -34,6 +36,11 @@ interface Vehicle {
   group?: { id: string; name: string; icon: string; color?: string } | null;
   complianceDocuments: Array<{ type: string; status: string; expiryDate: string }>;
   driverMappings: Array<{ isActive: boolean; driver: { id: string; name: string } }>;
+}
+
+function titleCase(s: string | null | undefined): string {
+  if (!s) return "";
+  return s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
 }
 
 interface PaginationData {
@@ -46,12 +53,14 @@ interface PaginationData {
 const DOC_ABBR: Record<string, string> = { RC: "RC", INSURANCE: "INS", PERMIT: "PMT", PUCC: "PUC", FITNESS: "FIT", TAX: "TAX" };
 
 export default function VehiclesPage() {
+  const router = useRouter();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [groupFilter, setGroupFilter] = useState("ALL");
   const [usageFilter, setUsageFilter] = useState<"ALL" | "PRIVATE" | "COMMERCIAL">("ALL");
+  const [lifecycleTab, setLifecycleTab] = useState<"ALL" | "SOLD">("ALL");
   const [groups, setGroups] = useState<VehicleGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setFetching] = useState(false);
@@ -61,21 +70,25 @@ export default function VehiclesPage() {
   const filterRef = useRef(statusFilter);
   const groupRef = useRef(groupFilter);
   const usageRef = useRef(usageFilter);
+  const lifecycleRef = useRef(lifecycleTab);
   searchRef.current = search;
   filterRef.current = statusFilter;
   groupRef.current = groupFilter;
   usageRef.current = usageFilter;
+  lifecycleRef.current = lifecycleTab;
 
-  const fetchVehicles = async (page = 1, opts?: { initial?: boolean; overrideStatus?: string; overrideGroup?: string; overrideUsage?: "ALL" | "PRIVATE" | "COMMERCIAL" }) => {
+  const fetchVehicles = async (page = 1, opts?: { initial?: boolean; overrideStatus?: string; overrideGroup?: string; overrideUsage?: "ALL" | "PRIVATE" | "COMMERCIAL"; overrideLifecycle?: "ALL" | "SOLD" }) => {
     if (opts?.initial) setLoading(true); else setFetching(true);
     try {
       const usage = opts?.overrideUsage ?? usageRef.current;
+      const lifecycle = opts?.overrideLifecycle ?? lifecycleRef.current;
       const res = await vehicleAPI.getAll({
         page, limit: 10,
         search: searchRef.current || undefined,
         status: (opts?.overrideStatus ?? filterRef.current) !== "ALL" ? (opts?.overrideStatus ?? filterRef.current) : undefined,
         groupId: (opts?.overrideGroup ?? groupRef.current) !== "ALL" ? (opts?.overrideGroup ?? groupRef.current) : undefined,
         vehicleUsage: usage !== "ALL" ? usage : undefined,
+        lifecycle: lifecycle === "SOLD" ? "SOLD" : undefined,
       });
       setVehicles(res.data.data.vehicles);
       setPagination(res.data.data.pagination);
@@ -122,6 +135,19 @@ export default function VehiclesPage() {
           <Plus className="w-4 h-4" />
           Onboard Vehicle
         </Link>
+      </div>
+
+      {/* Active / Sold Tabs */}
+      <div className="inline-flex p-1 rounded-xl bg-gray-100 dark:bg-gray-800/50">
+        {(["ALL", "SOLD"] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => { setLifecycleTab(tab); fetchVehicles(1, { overrideLifecycle: tab }); }}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${lifecycleTab === tab ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
+          >
+            {tab === "ALL" ? "All Vehicles" : "Sold"}
+          </button>
+        ))}
       </div>
 
       {/* Quick Stats */}
@@ -251,10 +277,16 @@ export default function VehiclesPage() {
                         </div>
                       ); })()}
                       <div>
-                        <h3 className="text-sm font-black text-gray-900 dark:text-white font-mono tracking-wider group-hover:text-brand-500 transition-colors">
-                          {v.registrationNumber}
-                        </h3>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{v.make} {v.model}</p>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-sm font-black text-gray-900 dark:text-white font-mono tracking-wider group-hover:text-brand-500 transition-colors">
+                            {v.registrationNumber}
+                          </h3>
+                          {v.status === "SOLD" && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">Sold</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-semibold mt-0.5 truncate">{titleCase(v.make)}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300 truncate">{titleCase(v.model)}</p>
                       </div>
                     </div>
                     {/* Score ring */}
@@ -354,11 +386,16 @@ export default function VehiclesPage() {
                     <Badge color={v.overallStatus === "GREEN" ? "success" : v.overallStatus === "YELLOW" ? "warning" : v.overallStatus === "ORANGE" ? "error" : "error"} variant="light" size="sm">
                       {v.overallStatus === "GREEN" ? "OK" : v.overallStatus === "YELLOW" ? "Warn" : v.overallStatus === "ORANGE" ? "Critical" : "Expired"}
                     </Badge>
+                    {v.status === "SOLD" && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">Sold</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
-                    <span>{v.make} {v.model}</span>
+                    <span className="text-gray-400 dark:text-gray-500">{titleCase(v.make)}</span>
                     <span className="text-gray-300 dark:text-gray-600">&bull;</span>
-                    <span>{v.fuelType}</span>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">{titleCase(v.model)}</span>
+                    <span className="text-gray-300 dark:text-gray-600">&bull;</span>
+                    <span>{titleCase(v.fuelType)}</span>
                     {v.vehicleUsage && (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${v.vehicleUsage === "COMMERCIAL" ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"}`}>
                         {v.vehicleUsage === "COMMERCIAL" ? "Commercial" : "Private"}
@@ -400,6 +437,19 @@ export default function VehiclesPage() {
                   </span>
                 ) : (
                   <span className="text-xs text-gray-300 dark:text-gray-600 flex-shrink-0">&mdash;</span>
+                )}
+
+                {/* Sell action (active only) */}
+                {v.status !== "SOLD" && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/vehicles/${v.id}?action=sell`); }}
+                    title="Sell vehicle"
+                    className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 hover:bg-gray-900 hover:text-white dark:bg-gray-800 dark:hover:bg-gray-100 dark:hover:text-gray-900 text-[10px] font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 transition-colors flex-shrink-0"
+                  >
+                    <CreditCard className="w-3 h-3" />
+                    Sell
+                  </button>
                 )}
 
                 {/* Arrow */}

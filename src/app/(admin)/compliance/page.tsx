@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { vehicleAPI, vehicleGroupAPI } from "@/lib/api";
 import Badge from "@/components/ui/badge/Badge";
 import Link from "next/link";
@@ -9,6 +10,11 @@ import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { Truck, LayoutGrid, List, ChevronRight, ShieldCheck } from "lucide-react";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 import { SearchInput } from "@/components/ui/SearchInput";
+
+function titleCase(s: string | null | undefined): string {
+  if (!s) return "";
+  return s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
+}
 
 interface ComplianceDoc {
   type: string;
@@ -45,9 +51,15 @@ const DOC_FULL: Record<string, string> = {
 };
 
 export default function ComplianceOverviewPage() {
+  const searchParams = useSearchParams();
+  const initialStatus = searchParams.get("status");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>("ALL");
+  const [filter, setFilter] = useState<string>(
+    initialStatus && ["RED", "ORANGE", "YELLOW", "GREEN"].includes(initialStatus)
+      ? initialStatus
+      : "ALL",
+  );
   const [groupFilter, setGroupFilter] = useState<string>("ALL");
   const [groups, setGroups] = useState<VehicleGroup[]>([]);
   const [view, setView] = useState<"list" | "grid">("list");
@@ -170,7 +182,7 @@ export default function ComplianceOverviewPage() {
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl">
           {(["ALL", "RED", "ORANGE", "YELLOW", "GREEN"] as const).map((status) => {
             const isActive = filter === status;
-            const dotColor = status === "RED" ? "bg-red-500" : status === "ORANGE" ? "bg-red-500 animate-blink" : status === "YELLOW" ? "bg-amber-500" : status === "GREEN" ? "bg-emerald-500" : "";
+            const dotColor = status === "RED" ? "bg-red-500" : status === "ORANGE" ? "bg-amber-500 animate-blink" : status === "YELLOW" ? "bg-amber-500" : status === "GREEN" ? "bg-emerald-500" : "";
             return (
               <button
                 key={status}
@@ -182,7 +194,7 @@ export default function ComplianceOverviewPage() {
                 }`}
               >
                 {status !== "ALL" && <span className={`w-2 h-2 rounded-full ${dotColor}`} />}
-                {status === "ALL" ? "All" : status === "RED" ? "Expired" : status === "YELLOW" ? "Expiring" : "Valid"}
+                {status === "ALL" ? "All" : status === "RED" ? "Expired" : status === "ORANGE" ? "Critical" : status === "YELLOW" ? "Expiring" : "Valid"}
                 <span className={`text-xs ${isActive ? "text-gray-500 dark:text-gray-400" : "text-gray-400 dark:text-gray-500"}`}>
                   {counts[status]}
                 </span>
@@ -224,7 +236,7 @@ export default function ComplianceOverviewPage() {
             const vGreen = vehicle.complianceDocuments.filter((d) => d.status === "GREEN").length;
             const vTotal = vehicle.complianceDocuments.length;
             const vScore = vTotal > 0 ? Math.round((vGreen / vTotal) * 100) : 0;
-            const grad = vehicle.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : vehicle.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : vehicle.overallStatus === "ORANGE" ? "from-red-500 to-rose-600" : "from-red-500 to-rose-600";
+            const grad = vehicle.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : vehicle.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : vehicle.overallStatus === "ORANGE" ? "from-amber-500 to-amber-600" : "from-red-500 to-rose-600";
 
             return (
               <Link
@@ -252,12 +264,16 @@ export default function ComplianceOverviewPage() {
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white font-mono tracking-wider group-hover:text-brand-500 transition-colors">
                       {vehicle.registrationNumber}
                     </h3>
-                    <Badge color={vehicle.overallStatus === "GREEN" ? "success" : vehicle.overallStatus === "YELLOW" ? "warning" : vehicle.overallStatus === "ORANGE" ? "error" : "error"} variant="light" size="sm">
+                    <Badge color={vehicle.overallStatus === "GREEN" ? "success" : vehicle.overallStatus === "YELLOW" ? "warning" : vehicle.overallStatus === "ORANGE" ? "warning" : "error"} variant="light" size="sm">
                       {vScore}%
                     </Badge>
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                    {vehicle.make} {vehicle.model} &bull; {vehicle.fuelType}
+                  <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1 flex-wrap">
+                    <span className="text-gray-400 dark:text-gray-500">{titleCase(vehicle.make)}</span>
+                    <span className="text-gray-300 dark:text-gray-600">&bull;</span>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">{titleCase(vehicle.model)}</span>
+                    <span className="text-gray-300 dark:text-gray-600">&bull;</span>
+                    <span>{titleCase(vehicle.fuelType)}</span>
                     {vehicle.group && (() => { const GIcon = getVehicleTypeIcon(vehicle.group.icon); return (
                       <><span className="text-gray-300 dark:text-gray-600 mx-0.5">&bull;</span><span className="text-brand-500 dark:text-brand-400 font-medium inline-flex items-center gap-0.5"><GIcon className="w-3 h-3" />{vehicle.group.name}</span></>
                     ); })()}
@@ -270,12 +286,12 @@ export default function ComplianceOverviewPage() {
                     return (
                       <div key={`${doc.type}-${doc.expiryDate}`} className="text-center">
                         <p className={`text-[9px] font-bold ${
-                          doc.status === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-600 dark:text-amber-400" : doc.status === "ORANGE" ? "text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400"
+                          doc.status === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-600 dark:text-amber-400" : doc.status === "ORANGE" ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"
                         }`}>
                           {DOC_LABELS[doc.type] || doc.type.slice(0, 3)}
                         </p>
                         <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${
-                          doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"
+                          doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-amber-500 animate-blink" : "bg-red-500"
                         }`} />
                         {/* Days/Exp label intentionally hidden — uncomment to restore:
                         <p className="text-[8px] text-gray-400 mt-0.5">{days <= 0 ? "Exp" : `${days}d`}</p>
@@ -293,7 +309,7 @@ export default function ComplianceOverviewPage() {
                     const days = Math.ceil((new Date(nearest.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                     return (
                       <span className={`text-[10px] px-2 py-1 rounded-md font-semibold ${
-                        nearest.status === "GREEN" ? "bg-emerald-100 text-emerald-700" : nearest.status === "YELLOW" ? "bg-amber-100 text-amber-700" : nearest.status === "ORANGE" ? "bg-red-100 text-red-700 animate-blink" : "bg-red-100 text-red-700"
+                        nearest.status === "GREEN" ? "bg-emerald-100 text-emerald-700" : nearest.status === "YELLOW" ? "bg-amber-100 text-amber-700" : nearest.status === "ORANGE" ? "bg-amber-100 text-amber-700 animate-blink" : "bg-red-100 text-red-700"
                       }`}>
                         {DOC_FULL[nearest.type] || nearest.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}: {days <= 0 ? "Exp" : `${days}d`}
                       </span>
@@ -343,8 +359,12 @@ export default function ComplianceOverviewPage() {
                         <h3 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-brand-500 transition-colors font-mono tracking-wide">
                           {vehicle.registrationNumber}
                         </h3>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                          {vehicle.make} {vehicle.model} &bull; {vehicle.fuelType}
+                        <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 flex-wrap">
+                          <span className="text-gray-400 dark:text-gray-500">{titleCase(vehicle.make)}</span>
+                          <span className="text-gray-300 dark:text-gray-600">&bull;</span>
+                          <span className="font-semibold text-gray-700 dark:text-gray-300">{titleCase(vehicle.model)}</span>
+                          <span className="text-gray-300 dark:text-gray-600">&bull;</span>
+                          <span>{titleCase(vehicle.fuelType)}</span>
                           {vehicle.group && (() => { const GIcon = getVehicleTypeIcon(vehicle.group.icon); return (
                             <><span className="text-gray-300 dark:text-gray-600 mx-0.5">&bull;</span><span className="text-brand-500 dark:text-brand-400 font-medium inline-flex items-center gap-0.5"><GIcon className="w-3 h-3" />{vehicle.group.name}</span></>
                           ); })()}
@@ -355,12 +375,12 @@ export default function ComplianceOverviewPage() {
                       <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
                         <circle cx="18" cy="18" r="15.5" fill="none" className="stroke-gray-100 dark:stroke-gray-800" strokeWidth="3" />
                         <circle cx="18" cy="18" r="15.5" fill="none"
-                          className={vehicle.overallStatus === "GREEN" ? "stroke-emerald-500" : vehicle.overallStatus === "YELLOW" ? "stroke-amber-500" : vehicle.overallStatus === "ORANGE" ? "stroke-red-500" : "stroke-red-500"}
+                          className={vehicle.overallStatus === "GREEN" ? "stroke-emerald-500" : vehicle.overallStatus === "YELLOW" ? "stroke-amber-500" : vehicle.overallStatus === "ORANGE" ? "stroke-amber-500" : "stroke-red-500"}
                           strokeWidth="3" strokeLinecap="round" strokeDasharray={`${vScore * 0.975} 100`}
                         />
                       </svg>
                       <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-black ${
-                        vehicle.overallStatus === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : vehicle.overallStatus === "YELLOW" ? "text-amber-600 dark:text-amber-400" : vehicle.overallStatus === "ORANGE" ? "text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400"
+                        vehicle.overallStatus === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : vehicle.overallStatus === "YELLOW" ? "text-amber-600 dark:text-amber-400" : vehicle.overallStatus === "ORANGE" ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"
                       }`}>{vScore}%</span>
                     </div>
                   </div>
@@ -370,13 +390,13 @@ export default function ComplianceOverviewPage() {
                       const days = Math.ceil((new Date(doc.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                       return (
                         <div key={`${doc.type}-${doc.expiryDate}`} className={`relative rounded-lg p-2 text-center ${
-                          doc.status === "GREEN" ? "bg-emerald-50 dark:bg-emerald-500/10" : doc.status === "YELLOW" ? "bg-amber-50 dark:bg-amber-500/10" : doc.status === "ORANGE" ? "bg-red-50 dark:bg-red-500/10" : "bg-red-50 dark:bg-red-500/10"
+                          doc.status === "GREEN" ? "bg-emerald-50 dark:bg-emerald-500/10" : doc.status === "YELLOW" ? "bg-amber-50 dark:bg-amber-500/10" : doc.status === "ORANGE" ? "bg-amber-50 dark:bg-amber-500/10" : "bg-red-50 dark:bg-red-500/10"
                         }`}>
-                          <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"}`} />
-                          <p className={`text-[10px] font-bold ${doc.status === "GREEN" ? "text-emerald-700 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-700 dark:text-amber-400" : doc.status === "ORANGE" ? "text-red-700 dark:text-red-400" : "text-red-700 dark:text-red-400"}`}>
+                          <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-amber-500 animate-blink" : "bg-red-500"}`} />
+                          <p className={`text-[10px] font-bold ${doc.status === "GREEN" ? "text-emerald-700 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-700 dark:text-amber-400" : doc.status === "ORANGE" ? "text-amber-700 dark:text-amber-400" : "text-red-700 dark:text-red-400"}`}>
                             {DOC_LABELS[doc.type] || doc.type}
                           </p>
-                          <p className={`text-[9px] mt-0.5 ${doc.status === "GREEN" ? "text-emerald-600/60" : doc.status === "YELLOW" ? "text-amber-600/60" : doc.status === "ORANGE" ? "text-red-600/60" : "text-red-600/60"}`}>
+                          <p className={`text-[9px] mt-0.5 ${doc.status === "GREEN" ? "text-emerald-600/60" : doc.status === "YELLOW" ? "text-amber-600/60" : doc.status === "ORANGE" ? "text-amber-600/60" : "text-red-600/60"}`}>
                             {days <= 0 ? "Expired" : `${days}d`}
                           </p>
                         </div>
@@ -391,7 +411,7 @@ export default function ComplianceOverviewPage() {
                         <span key={`${doc.type}-${doc.expiryDate}`} className={`text-[10px] px-2 py-0.5 rounded-md font-medium ${
                           doc.status === "GREEN" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
                           : doc.status === "YELLOW" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
-                          : doc.status === "ORANGE" ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400 animate-blink"
+                          : doc.status === "ORANGE" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 animate-blink"
                           : "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400"
                         }`}>
                           {DOC_FULL[doc.type] || doc.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}: {days <= 0 ? "Expired" : `${days}d`}

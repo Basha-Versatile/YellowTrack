@@ -31,6 +31,9 @@ interface DriverData {
   profilePhoto: string | null;
   selfVerifiedAt: string | null;
   adminVerified: boolean;
+  pfAccountNumber: string | null;
+  medicalInsuranceName: string | null;
+  medicalInsuranceNumber: string | null;
 }
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
@@ -58,6 +61,7 @@ export default function DriverVerifyPage() {
   const [form, setForm] = useState({
     name: "", phone: "", aadhaarLast4: "", vehicleClass: "",
     bloodGroup: "", fatherName: "", motherName: "",
+    pfAccountNumber: "", medicalInsuranceName: "", medicalInsuranceNumber: "",
   });
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([
     { name: "", relation: "", customRelation: "", phone: "" },
@@ -85,6 +89,9 @@ export default function DriverVerifyPage() {
           bloodGroup: d.bloodGroup || "",
           fatherName: d.fatherName || "",
           motherName: d.motherName || "",
+          pfAccountNumber: d.pfAccountNumber || "",
+          medicalInsuranceName: d.medicalInsuranceName || "",
+          medicalInsuranceNumber: d.medicalInsuranceNumber || "",
         });
         if (d.emergencyContacts && Array.isArray(d.emergencyContacts) && d.emergencyContacts.length > 0) {
           setEmergencyContacts(d.emergencyContacts.map((ec: { name: string; relation: string; phone: string }) => ({
@@ -443,6 +450,35 @@ export default function DriverVerifyPage() {
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Mother&apos;s Name</label>
                 <input type="text" value={form.motherName} onChange={(e) => setForm({ ...form, motherName: e.target.value })} className={inputClass} placeholder="Mother's full name" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── CARD: Benefits & Insurance ── */}
+        <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden mb-6">
+          <div className="px-6 sm:px-8 py-4 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">Benefits & Insurance</h3>
+              <p className="text-[10px] text-gray-400">PF and medical insurance details (optional)</p>
+            </div>
+          </div>
+          <div className="px-6 sm:px-8 py-6 space-y-5">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">PF Account Number</label>
+              <input type="text" value={form.pfAccountNumber ?? ""} onChange={(e) => setForm({ ...form, pfAccountNumber: e.target.value })} className={inputClass} placeholder="e.g. AB/CDE/1234567/000/1234567" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Medical Insurance Provider</label>
+                <input type="text" value={form.medicalInsuranceName ?? ""} onChange={(e) => setForm({ ...form, medicalInsuranceName: e.target.value })} className={inputClass} placeholder="e.g. ESIC, Star Health" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Policy / Account Number</label>
+                <input type="text" value={form.medicalInsuranceNumber ?? ""} onChange={(e) => setForm({ ...form, medicalInsuranceNumber: e.target.value })} className={inputClass} placeholder="ESIC IP or Policy No." />
               </div>
             </div>
           </div>

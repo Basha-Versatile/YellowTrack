@@ -39,6 +39,9 @@ const driverSchema = new Schema(
     permanentAddressLng: { type: Number },
     selfVerifiedAt: { type: Date },
     adminVerified: { type: Boolean, default: false },
+    pfAccountNumber: { type: String, trim: true },
+    medicalInsuranceName: { type: String, trim: true },
+    medicalInsuranceNumber: { type: String, trim: true },
   },
   { timestamps: true },
 );

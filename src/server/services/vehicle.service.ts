@@ -1,8 +1,14 @@
 import "server-only";
 import { AppError, BadRequestError, NotFoundError, ConflictError } from "@/lib/errors";
 import { fetchRcDetails } from "@/lib/surepass";
-import { COMPLIANCE_DOC_TYPES, InsurancePolicy } from "@/models";
-import { type ScopedContext, tenantStamp } from "@/lib/auth/tenant-context";
+import {
+  COMPLIANCE_DOC_TYPES,
+  InsurancePolicy,
+  Vehicle,
+  VehicleDeletionOtp,
+  VehicleDriverMapping,
+} from "@/models";
+import { type ScopedContext, tenantFilter, tenantStamp } from "@/lib/auth/tenant-context";
 import * as vehicleRepo from "../repositories/vehicle.repository";
 import * as vehicleGroupRepo from "../repositories/vehicleGroup.repository";
 import * as complianceRepo from "../repositories/compliance.repository";
@@ -454,4 +460,81 @@ export async function getDashboardStats(ctx: ScopedContext) {
     challanRepo.getStats(ctx),
   ]);
   return { ...vehicleStats, challans: challanStats };
+}
+
+// ── Vehicle deletion (OTP-gated cascade) ──────────────────────
+
+const DELETION_OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+export async function requestVehicleDeletion(
+  ctx: ScopedContext,
+  vehicleId: string,
+  userId: string,
+) {
+  const vehicle = await vehicleRepo.findById(ctx, vehicleId);
+  if (!vehicle) throw new NotFoundError("Vehicle not found");
+
+  // Clear any existing pending OTP for this user+vehicle so requests are idempotent.
+  await VehicleDeletionOtp.deleteMany(
+    tenantFilter(ctx, { vehicleId, userId }),
+  );
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = new Date(Date.now() + DELETION_OTP_TTL_MS);
+  await VehicleDeletionOtp.create({
+    ...tenantStamp(ctx),
+    vehicleId,
+    userId,
+    otp,
+    expiresAt,
+  });
+
+  // For now the OTP is returned directly. When email/SMS is wired up,
+  // drop `otp` from the response and dispatch via the provider instead.
+  return {
+    otp,
+    expiresAt: expiresAt.toISOString(),
+    registrationNumber: vehicle.registrationNumber as string,
+  };
+}
+
+export async function confirmVehicleDeletion(
+  ctx: ScopedContext,
+  vehicleId: string,
+  userId: string,
+  otp: string,
+) {
+  const vehicle = await vehicleRepo.findById(ctx, vehicleId);
+  if (!vehicle) throw new NotFoundError("Vehicle not found");
+
+  const token = await VehicleDeletionOtp.findOne(
+    tenantFilter(ctx, { vehicleId, userId }),
+  );
+  if (!token) {
+    throw new BadRequestError("No active OTP — please request a new code.");
+  }
+  if (new Date(token.expiresAt as Date) < new Date()) {
+    await VehicleDeletionOtp.deleteOne({ _id: token._id });
+    throw new BadRequestError("OTP has expired — please request a new code.");
+  }
+  if (String(token.otp) !== otp.trim()) {
+    throw new BadRequestError("Incorrect OTP.");
+  }
+
+  // SOFT DELETE: mark the vehicle as deleted and unassign the active driver.
+  // Related collections (challans, compliance, EMI, fastag, services, etc.)
+  // are intentionally preserved as historical evidence. Vehicle schema
+  // middleware auto-filters deletedAt rows out of every query, so the vehicle
+  // disappears from the UI immediately.
+  await Vehicle.updateOne(
+    tenantFilter(ctx, { _id: vehicleId }),
+    { $set: { deletedAt: new Date() } },
+    { includeDeleted: true } as never,
+  );
+  await VehicleDriverMapping.updateMany(
+    tenantFilter(ctx, { vehicleId, isActive: true }),
+    { isActive: false, unassignedAt: new Date() },
+  );
+  await VehicleDeletionOtp.deleteMany(tenantFilter(ctx, { vehicleId }));
+
+  return { deletedVehicleId: vehicleId };
 }

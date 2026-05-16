@@ -43,6 +43,9 @@ export const updateDriverSchema = z.object({
   permanentAddressLat: z.coerce.number().optional().nullable(),
   permanentAddressLng: z.coerce.number().optional().nullable(),
   profilePhoto: z.string().optional().nullable(),
+  pfAccountNumber: z.string().optional().nullable(),
+  medicalInsuranceName: z.string().optional().nullable(),
+  medicalInsuranceNumber: z.string().optional().nullable(),
 });
 
 export type CreateDriverInput = z.infer<typeof createDriverSchema>;

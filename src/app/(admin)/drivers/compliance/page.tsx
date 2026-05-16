@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { driverAPI } from "@/lib/api";
 import Badge from "@/components/ui/badge/Badge";
 import Link from "next/link";
@@ -53,9 +54,15 @@ function getDriverOverall(driver: Driver) {
 }
 
 export default function DriverCompliancePage() {
+  const searchParams = useSearchParams();
+  const initialStatus = searchParams.get("status");
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("ALL");
+  const [filter, setFilter] = useState(
+    initialStatus && ["RED", "ORANGE", "YELLOW", "GREEN"].includes(initialStatus)
+      ? initialStatus
+      : "ALL",
+  );
   const [view, setView] = useState<"list" | "grid">("list");
   const [hoverPhoto, setHoverPhoto] = useState<{ url: string; x: number; y: number } | null>(null);
 
@@ -135,7 +142,7 @@ export default function DriverCompliancePage() {
           {(["ALL", "RED", "ORANGE", "YELLOW", "GREEN"] as const).map((s) => (
             <button key={s} onClick={() => setFilter(s)}
               className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${filter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
-              {s !== "ALL" && <span className={`w-2 h-2 rounded-full ${s === "RED" ? "bg-red-500" : s === "ORANGE" ? "bg-red-500 animate-blink" : s === "YELLOW" ? "bg-amber-500" : "bg-emerald-500"}`} />}
+              {s !== "ALL" && <span className={`w-2 h-2 rounded-full ${s === "RED" ? "bg-red-500" : s === "ORANGE" ? "bg-amber-500 animate-blink" : s === "YELLOW" ? "bg-amber-500" : "bg-emerald-500"}`} />}
               {s === "ALL" ? "All" : s === "RED" ? "Expired" : s === "ORANGE" ? "Critical" : s === "YELLOW" ? "Expiring" : "Valid"}
               <span className="text-xs text-gray-400">{counts[s]}</span>
             </button>
@@ -159,7 +166,7 @@ export default function DriverCompliancePage() {
       ) : view === "list" ? (
         <div className="space-y-2">
           {paginatedItems.map((driver) => {
-            const grad = driver.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : driver.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : driver.overallStatus === "ORANGE" ? "from-red-500 to-rose-600" : "from-red-500 to-rose-600";
+            const grad = driver.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : driver.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : driver.overallStatus === "ORANGE" ? "from-amber-500 to-amber-600" : "from-red-500 to-rose-600";
             const licenseDays = Math.ceil((new Date(driver.licenseExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
             return (
@@ -180,8 +187,8 @@ export default function DriverCompliancePage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-brand-500 transition-colors">{driver.name}</h3>
-                    <Badge color={driver.overallStatus === "GREEN" ? "success" : driver.overallStatus === "YELLOW" ? "warning" : driver.overallStatus === "ORANGE" ? "error" : "error"} variant="light" size="sm">
-                      {driver.overallStatus === "GREEN" ? "OK" : driver.overallStatus === "YELLOW" ? "Expiring" : "Expired"}
+                    <Badge color={driver.overallStatus === "GREEN" ? "success" : driver.overallStatus === "YELLOW" ? "warning" : driver.overallStatus === "ORANGE" ? "warning" : "error"} variant="light" size="sm">
+                      {driver.overallStatus === "GREEN" ? "OK" : driver.overallStatus === "YELLOW" ? "Expiring" : driver.overallStatus === "ORANGE" ? "Critical" : "Expired"}
                     </Badge>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">
@@ -201,15 +208,15 @@ export default function DriverCompliancePage() {
                       const ds = getDocStatus(uploadedDl.expiryDate);
                       return (
                         <div className="text-center">
-                          <p className={`text-[9px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-red-600" : "text-red-600"}`}>DL</p>
-                          <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${ds.status === "GREEN" ? "bg-emerald-500" : ds.status === "YELLOW" ? "bg-amber-500" : ds.status === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"}`} />
+                          <p className={`text-[9px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-amber-600" : "text-red-600"}`}>DL</p>
+                          <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${ds.status === "GREEN" ? "bg-emerald-500" : ds.status === "YELLOW" ? "bg-amber-500" : ds.status === "ORANGE" ? "bg-amber-500 animate-blink" : "bg-red-500"}`} />
                         </div>
                       );
                     }
                     return (
                       <div className="text-center">
-                        <p className={`text-[9px] font-bold ${driver.licenseStatus === "GREEN" ? "text-emerald-600" : driver.licenseStatus === "YELLOW" ? "text-amber-600" : driver.licenseStatus === "ORANGE" ? "text-red-600" : "text-red-600"}`}>DL</p>
-                        <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${driver.licenseStatus === "GREEN" ? "bg-emerald-500" : driver.licenseStatus === "YELLOW" ? "bg-amber-500" : driver.licenseStatus === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"}`} />
+                        <p className={`text-[9px] font-bold ${driver.licenseStatus === "GREEN" ? "text-emerald-600" : driver.licenseStatus === "YELLOW" ? "text-amber-600" : driver.licenseStatus === "ORANGE" ? "text-amber-600" : "text-red-600"}`}>DL</p>
+                        <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${driver.licenseStatus === "GREEN" ? "bg-emerald-500" : driver.licenseStatus === "YELLOW" ? "bg-amber-500" : driver.licenseStatus === "ORANGE" ? "bg-amber-500 animate-blink" : "bg-red-500"}`} />
                       </div>
                     );
                   })()}
@@ -219,8 +226,8 @@ export default function DriverCompliancePage() {
                       const ds = getDocStatus(doc.expiryDate);
                       return (
                         <div key={`${doc.type}-${doc.expiryDate}`} className="text-center">
-                          <p className={`text-[9px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-red-600" : "text-red-600"}`}>{DOC_LABELS[doc.type] || doc.type.slice(0, 3)}</p>
-                          <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${ds.status === "GREEN" ? "bg-emerald-500" : ds.status === "YELLOW" ? "bg-amber-500" : ds.status === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"}`} />
+                          <p className={`text-[9px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-amber-600" : "text-red-600"}`}>{DOC_LABELS[doc.type] || doc.type.slice(0, 3)}</p>
+                          <span className={`block w-2 h-2 rounded-full mx-auto mt-0.5 ${ds.status === "GREEN" ? "bg-emerald-500" : ds.status === "YELLOW" ? "bg-amber-500" : ds.status === "ORANGE" ? "bg-amber-500 animate-blink" : "bg-red-500"}`} />
                         </div>
                       );
                     })}
@@ -233,7 +240,7 @@ export default function DriverCompliancePage() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {paginatedItems.map((driver) => {
-            const grad = driver.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : driver.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : driver.overallStatus === "ORANGE" ? "from-red-500 to-rose-600" : "from-red-500 to-rose-600";
+            const grad = driver.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : driver.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : driver.overallStatus === "ORANGE" ? "from-amber-500 to-amber-600" : "from-red-500 to-rose-600";
             const licenseDays = Math.ceil((new Date(driver.licenseExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
             const hasUploadedDl = driver.documents.some((d) => d.type === "DL");
             const allItems = [
@@ -272,28 +279,28 @@ export default function DriverCompliancePage() {
                       <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
                         <circle cx="18" cy="18" r="14" fill="none" className="stroke-gray-100 dark:stroke-gray-800" strokeWidth="3" />
                         <circle cx="18" cy="18" r="14" fill="none"
-                          className={driver.overallStatus === "GREEN" ? "stroke-emerald-500" : driver.overallStatus === "YELLOW" ? "stroke-amber-500" : driver.overallStatus === "ORANGE" ? "stroke-red-500" : "stroke-red-500"}
+                          className={driver.overallStatus === "GREEN" ? "stroke-emerald-500" : driver.overallStatus === "YELLOW" ? "stroke-amber-500" : driver.overallStatus === "ORANGE" ? "stroke-amber-500" : "stroke-red-500"}
                           strokeWidth="3" strokeLinecap="round" strokeDasharray={`${score * 0.88} 100`} />
                       </svg>
-                      <span className={`absolute inset-0 flex items-center justify-center text-[9px] font-black ${driver.overallStatus === "GREEN" ? "text-emerald-600" : driver.overallStatus === "YELLOW" ? "text-amber-600" : driver.overallStatus === "ORANGE" ? "text-red-600" : "text-red-600"}`}>{score}%</span>
+                      <span className={`absolute inset-0 flex items-center justify-center text-[9px] font-black ${driver.overallStatus === "GREEN" ? "text-emerald-600" : driver.overallStatus === "YELLOW" ? "text-amber-600" : driver.overallStatus === "ORANGE" ? "text-amber-600" : "text-red-600"}`}>{score}%</span>
                     </div>
                   </div>
 
                   {/* Items grid */}
                   <div className="space-y-1.5">
                     {/* License row */}
-                    <div className={`flex items-center justify-between p-2.5 rounded-lg ${driver.licenseStatus === "GREEN" ? "bg-emerald-50 dark:bg-emerald-500/10" : driver.licenseStatus === "YELLOW" ? "bg-amber-50 dark:bg-amber-500/10" : driver.licenseStatus === "ORANGE" ? "bg-red-50 dark:bg-red-500/10" : "bg-red-50 dark:bg-red-500/10"}`}>
+                    <div className={`flex items-center justify-between p-2.5 rounded-lg ${driver.licenseStatus === "GREEN" ? "bg-emerald-50 dark:bg-emerald-500/10" : driver.licenseStatus === "YELLOW" ? "bg-amber-50 dark:bg-amber-500/10" : driver.licenseStatus === "ORANGE" ? "bg-amber-50 dark:bg-amber-500/10" : "bg-red-50 dark:bg-red-500/10"}`}>
                       <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">Driving License</span>
-                      <span className={`text-[10px] font-bold ${driver.licenseStatus === "GREEN" ? "text-emerald-600" : driver.licenseStatus === "YELLOW" ? "text-amber-600" : driver.licenseStatus === "ORANGE" ? "text-red-600" : "text-red-600"}`}>
+                      <span className={`text-[10px] font-bold ${driver.licenseStatus === "GREEN" ? "text-emerald-600" : driver.licenseStatus === "YELLOW" ? "text-amber-600" : driver.licenseStatus === "ORANGE" ? "text-amber-600" : "text-red-600"}`}>
                         {licenseDays <= 0 ? "Expired" : `${licenseDays}d`}
                       </span>
                     </div>
                     {driver.documents.map((doc) => {
                       const ds = getDocStatus(doc.expiryDate);
                       return (
-                        <div key={`${doc.type}-${doc.expiryDate}`} className={`flex items-center justify-between p-2.5 rounded-lg ${ds.status === "GREEN" ? "bg-emerald-50 dark:bg-emerald-500/10" : ds.status === "YELLOW" ? "bg-amber-50 dark:bg-amber-500/10" : ds.status === "ORANGE" ? "bg-red-50 dark:bg-red-500/10" : "bg-red-50 dark:bg-red-500/10"}`}>
+                        <div key={`${doc.type}-${doc.expiryDate}`} className={`flex items-center justify-between p-2.5 rounded-lg ${ds.status === "GREEN" ? "bg-emerald-50 dark:bg-emerald-500/10" : ds.status === "YELLOW" ? "bg-amber-50 dark:bg-amber-500/10" : ds.status === "ORANGE" ? "bg-amber-50 dark:bg-amber-500/10" : "bg-red-50 dark:bg-red-500/10"}`}>
                           <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{DOC_FULL[doc.type] || doc.type}</span>
-                          <span className={`text-[10px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-red-600" : "text-red-600"}`}>
+                          <span className={`text-[10px] font-bold ${ds.status === "GREEN" ? "text-emerald-600" : ds.status === "YELLOW" ? "text-amber-600" : ds.status === "ORANGE" ? "text-amber-600" : "text-red-600"}`}>
                             {ds.days <= 0 ? "Expired" : `${ds.days}d`}
                           </span>
                         </div>

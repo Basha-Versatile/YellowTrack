@@ -3,10 +3,12 @@ import {
   Challan,
   ComplianceDocument,
   Driver,
+  ServicePart,
   Tyre,
   Vehicle,
   VehicleDriverMapping,
   VehicleGroup,
+  VehicleSale,
 } from "@/models";
 import {
   type ScopedContext,
@@ -21,6 +23,7 @@ export type VehicleListQuery = {
   status?: string;
   groupId?: string;
   vehicleUsage?: "PRIVATE" | "COMMERCIAL";
+  lifecycle?: "ACTIVE" | "SOLD";
 };
 
 type Paginated<T> = {
@@ -45,6 +48,7 @@ export async function findAll(
     status,
     groupId,
     vehicleUsage,
+    lifecycle,
   }: VehicleListQuery,
 ): Promise<Paginated<EnrichedVehicle>> {
   const skip = (page - 1) * limit;
@@ -59,6 +63,7 @@ export async function findAll(
   }
   if (groupId) extras.groupId = groupId;
   if (vehicleUsage) extras.vehicleUsage = vehicleUsage;
+  if (lifecycle) extras.status = lifecycle;
 
   if (status) {
     const vehicleIdsWithStatus = await ComplianceDocument.find(
@@ -90,7 +95,7 @@ export async function findAll(
     .map((v) => v.groupId)
     .filter((id): id is NonNullable<typeof id> => Boolean(id));
 
-  const [groups, complianceDocs, pendingChallans, activeMappings] =
+  const [groups, complianceDocs, pendingChallans, activeMappings, sales] =
     await Promise.all([
       groupIds.length
         ? VehicleGroup.find(tenantFilter(ctx, { _id: { $in: groupIds } })).lean()
@@ -106,6 +111,11 @@ export async function findAll(
       )
         .populate({ path: "driverId", model: Driver })
         .lean(),
+      lifecycle === "SOLD"
+        ? VehicleSale.find(
+            tenantFilter(ctx, { vehicleId: { $in: vehicleIds } }),
+          ).lean()
+        : Promise.resolve([] as Array<Record<string, unknown>>),
     ]);
 
   const groupsById = new Map(groups.map((g) => [String(g._id), g]));
@@ -133,12 +143,18 @@ export async function findAll(
     });
   }
 
+  const salesByVehicle = new Map<string, Record<string, unknown>>();
+  for (const s of sales as Array<Record<string, unknown>>) {
+    salesByVehicle.set(String(s.vehicleId), s);
+  }
+
   const enriched: EnrichedVehicle[] = vehicles.map((v) => ({
     ...v,
     group: v.groupId ? groupsById.get(String(v.groupId)) ?? null : null,
     complianceDocuments: complianceByVehicle.get(String(v._id)) ?? [],
     challans: challansByVehicle.get(String(v._id)) ?? [],
     driverMappings: mappingsByVehicle.get(String(v._id)) ?? [],
+    sale: salesByVehicle.get(String(v._id)) ?? null,
   }));
 
   return {
@@ -160,6 +176,8 @@ export async function findById(
     challans,
     driverMappings,
     tyres,
+    serviceParts,
+    sale,
   ] = await Promise.all([
     vehicle.groupId
       ? VehicleGroup.findOne(
@@ -181,6 +199,10 @@ export async function findById(
     Tyre.find(tenantFilter(ctx, { vehicleId: id }))
       .sort({ position: 1 })
       .lean(),
+    ServicePart.find(tenantFilter(ctx, { vehicleId: id }))
+      .sort({ name: 1 })
+      .lean(),
+    VehicleSale.findOne(tenantFilter(ctx, { vehicleId: id })).lean(),
   ]);
 
   const mappings = (
@@ -196,6 +218,8 @@ export async function findById(
     challans,
     driverMappings: mappings,
     tyres,
+    serviceParts,
+    sale,
   } as unknown as EnrichedVehicle;
 }
 
