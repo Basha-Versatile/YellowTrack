@@ -343,7 +343,7 @@ const AppSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div
-        className={`px-5 pt-7 pb-4 flex bg-gray-100/70 dark:bg-white/5 ${
+        className={`px-5 pt-7 pb-4 flex bg-gray-900 ${
           !expanded ? "justify-center" : "justify-start"
         }`}
       >
@@ -351,8 +351,8 @@ const AppSidebar: React.FC = () => {
           <Image src="/images/logo/yellow-track-logo.png" alt="Yellow Track" width={40} height={40} className="flex-shrink-0 rounded-xl object-contain" />
           {expanded && (
             <span className="text-lg font-extrabold tracking-tight">
-              <span className="text-yellow-500">Yellow</span>
-              <span className="text-gray-900 dark:text-white"> Track</span>
+              <span className="text-yellow-400">Yellow</span>
+              <span className="text-white"> Track</span>
             </span>
           )}
         </Link>

@@ -841,7 +841,12 @@ export default function VehicleDetailPage() {
                       {vehicle.overallStatus}
                     </span>
                   </div>
-                  <p className="text-white/50 text-[11px] uppercase tracking-wider font-semibold">
+                  {vehicle.ownerName && (
+                    <p className="text-white text-lg sm:text-xl font-extrabold tracking-tight leading-tight mt-1">
+                      {titleCase(vehicle.ownerName)}
+                    </p>
+                  )}
+                  <p className="text-white/50 text-[11px] uppercase tracking-wider font-semibold mt-1">
                     {titleCase(vehicle.make)}
                   </p>
                   <p className="text-white/85 text-sm flex items-center gap-1.5 flex-wrap mt-0.5">
