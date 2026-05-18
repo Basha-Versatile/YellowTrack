@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { vehicleAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { ExpensesDashboardSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
@@ -11,7 +11,7 @@ import { pickValidatedFiles } from "@/lib/file-validation";
 import {
   Plus, Download, AlertTriangle, Wrench, Car, CheckCircle2,
   MoreHorizontal, BarChart3, PieChart, FileText,
-  ImageIcon, Upload, Banknote
+  ImageIcon, Upload, Banknote, X, Receipt,
 } from "lucide-react";
 import { VehicleAutocomplete } from "@/components/vehicles/VehicleAutocomplete";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
@@ -32,6 +32,7 @@ const CATEGORY_ICONS: Record<string, React.FC<{ className?: string }>> = {
   fastag: Car,
   compliance: CheckCircle2,
   emi: Banknote,
+  invoices: FileText,
 };
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string; gradient: string }> = {
@@ -40,6 +41,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; dot: string; g
   fastag: { bg: "bg-amber-500/10", text: "text-amber-400", dot: "#f59e0b", gradient: "from-amber-500 to-amber-600" },
   compliance: { bg: "bg-emerald-500/10", text: "text-emerald-400", dot: "#10b981", gradient: "from-emerald-500 to-emerald-600" },
   emi: { bg: "bg-purple-500/10", text: "text-purple-400", dot: "#a855f7", gradient: "from-purple-500 to-fuchsia-600" },
+  invoices: { bg: "bg-cyan-500/10", text: "text-cyan-400", dot: "#06b6d4", gradient: "from-cyan-500 to-sky-600" },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -48,6 +50,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   fastag: "FASTag",
   compliance: "Compliance",
   emi: "EMI",
+  invoices: "Invoices",
 };
 
 const CATEGORY_COLORS_HEX: Record<string, string> = {
@@ -56,6 +59,7 @@ const CATEGORY_COLORS_HEX: Record<string, string> = {
   fastag: "#f59e0b",
   compliance: "#10b981",
   emi: "#a855f7",
+  invoices: "#06b6d4",
 };
 
 export default function VehicleExpensesPage() {
@@ -68,6 +72,7 @@ export default function VehicleExpensesPage() {
 
 function VehicleExpensesContent() {
   const toast = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [report, setReport] = useState<ReportData | null>(null);
   const [vehicles, setVehicles] = useState<VehicleBasic[]>([]);
@@ -82,6 +87,14 @@ function VehicleExpensesContent() {
   const [expVehicleId, setExpVehicleId] = useState("");
   const [expForm, setExpForm] = useState({ category: "COMPLIANCE", title: "", amount: "", handlingCharges: "", expenseDate: new Date().toISOString().split("T")[0], description: "" });
   const [expProofs, setExpProofs] = useState<File[]>([]);
+  const [serviceSubType, setServiceSubType] = useState<"GENERAL" | "TYRES">("GENERAL");
+  const [tyreOdometerKm, setTyreOdometerKm] = useState("");
+  const [tyreBrand, setTyreBrand] = useState("");
+  const [lastTyreReplacement, setLastTyreReplacement] = useState<{
+    odometerKm: number;
+    brand: string;
+    date: string;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -111,8 +124,38 @@ function VehicleExpensesContent() {
   useEffect(() => { vehicleAPI.getAll({ page: 1, limit: 100 }).then((res) => setVehicles(res.data.data.vehicles || [])).catch(() => {}); }, []);
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
+  // When the user picks Service → Tyres for a specific vehicle, fetch that
+  // vehicle's previous tyre replacement so we can show the "ran X km" hint.
+  useEffect(() => {
+    if (!showModal || expForm.category !== "SERVICE" || serviceSubType !== "TYRES" || !expVehicleId) {
+      setLastTyreReplacement(null);
+      return;
+    }
+    let cancelled = false;
+    vehicleAPI
+      .getTyreReplacements(expVehicleId)
+      .then((res) => {
+        if (cancelled) return;
+        const records: Array<{ odometerKm: number; brand: string; date: string }> =
+          res.data.data.records ?? [];
+        // Records are returned in date-desc order — first is the latest.
+        setLastTyreReplacement(records[0] ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setLastTyreReplacement(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showModal, expForm.category, serviceSubType, expVehicleId]);
+
   const handleLogExpense = async () => {
     if (!expVehicleId || !expForm.title || !expForm.amount || !expForm.expenseDate) return;
+    const isTyreReplacement = expForm.category === "SERVICE" && serviceSubType === "TYRES";
+    if (isTyreReplacement && (!tyreOdometerKm.trim() || !tyreBrand.trim())) {
+      toast.error("Missing fields", "Odometer (km) and brand are required for tyre replacements");
+      return;
+    }
     setSaving(true);
     try {
       const fd = new FormData();
@@ -120,9 +163,20 @@ function VehicleExpensesContent() {
       if (expForm.handlingCharges) fd.append("handlingCharges", expForm.handlingCharges);
       if (expForm.description) fd.append("description", expForm.description);
       for (const f of expProofs) fd.append("proof", f);
+      if (isTyreReplacement) {
+        fd.append("serviceSubType", "TYRES");
+        fd.append("odometerKm", tyreOdometerKm.trim());
+        fd.append("tyreBrand", tyreBrand.trim());
+      }
       await vehicleAPI.createExpense(expVehicleId, fd);
       toast.success("Expense Logged", "Expense recorded successfully");
-      setShowModal(false); setExpForm({ category: "COMPLIANCE", title: "", amount: "", handlingCharges: "", expenseDate: new Date().toISOString().split("T")[0], description: "" }); setExpProofs([]);
+      setShowModal(false);
+      setExpForm({ category: "COMPLIANCE", title: "", amount: "", handlingCharges: "", expenseDate: new Date().toISOString().split("T")[0], description: "" });
+      setExpProofs([]);
+      setServiceSubType("GENERAL");
+      setTyreOdometerKm("");
+      setTyreBrand("");
+      setLastTyreReplacement(null);
       fetchReport();
     } catch { toast.error("Error", "Failed to log expense"); }
     finally { setSaving(false); }
@@ -360,6 +414,19 @@ function VehicleExpensesContent() {
   const breakdown = report?.summary?.breakdown || {};
   const activeCategories = Object.entries(breakdown).filter(([, v]) => v > 0);
 
+  // Per-category transaction count, drawn from the same expenses list the
+  // table uses — keeps the chip footer ("3 txns · avg ₹X") in sync with the
+  // table rows below.
+  const categoryStats: Record<string, { count: number }> = (() => {
+    const m: Record<string, { count: number }> = {};
+    if (!report) return m;
+    for (const e of report.expenses) {
+      if (!m[e.category]) m[e.category] = { count: 0 };
+      m[e.category].count += 1;
+    }
+    return m;
+  })();
+
   const barCategories = report?.timeline?.map((t) => new Date(t.period + "-01").toLocaleDateString("en-IN", { month: "short", year: "2-digit" })) || [];
   const barSeries = activeCategories.map(([key]) => ({
     name: CATEGORY_LABELS[key] || key,
@@ -383,6 +450,20 @@ function VehicleExpensesContent() {
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-400 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all">
             <Plus className="w-4 h-4" />
             Log Expense
+          </button>
+          <button
+            disabled={!vehicleId}
+            onClick={() => {
+              if (!vehicleId) return;
+              setExpVehicleId(vehicleId);
+              setExpForm((prev) => ({ ...prev, category: "INVOICE", title: prev.title || "Vehicle Invoice" }));
+              setShowModal(true);
+            }}
+            title={vehicleId ? "Add an invoice for the selected vehicle" : "Pick a vehicle from the filter to add its invoice"}
+            className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all"
+          >
+            <FileText className="w-4 h-4" />
+            Add Invoice
           </button>
           <div className="relative">
             <button onClick={() => setShowDownload(!showDownload)}
@@ -453,44 +534,61 @@ function VehicleExpensesContent() {
         <ExpensesDashboardSkeleton />
       ) : report && (
         <>
-          {/* 3D Glassy Summary Cards — horizontal scroll */}
-          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+          {/* Summary chips — compact, horizontal scroll */}
+          <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
             <style>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
-            {/* Total card — 3D dark glass */}
-            <div className="relative rounded-2xl overflow-hidden group flex-shrink-0 min-w-[200px]" style={{ perspective: "1000px" }}>
-              <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-950 p-6 rounded-2xl border border-white/10 shadow-2xl shadow-gray-900/50 transform transition-transform duration-300 group-hover:rotate-y-2 group-hover:scale-[1.02] h-full">
-                <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 via-transparent to-transparent rounded-2xl" />
-                <div className="absolute top-3 right-3 w-16 h-16 rounded-full bg-yellow-500/10 blur-xl" />
-                <div className="relative z-10">
-                  <p className="text-[10px] uppercase tracking-widest text-yellow-400/80 font-bold">Total Expenses</p>
-                  <p className="text-3xl font-black text-white mt-2 tracking-tight">&#8377;{report.summary.totalSpent.toLocaleString("en-IN")}</p>
-                  <p className="text-[10px] text-gray-400 mt-2">{report.expenses.length} transactions</p>
+            {/* Total chip — dark headline */}
+            <div className="flex-shrink-0 min-w-[200px] rounded-xl bg-gradient-to-br from-gray-900 to-gray-800 border border-white/10 px-4 py-3 shadow-lg shadow-gray-900/30 relative overflow-hidden">
+              <div className="absolute top-2 right-2 w-12 h-12 rounded-full bg-yellow-500/10 blur-xl" />
+              <div className="relative">
+                <p className="text-[9px] uppercase tracking-widest text-yellow-400/80 font-bold">Total Expenses</p>
+                <p className="text-2xl font-black text-white mt-1 tracking-tight leading-none">&#8377;{report.summary.totalSpent.toLocaleString("en-IN")}</p>
+                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-400">
+                  <span className="font-semibold text-gray-300">{report.expenses.length}</span>
+                  <span>txns</span>
+                  {report.expenses.length > 0 && (
+                    <>
+                      <span className="text-gray-600">·</span>
+                      <span>avg &#8377;{Math.round(report.summary.totalSpent / report.expenses.length).toLocaleString("en-IN")}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* All category cards — glassy */}
+            {/* Category chips — compact */}
             {activeCategories.map(([key, val]) => {
               const c = CATEGORY_COLORS[key] || CATEGORY_COLORS.misc;
               const pct = report.summary.totalSpent > 0 ? Math.round((val / report.summary.totalSpent) * 100) : 0;
+              const count = categoryStats[key]?.count ?? 0;
+              const avg = count > 0 ? Math.round(val / count) : 0;
               return (
-                <div key={key} className="relative rounded-2xl overflow-hidden group flex-shrink-0 min-w-[180px]" style={{ perspective: "800px" }}>
-                  <div className="relative bg-white/70 dark:bg-gray-800/50 backdrop-blur-xl p-5 rounded-2xl border border-white/30 dark:border-gray-700/50 shadow-xl shadow-gray-200/20 dark:shadow-none transform transition-all duration-300 group-hover:scale-[1.03] group-hover:-translate-y-1 h-full">
-                    <div className={`absolute inset-0 bg-gradient-to-br ${c.gradient} opacity-[0.04] rounded-2xl`} />
-                    <div className="relative z-10">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${c.gradient} flex items-center justify-center shadow-lg`} style={{ boxShadow: `0 4px 14px ${c.dot}30` }}>
-                          {(() => { const Icon = CATEGORY_ICONS[key] || MoreHorizontal; return <Icon className="w-4 h-4 text-white" />; })()}
-                        </div>
-                        <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">{CATEGORY_LABELS[key]}</p>
+                <div
+                  key={key}
+                  className="flex-shrink-0 min-w-[180px] rounded-xl bg-white dark:bg-gray-800/40 border border-gray-200/80 dark:border-gray-700/60 px-3 py-2.5 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className={`w-6 h-6 rounded-md bg-gradient-to-br ${c.gradient} flex items-center justify-center flex-shrink-0`}>
+                        {(() => { const Icon = CATEGORY_ICONS[key] || MoreHorizontal; return <Icon className="w-3 h-3 text-white" />; })()}
                       </div>
-                      <p className="text-xl font-black text-gray-900 dark:text-white">&#8377;{val.toLocaleString("en-IN")}</p>
-                      {/* Glass progress bar */}
-                      <div className="mt-3 h-1.5 bg-gray-200/50 dark:bg-gray-700/50 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full bg-gradient-to-r ${c.gradient}`} style={{ width: `${pct}%` }} />
-                      </div>
-                      <p className="text-[10px] text-gray-400 mt-1.5">{pct}% of total</p>
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold truncate">{CATEGORY_LABELS[key]}</p>
                     </div>
+                    <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 flex-shrink-0">{pct}%</span>
+                  </div>
+                  <p className="text-lg font-black text-gray-900 dark:text-white leading-none">&#8377;{val.toLocaleString("en-IN")}</p>
+                  <div className="mt-1.5 h-1 bg-gray-100 dark:bg-gray-700/50 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full bg-gradient-to-r ${c.gradient}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-1 text-[9px] text-gray-500 dark:text-gray-400">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">{count}</span>
+                    <span>txn{count === 1 ? "" : "s"}</span>
+                    {count > 0 && (
+                      <>
+                        <span className="text-gray-300 dark:text-gray-600">·</span>
+                        <span>avg &#8377;{avg.toLocaleString("en-IN")}</span>
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -581,8 +679,16 @@ function VehicleExpensesContent() {
                   <tbody className="divide-y divide-gray-100/50 dark:divide-gray-800/50">
                     {getFilteredExpenses().map((exp, i) => {
                       const c = CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.misc;
+                      const drilldownHref = exp.source === "SERVICE" && exp.vehicleId
+                        ? `/vehicles/services/${exp.vehicleId}`
+                        : null;
                       return (
-                        <tr key={i} className="hover:bg-white/50 dark:hover:bg-gray-800/30 transition-colors">
+                        <tr
+                          key={i}
+                          onClick={drilldownHref ? () => router.push(drilldownHref) : undefined}
+                          className={`hover:bg-white/50 dark:hover:bg-gray-800/30 transition-colors ${drilldownHref ? "cursor-pointer" : ""}`}
+                          title={drilldownHref ? "Open service history for this vehicle" : undefined}
+                        >
                           <td className="px-5 py-3.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">{new Date(exp.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td>
                           <td className="px-5 py-3.5 font-semibold text-gray-900 dark:text-white whitespace-nowrap font-mono text-[11px]">{exp.vehicle?.registrationNumber || "—"}</td>
                           <td className="px-5 py-3.5">
@@ -606,7 +712,7 @@ function VehicleExpensesContent() {
                             {exp.proofUrls.length > 0 ? (
                               <div className="inline-flex items-center gap-1 justify-center">
                                 {exp.proofUrls.slice(0, 3).map((url, idx) => (
-                                  <a key={idx} href={resolveImageUrl(url) ?? "#"} target="_blank" rel="noreferrer" className="w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center text-brand-500 hover:text-brand-600 transition-colors" title={`Attachment ${idx + 1}`}>
+                                  <a key={idx} href={resolveImageUrl(url) ?? "#"} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center text-brand-500 hover:text-brand-600 transition-colors" title={`Attachment ${idx + 1}`}>
                                     <ImageIcon className="w-3.5 h-3.5" />
                                   </a>
                                 ))}
@@ -628,96 +734,238 @@ function VehicleExpensesContent() {
         </>
       )}
 
-      {/* Log Expense Modal — Compact */}
+      {/* Log Expense Modal */}
       {showModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowModal(false)} />
-          <div className="relative bg-white/90 dark:bg-gray-900/90 backdrop-blur-2xl rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-white/20 dark:border-gray-700/50">
-            <div className="bg-gradient-to-r from-yellow-500 to-amber-500 px-5 py-4">
-              <h3 className="text-base font-bold text-white">Log Expense</h3>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !saving && setShowModal(false)} />
+          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+            {/* Sticky header */}
+            <div className="flex items-center justify-between bg-gradient-to-r from-yellow-500 to-amber-500 px-6 py-4 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <Receipt className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Log Expense</h3>
+                  <p className="text-[11px] text-yellow-50/90">Record a vehicle expense with attachments</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !saving && setShowModal(false)}
+                disabled={saving}
+                className="w-8 h-8 rounded-lg bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-colors disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <div className="p-5 space-y-3">
-              {/* Row 1: Vehicle + Category */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Vehicle *</label>
-                  <select value={expVehicleId} onChange={(e) => setExpVehicleId(e.target.value)} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <option value="">Select vehicle</option>
-                    {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>)}
-                  </select>
+
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              {/* SECTION: Basic info */}
+              <section className="space-y-3">
+                <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Basics</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Vehicle <span className="text-red-500">*</span></label>
+                    <select value={expVehicleId} onChange={(e) => setExpVehicleId(e.target.value)} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                      <option value="">Select vehicle</option>
+                      {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Category <span className="text-red-500">*</span></label>
+                    <select value={expForm.category} onChange={(e) => setExpForm({ ...expForm, category: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                      <option value="COMPLIANCE">Compliance</option>
+                      <option value="SERVICE">Services</option>
+                      <option value="FASTAG">FASTag</option>
+                      <option value="CHALLAN">Challans</option>
+                      <option value="EMI">EMI</option>
+                      <option value="INVOICE">Invoice</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Category *</label>
-                  <select value={expForm.category} onChange={(e) => setExpForm({ ...expForm, category: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                    <option value="COMPLIANCE">Compliance</option>
-                    <option value="SERVICE">Services</option>
-                    <option value="FASTAG">FASTag</option>
-                    <option value="CHALLAN">Challans</option>
-                    <option value="EMI">EMI</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Title <span className="text-red-500">*</span></label>
+                  <input type="text" placeholder="e.g. RC Renewal, Diesel Fill" value={expForm.title} onChange={(e) => setExpForm({ ...expForm, title: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
                 </div>
-              </div>
-              {/* Row 2: Title */}
-              <div>
-                <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Title *</label>
-                <input type="text" placeholder="e.g. RC Renewal, Diesel Fill" value={expForm.title} onChange={(e) => setExpForm({ ...expForm, title: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-              </div>
-              {/* Row 3: Amount + Handling = Total */}
-              <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2.5">
-                <div>
-                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Amount (&#8377;) *</label>
-                  <input type="number" min="0" placeholder="0" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Handling (&#8377;)</label>
-                  <input type="number" min="0" placeholder="0" value={expForm.handlingCharges} onChange={(e) => setExpForm({ ...expForm, handlingCharges: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                </div>
-                <div className="h-9 flex items-center px-3 rounded-lg bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200/70 dark:border-yellow-500/20">
-                  <span className="text-[9px] font-semibold text-yellow-700/80 dark:text-yellow-400/80 uppercase tracking-wider mr-1.5">Total</span>
-                  <span className="text-xs font-black text-yellow-700 dark:text-yellow-400 font-mono">
-                    &#8377;{((Number(expForm.amount) || 0) + (Number(expForm.handlingCharges) || 0)).toLocaleString("en-IN")}
-                  </span>
-                </div>
-              </div>
-              {/* Row 3: Date + Attachment */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Date *</label>
-                  <DatePicker value={expForm.expenseDate} onChange={(v) => setExpForm({ ...expForm, expenseDate: v })} placeholder="Select date" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Attachments</label>
-                  <label className="flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 cursor-pointer transition-colors group">
-                    <Upload className="w-3.5 h-3.5 text-gray-300 group-hover:text-yellow-500" />
-                    <span className="text-[10px] text-gray-400 group-hover:text-yellow-600">
-                      {expProofs.length === 0 ? "Upload receipts" : `Add more (${expProofs.length} selected)`}
-                    </span>
-                    <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) setExpProofs((prev) => [...prev, ...fs]); }} />
-                  </label>
-                </div>
-              </div>
-              {expProofs.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {expProofs.map((f, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 text-[10px] font-medium">
-                      <span className="truncate max-w-[140px]">{f.name}</span>
-                      <button type="button" onClick={() => setExpProofs((prev) => prev.filter((_, i) => i !== idx))} className="text-red-500 text-[9px] font-semibold ml-0.5" title="Remove">X</button>
-                    </span>
-                  ))}
-                </div>
+              </section>
+
+              {/* SECTION: Service Details (conditional) */}
+              {expForm.category === "SERVICE" && (
+                <section className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 dark:border-blue-500/20 dark:bg-blue-500/5 p-4">
+                  <h4 className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Wrench className="w-3 h-3" />
+                    Service Details
+                  </h4>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Service Type</label>
+                    <select value={serviceSubType} onChange={(e) => setServiceSubType(e.target.value as "GENERAL" | "TYRES")} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                      <option value="GENERAL">General Service</option>
+                      <option value="TYRES">Tyre Replacement</option>
+                    </select>
+                  </div>
+                  {serviceSubType === "TYRES" && (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Odometer (km) <span className="text-red-500">*</span></label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 45000"
+                            value={tyreOdometerKm}
+                            onChange={(e) => setTyreOdometerKm(e.target.value)}
+                            className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Brand <span className="text-red-500">*</span></label>
+                          <input
+                            type="text"
+                            list="tyre-brands"
+                            placeholder="e.g. MRF, CEAT"
+                            value={tyreBrand}
+                            onChange={(e) => setTyreBrand(e.target.value)}
+                            className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                          />
+                          <datalist id="tyre-brands">
+                            <option value="MRF" />
+                            <option value="CEAT" />
+                            <option value="Apollo" />
+                            <option value="JK Tyre" />
+                            <option value="Bridgestone" />
+                            <option value="Michelin" />
+                            <option value="Goodyear" />
+                            <option value="Yokohama" />
+                            <option value="Pirelli" />
+                            <option value="Continental" />
+                          </datalist>
+                        </div>
+                      </div>
+                      {(() => {
+                        if (!lastTyreReplacement) {
+                          return (
+                            <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800/40 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                              First tyre replacement on record for this vehicle.
+                            </div>
+                          );
+                        }
+                        const curKm = Number(tyreOdometerKm) || 0;
+                        const ran = curKm > 0 ? curKm - lastTyreReplacement.odometerKm : null;
+                        return (
+                          <div className="rounded-lg border border-amber-300/60 bg-white dark:border-amber-500/30 dark:bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                            <span className="font-semibold">Last replacement: </span>
+                            {lastTyreReplacement.brand} at {lastTyreReplacement.odometerKm.toLocaleString("en-IN")} km on {new Date(lastTyreReplacement.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}.
+                            {ran != null && ran > 0 && (
+                              <> Outgoing tyres ran <span className="font-bold">{ran.toLocaleString("en-IN")} km</span>.</>
+                            )}
+                            {ran != null && ran < 0 && (
+                              <> <span className="text-red-600 dark:text-red-400 font-semibold">Odometer is lower than last replacement — check entry.</span></>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </section>
               )}
-              {/* Row 4: Notes */}
-              <div>
-                <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Notes</label>
-                <input type="text" placeholder="Optional notes..." value={expForm.description} onChange={(e) => setExpForm({ ...expForm, description: e.target.value })} className="w-full h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-              </div>
-              {/* Actions */}
-              <div className="flex gap-2.5 pt-1">
-                <button onClick={handleLogExpense} disabled={saving || !expVehicleId || !expForm.title || !expForm.amount || !expForm.expenseDate}
-                  className="flex-1 h-10 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-500 text-white font-semibold text-sm shadow-lg shadow-yellow-500/25 transition-all disabled:opacity-50 flex items-center justify-center">
-                  {saving ? "Saving..." : "Log Expense"}
+
+              {/* SECTION: Amount */}
+              <section className="space-y-3">
+                <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Amount</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Amount (&#8377;) <span className="text-red-500">*</span></label>
+                    <input type="number" min="0" placeholder="0" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Handling (&#8377;)</label>
+                    <input type="number" min="0" placeholder="0" value={expForm.handlingCharges} onChange={(e) => setExpForm({ ...expForm, handlingCharges: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                  </div>
+                  <div className="h-10 flex items-center gap-2 px-4 rounded-lg bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-500/10 dark:to-amber-500/10 border border-yellow-200/70 dark:border-yellow-500/20 min-w-[120px]">
+                    <span className="text-[10px] font-bold text-yellow-700 dark:text-yellow-400/80 uppercase tracking-wider">Total</span>
+                    <span className="text-sm font-black text-yellow-700 dark:text-yellow-400 font-mono">
+                      &#8377;{((Number(expForm.amount) || 0) + (Number(expForm.handlingCharges) || 0)).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              {/* SECTION: When & Where */}
+              <section className="space-y-3">
+                <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Date & Receipts</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Date <span className="text-red-500">*</span></label>
+                    <DatePicker value={expForm.expenseDate} onChange={(v) => setExpForm({ ...expForm, expenseDate: v })} placeholder="Select date" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Attachments</label>
+                    <label className="flex items-center gap-2 h-10 px-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 hover:border-yellow-400 hover:bg-yellow-50/30 dark:hover:bg-yellow-500/[0.03] cursor-pointer transition-colors group">
+                      <Upload className="w-4 h-4 text-gray-400 group-hover:text-yellow-500" />
+                      <span className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-yellow-600 truncate">
+                        {expProofs.length === 0 ? "Upload receipts (PDF, JPG, PNG)" : `Add more (${expProofs.length} selected)`}
+                      </span>
+                      <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) setExpProofs((prev) => [...prev, ...fs]); }} />
+                    </label>
+                  </div>
+                </div>
+                {expProofs.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {expProofs.map((f, idx) => (
+                      <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-yellow-50 dark:bg-yellow-500/10 text-yellow-800 dark:text-yellow-400 text-xs font-medium">
+                        <FileText className="w-3 h-3" />
+                        <span className="truncate max-w-[180px]">{f.name}</span>
+                        <button type="button" onClick={() => setExpProofs((prev) => prev.filter((_, i) => i !== idx))} className="text-yellow-700 hover:text-red-500 transition-colors" title="Remove">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* SECTION: Notes */}
+              <section>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+                <textarea
+                  rows={2}
+                  placeholder="Optional notes…"
+                  value={expForm.description}
+                  onChange={(e) => setExpForm({ ...expForm, description: e.target.value })}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white resize-none"
+                />
+              </section>
+            </div>
+
+            {/* Sticky footer */}
+            <div className="border-t border-gray-100 dark:border-gray-800 px-6 py-3.5 flex items-center justify-between gap-3 bg-gray-50/60 dark:bg-gray-900/60 flex-shrink-0">
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                <span className="text-red-500">*</span> Required fields
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => !saving && setShowModal(false)}
+                  disabled={saving}
+                  className="h-10 px-5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+                >
+                  Cancel
                 </button>
-                <button onClick={() => setShowModal(false)} className="h-10 px-5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 transition-all">Cancel</button>
+                <button
+                  type="button"
+                  onClick={handleLogExpense}
+                  disabled={saving || !expVehicleId || !expForm.title || !expForm.amount || !expForm.expenseDate}
+                  className="h-10 px-6 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-500 text-white font-semibold text-sm shadow-md shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
+                >
+                  {saving ? "Saving…" : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Log Expense
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
 import { NotFoundError } from "@/lib/errors";
-import { Expense } from "@/models";
+import { Expense, TyreReplacement } from "@/models";
 import { parseMultipart, manyFiles } from "@/lib/upload";
 import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
 
@@ -47,6 +47,11 @@ export const DELETE = withRoute<{ id: string; expenseId: string }>(
     const ctx = tenantOf(session);
     await Expense.findOneAndDelete(
       tenantFilter(ctx, { _id: params.expenseId }),
+    );
+    // Cascade: drop the matching tyre-replacement record if the deleted
+    // expense was the trigger for it.
+    await TyreReplacement.deleteMany(
+      tenantFilter(ctx, { expenseId: params.expenseId }),
     );
     return success(null, "Expense deleted");
   },

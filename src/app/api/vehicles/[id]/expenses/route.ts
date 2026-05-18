@@ -1,7 +1,7 @@
 import { withRoute } from "@/lib/api-handler";
 import { success, created } from "@/lib/http";
 import { BadRequestError } from "@/lib/errors";
-import { Expense } from "@/models";
+import { Expense, TyreReplacement } from "@/models";
 import { parseMultipart, manyFiles } from "@/lib/upload";
 import {
   tenantOf,
@@ -65,6 +65,27 @@ export const POST = withRoute<{ id: string }>(
     }
 
     const proofs = manyFiles(files, "proof");
+
+    // Optional tyre-replacement payload — only when category=SERVICE and the
+    // sub-type flag is TYRES. We validate here so an Expense isn't created
+    // with half-valid tyre data.
+    const serviceSubType = val("serviceSubType");
+    const isTyreReplacement = category === "SERVICE" && serviceSubType === "TYRES";
+    let tyreOdometerKm: number | null = null;
+    let tyreBrand: string | null = null;
+    if (isTyreReplacement) {
+      const odoRaw = val("odometerKm");
+      tyreBrand = (val("tyreBrand") ?? "").trim() || null;
+      if (!odoRaw || !tyreBrand) {
+        throw new BadRequestError("Odometer (km) and brand are required for tyre replacements");
+      }
+      const odo = parseFloat(odoRaw);
+      if (!Number.isFinite(odo) || odo < 0) {
+        throw new BadRequestError("Odometer must be a non-negative number");
+      }
+      tyreOdometerKm = odo;
+    }
+
     const expense = await Expense.create({
       ...tenantStamp(ctx),
       vehicleId: params.id,
@@ -77,6 +98,25 @@ export const POST = withRoute<{ id: string }>(
       proofUrls: proofs.map((p) => p.url),
       referenceId: val("referenceId") ?? null,
     });
+
+    if (isTyreReplacement && tyreOdometerKm != null && tyreBrand) {
+      const tyreCountRaw = val("tyreCount");
+      const tyreCount =
+        tyreCountRaw && tyreCountRaw !== ""
+          ? Math.max(0, Math.floor(Number(tyreCountRaw)))
+          : null;
+      await TyreReplacement.create({
+        ...tenantStamp(ctx),
+        vehicleId: params.id,
+        expenseId: expense._id,
+        date: new Date(expenseDate),
+        odometerKm: tyreOdometerKm,
+        brand: tyreBrand,
+        tyreCount,
+        notes: val("description") ?? null,
+      });
+    }
+
     return created(expense, "Expense logged");
   },
   { auth: true },

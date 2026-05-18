@@ -82,7 +82,7 @@ export default function VehicleServiceDetailPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
               <Link
-                href="/vehicles/services"
+                href="/vehicles/expenses"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />

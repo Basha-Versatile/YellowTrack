@@ -14,7 +14,7 @@ import {
 } from "../icons/index";
 import { BsFillCarFrontFill } from "react-icons/bs";
 import { MdSpaceDashboard } from "react-icons/md";
-import { Lightbulb, Shield, UsersRound } from "lucide-react";
+import { Database, Lightbulb, Shield, UsersRound } from "lucide-react";
 
 type NavSubItem = {
   name: string;
@@ -47,11 +47,11 @@ const navItems: NavItem[] = [
       { name: "All Vehicles", path: "/vehicles", perm: "vehicles:read" },
       { name: "Sold Vehicles", path: "/vehicles/sold", perm: "vehicles:read" },
       { name: "Vehicle Groups", path: "/vehicles/groups", perm: "groups:read" },
-      { name: "Onboard Vehicle", path: "/vehicles/onboard", perm: "vehicles:create" },
+      // { name: "Onboard Vehicle", path: "/vehicles/onboard", perm: "vehicles:create" },
       { name: "Compliance", path: "/compliance", perm: "compliance:read" },
       { name: "Challans", path: "/challans", perm: "challans:read" },
       { name: "FASTag", path: "/fastag", perm: "fastag:read" },
-      { name: "Service Costs", path: "/vehicles/services", perm: "services:read" },
+      // { name: "Service Costs", path: "/vehicles/services", perm: "services:read" },
       { name: "Expenses", path: "/vehicles/expenses", perm: "expenses:read" },
       { name: "EMI Tracker", path: "/vehicles/emi", perm: "emi:read" },
     ],
@@ -61,7 +61,7 @@ const navItems: NavItem[] = [
     name: "Drivers",
     subItems: [
       { name: "All Drivers", path: "/drivers", perm: "drivers:read" },
-      { name: "Add Driver", path: "/drivers/add", perm: "drivers:create" },
+      // { name: "Add Driver", path: "/drivers/add", perm: "drivers:create" },
       { name: "Compliance", path: "/drivers/compliance", perm: "drivers:read" },
     ],
   },
@@ -76,6 +76,13 @@ const navItems: NavItem[] = [
     name: "Roles & permissions",
     path: "/settings/roles",
     perm: "settings.roles:manage",
+  },
+  {
+    icon: <Database className="h-5 w-5" />,
+    name: "Masters",
+    subItems: [
+      { name: "Document Types", path: "/settings/document-types", perm: "settings.documentTypes:manage" },
+    ],
   },
   {
     icon: <Lightbulb className="h-5 w-5" />,

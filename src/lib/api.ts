@@ -346,6 +346,8 @@ export const vehicleAPI = {
     api.put(`/vehicles/${vehicleId}/tyres`, { tyres, tyreCount }),
   upsertServiceParts: (vehicleId: string, parts: Array<{ name: string; partNumber?: string | null; notes?: string | null }>) =>
     api.put(`/vehicles/${vehicleId}/service-parts`, { parts }),
+  getTyreReplacements: (vehicleId: string) =>
+    api.get(`/vehicles/${vehicleId}/tyre-replacements`),
   getAccessLog: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/access-log`),
   // Services
   getAllServices: (params?: { status?: string; vehicleId?: string }) => api.get("/vehicles/services/all", { params }),

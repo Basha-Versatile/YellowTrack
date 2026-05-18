@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useSearchParams } from "next/navigation";
-import { vehicleAPI, vehicleGroupAPI, complianceAPI, fastagAPI } from "@/lib/api";
+import { vehicleAPI, vehicleGroupAPI, complianceAPI, fastagAPI, documentTypeAPI } from "@/lib/api";
 
 // Three.js touches `window` on import — load client-only and skip SSR.
 const TyreDiagram3D = dynamic(
@@ -384,6 +384,8 @@ export default function VehicleDetailPage() {
 
   // Service records
   const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [tyreReplacements, setTyreReplacements] = useState<Array<{ _id?: string; date: string; odometerKm: number; brand: string; ranKm: number | null }>>([]);
+  const [tyreBrandPerformance, setTyreBrandPerformance] = useState<Array<{ brand: string; avgKm: number; replacements: number }>>([]);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null);
   const [savingService, setSavingService] = useState(false);
@@ -446,6 +448,19 @@ export default function VehicleDetailPage() {
   const [addingLoading, setAddingLoading] = useState(false);
   const [deletingCompliance, setDeletingCompliance] = useState<string | null>(null);
 
+  // Document type masters — populates the Add Document dropdown and label
+  // lookups for non-built-in trackers. Falls back to DOC_LABELS for codes the
+  // API doesn't return (defensive — handles network errors gracefully).
+  const [docTypeMasters, setDocTypeMasters] = useState<Array<{ code: string; name: string; hasExpiry: boolean }>>([]);
+  const docTypeLabel = (code: string) => {
+    const fromApi = docTypeMasters.find((d) => d.code === code)?.name;
+    return fromApi ?? DOC_LABELS[code] ?? code.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+  const docTypeHasExpiry = (code: string) => {
+    const t = docTypeMasters.find((d) => d.code === code);
+    return t ? t.hasExpiry : true;
+  };
+
   // Per-doc history modal
   const [historyDocType, setHistoryDocType] = useState<string | null>(null);
   const [historyData, setHistoryData] = useState<Array<{ id: string; expiryDate: string | null; documentUrl: string | null; isActive: boolean; createdAt: string; archivedAt: string | null }>>([]);
@@ -491,6 +506,18 @@ export default function VehicleDetailPage() {
         .finally(() => setLoading(false));
       vehicleAPI.getServices(params.id as string)
         .then((res) => setServices(res.data.data))
+        .catch(() => {});
+      vehicleAPI.getTyreReplacements(params.id as string)
+        .then((res) => {
+          setTyreReplacements(res.data.data.records ?? []);
+          setTyreBrandPerformance(res.data.data.brandPerformance ?? []);
+        })
+        .catch(() => {});
+      documentTypeAPI.getAll()
+        .then((res) => {
+          const list = (res.data.data ?? []) as Array<{ code: string; name: string; hasExpiry: boolean; isActive: boolean }>;
+          setDocTypeMasters(list.filter((d) => d.isActive));
+        })
         .catch(() => {});
     }
   };
@@ -1155,7 +1182,7 @@ export default function VehicleDetailPage() {
                           </svg>
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{DOC_LABELS[doc.type] || doc.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}</p>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{docTypeLabel(doc.type)}</p>
                           <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
                             {doc.expiryDate
                               ? <>Exp: {new Date(doc.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</>
@@ -1220,7 +1247,7 @@ export default function VehicleDetailPage() {
                         </label>
                       )}
                       <span className="text-gray-300 dark:text-gray-600">|</span>
-                      <button onClick={() => { if (confirm(`Remove this ${DOC_LABELS[doc.type] || doc.type.replace(/_/g, " ")} document? This cannot be undone.`)) handleDeleteCompliance(doc.id); }}
+                      <button onClick={() => { if (confirm(`Remove this ${docTypeLabel(doc.type)} document? This cannot be undone.`)) handleDeleteCompliance(doc.id); }}
                         disabled={deletingCompliance === doc.id}
                         className="text-[11px] font-medium text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors disabled:opacity-50">
                         <Trash2 className="w-3 h-3" strokeWidth={2} />
@@ -1268,7 +1295,7 @@ export default function VehicleDetailPage() {
                             {entry.action === "DOWNLOAD" ? "Downloaded" : "Viewed"}
                           </span>
                           <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">
-                            {DOC_LABELS[entry.target] || entry.target.replace(/_/g, " ")}
+                            {docTypeLabel(entry.target)}
                           </span>
                         </div>
                         <time className="text-[10px] text-gray-400 whitespace-nowrap">
@@ -1529,44 +1556,6 @@ export default function VehicleDetailPage() {
             )}
           </div>
 
-          {/* Invoice */}
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
-            <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-brand-500" strokeWidth={2} />
-              Vehicle Invoice
-            </h3>
-            {vehicle.invoiceUrl ? (
-              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
-                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" strokeWidth={2} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Invoice Uploaded</p>
-                    <p className="text-[10px] text-gray-400">Permanent document</p>
-                  </div>
-                </div>
-                <a href={(resolveImageUrl(vehicle.invoiceUrl) ?? "")} target="_blank" rel="noopener noreferrer"
-                  className="text-xs font-medium text-brand-500 hover:text-brand-600 flex items-center gap-1">
-                  <ExternalLink className="w-3 h-3" strokeWidth={2} />
-                  View
-                </a>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center py-6 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-yellow-400 dark:hover:border-yellow-500/50 cursor-pointer transition-colors group">
-                <Upload className="w-7 h-7 text-gray-300 dark:text-gray-600 group-hover:text-yellow-500 transition-colors" strokeWidth={1.5} />
-                <span className="text-xs text-gray-400 group-hover:text-yellow-600 font-medium mt-1.5">Upload Vehicle Invoice</span>
-                <span className="text-[10px] text-gray-300 dark:text-gray-600 mt-0.5">PDF, JPG, PNG</span>
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => {
-                  const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
-                  if (f && params.id) {
-                    vehicleAPI.uploadInvoice(params.id as string, f).then(() => fetchVehicle()).catch(console.error);
-                  }
-                }} />
-              </label>
-            )}
-          </div>
-
           {/* Current Driver */}
           {/* <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4">Current Driver</h3>
@@ -1670,6 +1659,49 @@ export default function VehicleDetailPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {(tyreReplacements.length > 0 || tyreBrandPerformance.length > 0) && (
+              <div className="px-5 pb-5 pt-1 border-t border-gray-100 dark:border-gray-800">
+                {tyreBrandPerformance.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Brand Performance</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tyreBrandPerformance.map((b, i) => (
+                        <span key={b.brand} className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold ${i === 0 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" : "bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300"}`}>
+                          <span className="font-bold">{b.brand}</span>
+                          <span className="opacity-60">·</span>
+                          <span>{b.avgKm.toLocaleString("en-IN")} km avg</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {tyreReplacements.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Replacement History ({tyreReplacements.length})</p>
+                    <div className="space-y-1.5">
+                      {tyreReplacements.map((r, idx) => (
+                        <div key={r._id ?? idx} className="flex items-center justify-between p-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-800/20 text-[11px]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold text-gray-800 dark:text-gray-200 truncate">{r.brand}</span>
+                            <span className="text-gray-400">·</span>
+                            <span className="font-mono text-gray-600 dark:text-gray-400">{r.odometerKm.toLocaleString("en-IN")} km</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 flex-shrink-0">
+                            {r.ranKm != null ? (
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">ran {r.ranKm.toLocaleString("en-IN")} km</span>
+                            ) : (
+                              <span className="text-[10px] uppercase tracking-wider font-bold text-brand-500">Current</span>
+                            )}
+                            <span className="text-[10px]">{new Date(r.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1891,11 +1923,20 @@ export default function VehicleDetailPage() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Document Type</label>
-                <select value={addType} onChange={(e) => { setAddType(e.target.value); if (e.target.value !== "OTHER") setAddCustomLabel(""); }}
+                <select value={addType} onChange={(e) => {
+                    const next = e.target.value;
+                    setAddType(next);
+                    if (next !== "OTHER") setAddCustomLabel("");
+                    // If the picked type is lifetime-only, force the lifetime checkbox.
+                    if (next !== "OTHER" && !docTypeHasExpiry(next)) {
+                      setAddLifetime(true);
+                      setAddExpiry("");
+                    }
+                  }}
                   className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-800 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                  {(Object.keys(DOC_LABELS) as string[]).map((t) => {
+                  {(docTypeMasters.length > 0 ? docTypeMasters.map((d) => d.code) : Object.keys(DOC_LABELS)).map((t) => {
                     const exists = vehicle?.complianceDocuments.some((d) => d.type === t);
-                    return <option key={t} value={t} disabled={exists}>{DOC_LABELS[t]}{exists ? " (already added)" : ""}</option>;
+                    return <option key={t} value={t} disabled={exists}>{docTypeLabel(t)}{exists ? " (already added)" : ""}</option>;
                   })}
                   <option value="OTHER">Other / Custom…</option>
                 </select>
@@ -1948,7 +1989,7 @@ export default function VehicleDetailPage() {
             <div className="bg-gradient-to-r from-brand-500 to-brand-400 px-6 py-5">
               <h3 className="text-lg font-bold text-white">Edit Expiry Date</h3>
               <p className="text-white/70 text-sm mt-0.5">
-                {DOC_LABELS[vehicle.complianceDocuments.find((d) => d.id === editingExpiry)?.type || ""] || "Document"}
+                {docTypeLabel(vehicle.complianceDocuments.find((d) => d.id === editingExpiry)?.type || "") || "Document"}
               </p>
             </div>
             <div className="p-6 space-y-5">
@@ -1986,7 +2027,7 @@ export default function VehicleDetailPage() {
             <div className="bg-gradient-to-r from-emerald-500 to-green-500 px-6 py-5">
               <h3 className="text-lg font-bold text-white">Renew Document</h3>
               <p className="text-white/70 text-sm mt-0.5">
-                {DOC_LABELS[vehicle.complianceDocuments.find((d) => d.id === renewingDoc)?.type || ""] || "Document"}
+                {docTypeLabel(vehicle.complianceDocuments.find((d) => d.id === renewingDoc)?.type || "") || "Document"}
               </p>
             </div>
             <div className="p-6 space-y-5">
@@ -2668,7 +2709,7 @@ export default function VehicleDetailPage() {
             </div>
             <div className="min-w-0">
               <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">
-                {historyDocType ? (DOC_LABELS[historyDocType] || historyDocType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())) : ""} History
+                {historyDocType ? docTypeLabel(historyDocType) : ""} History
               </h3>
               <p className="text-[11px] text-gray-400">All past versions of this document</p>
             </div>

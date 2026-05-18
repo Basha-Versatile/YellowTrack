@@ -78,6 +78,7 @@ export const PERMISSIONS = [
   "settings.roles:manage",
   "settings.users:manage",
   "settings.tenant:read",
+  "settings.documentTypes:manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -205,6 +206,7 @@ export const PERMISSION_GROUPS: Array<{
       { key: "settings.roles:manage", label: "Manage roles", description: "Create and edit custom roles." },
       { key: "settings.users:manage", label: "Manage users", description: "Invite users and assign roles." },
       { key: "settings.tenant:read", label: "View tenant settings", description: "View workspace details and plan." },
+      { key: "settings.documentTypes:manage", label: "Manage document types", description: "Add or edit compliance document trackers (Masters)." },
     ],
   },
 ];
