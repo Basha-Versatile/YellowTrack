@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
     name: "Vehicles",
     subItems: [
       { name: "All Vehicles", path: "/vehicles", perm: "vehicles:read" },
-      { name: "Sold Vehicles", path: "/vehicles/sold", perm: "vehicles:read" },
+      // { name: "Sold Vehicles", path: "/vehicles/sold", perm: "vehicles:read" },
       { name: "Vehicle Groups", path: "/vehicles/groups", perm: "groups:read" },
       // { name: "Onboard Vehicle", path: "/vehicles/onboard", perm: "vehicles:create" },
       { name: "Compliance", path: "/compliance", perm: "compliance:read" },
