@@ -1,7 +1,7 @@
 import { withRoute } from "@/lib/api-handler";
 import { created } from "@/lib/http";
 import { BadRequestError, NotFoundError } from "@/lib/errors";
-import { parseMultipart, firstFile, firstString } from "@/lib/upload";
+import { parseMultipart, manyFiles, firstString } from "@/lib/upload";
 import { tenantOf } from "@/lib/auth/tenant-context";
 import * as complianceRepo from "@/server/repositories/compliance.repository";
 import { calculateComplianceStatus } from "@/server/services/compliance.service";
@@ -28,14 +28,16 @@ export const POST = withRoute<{ id: string }>(
         ? new Date(expiryDateRaw)
         : null;
 
-    const file = firstFile(files, "document");
+    const uploaded = manyFiles(files, "document");
+    const urls = uploaded.map((f) => f.url);
     const status = calculateComplianceStatus(finalExpiry);
 
     const newDoc = await complianceRepo.renewDocument(ctx, params.id, {
       vehicleId: oldDoc.vehicleId,
       type: oldDoc.type,
       expiryDate: finalExpiry,
-      documentUrl: file?.url ?? null,
+      documentUrl: urls[0] ?? null,
+      documentUrls: urls,
       status,
       lastVerifiedAt: new Date(),
       isActive: true,

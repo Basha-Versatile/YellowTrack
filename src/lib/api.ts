@@ -454,21 +454,27 @@ export const driverAPI = {
 
 // ── Compliance ──────────────────────────────────────────────
 export const complianceAPI = {
-  uploadDocument: (docId: string, file: File) => {
+  uploadDocument: (docId: string, files: File | File[]) => {
+    const list = Array.isArray(files) ? files : [files];
     const formData = new FormData();
-    formData.append("document", file);
+    for (const f of list) formData.append("document", f);
     return api.post(`/compliance/${docId}/upload`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+  removeDocumentFile: (docId: string, url: string) =>
+    api.delete(`/compliance/${docId}/upload`, { data: { url } }),
   updateExpiry: (docId: string, data: { type: string; expiryDate?: string; lifetime?: boolean }) =>
     api.put(`/compliance/${docId}`, data),
-  renewDocument: (docId: string, data: { expiryDate?: string; type: string; lifetime?: boolean }, file?: File) => {
+  renewDocument: (docId: string, data: { expiryDate?: string; type: string; lifetime?: boolean }, files?: File | File[]) => {
     const formData = new FormData();
     if (data.expiryDate) formData.append("expiryDate", data.expiryDate);
     formData.append("type", data.type);
     if (data.lifetime) formData.append("lifetime", "true");
-    if (file) formData.append("document", file);
+    if (files) {
+      const list = Array.isArray(files) ? files : [files];
+      for (const f of list) formData.append("document", f);
+    }
     return api.post(`/compliance/${docId}/renew`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });

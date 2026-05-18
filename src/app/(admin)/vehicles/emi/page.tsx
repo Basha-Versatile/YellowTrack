@@ -250,33 +250,22 @@ export default function EmiHubPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl border border-gray-200/80 bg-gradient-to-br from-yellow-50 via-white to-amber-50 dark:border-gray-800 dark:from-yellow-500/[0.04] dark:via-gray-900 dark:to-amber-500/[0.04] p-6 sm:p-8">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-yellow-300/20 blur-3xl dark:bg-yellow-400/10"
-        />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-yellow-700/70 dark:text-yellow-400">
-              Fleet · EMI tracker
-            </span>
-            <h1 className="mt-2 text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-              Vehicles under EMI
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Track loan installments, upcoming dues, and defaulters across your fleet.
-            </p>
-          </div>
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-yellow-500/30 hover:from-yellow-500 hover:to-yellow-600 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            New EMI plan
-          </button>
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Vehicles under EMI</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Track loan installments, upcoming dues, and defaulters across your fleet.
+          </p>
         </div>
+        <button
+          onClick={openCreate}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2 text-xs font-bold text-white shadow shadow-yellow-500/30 hover:from-yellow-500 hover:to-yellow-600 transition-all"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          New EMI plan
+        </button>
       </div>
 
       {/* KPIs */}
@@ -314,6 +303,57 @@ export default function EmiHubPage() {
         />
       </div>
 
+      {/* Filters */}
+      <div className="flex items-center flex-wrap gap-2.5 justify-between">
+        <div className="flex items-center flex-wrap gap-1.5">
+          <FilterChip active={filter === "all"} onClick={() => setFilter("all")} label="All" />
+          <FilterChip active={filter === "due7"} onClick={() => setFilter("due7")} label="Due in 7d" />
+          <FilterChip active={filter === "due30"} onClick={() => setFilter("due30")} label="Due in 30d" />
+          <FilterChip active={filter === "overdue"} onClick={() => setFilter("overdue")} label="Overdue" tone="red" />
+          <FilterChip active={filter === "bounced"} onClick={() => setFilter("bounced")} label="Defaulted" tone="red" />
+          <FilterChip active={filter === "closed"} onClick={() => setFilter("closed")} label="Closed" tone="gray" />
+        </div>
+        <VehicleAutocomplete
+          vehicles={vehicles}
+          value={vehicleId}
+          onChange={setVehicleId}
+          placeholder="All vehicles"
+          allLabel="All vehicles"
+        />
+      </div>
+
+      {/* Table */}
+      <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
+        {loading ? (
+          <div className="p-12 text-center text-sm text-gray-500 dark:text-gray-400">
+            Loading EMI plans…
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState onCreate={openCreate} hasAnyPlans={(hub?.rows.length ?? 0) > 0} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50/80 dark:bg-gray-800/50">
+                <tr>
+                  <Th>Vehicle</Th>
+                  <Th>Lender</Th>
+                  <Th className="text-right">EMI / month</Th>
+                  <Th className="text-right">Outstanding</Th>
+                  <Th className="text-center">Progress</Th>
+                  <Th>Next due</Th>
+                  <Th className="text-center">Status</Th>
+                  <Th className="text-right">Actions</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100/50 dark:divide-gray-800/50">
+                {filtered.map((r, i) => (
+                  <Row key={r.id ? String(r.id) : `row-${i}`} row={r} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
       {/* EMI Calendar */}
       <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
         <div className="flex items-center justify-between gap-3 flex-wrap px-5 py-4 border-b border-gray-100 dark:border-gray-800">
@@ -399,58 +439,6 @@ export default function EmiHubPage() {
             })}
           </div>
         </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center flex-wrap gap-2.5 justify-between">
-        <div className="flex items-center flex-wrap gap-1.5">
-          <FilterChip active={filter === "all"} onClick={() => setFilter("all")} label="All" />
-          <FilterChip active={filter === "due7"} onClick={() => setFilter("due7")} label="Due in 7d" />
-          <FilterChip active={filter === "due30"} onClick={() => setFilter("due30")} label="Due in 30d" />
-          <FilterChip active={filter === "overdue"} onClick={() => setFilter("overdue")} label="Overdue" tone="red" />
-          <FilterChip active={filter === "bounced"} onClick={() => setFilter("bounced")} label="Defaulted" tone="red" />
-          <FilterChip active={filter === "closed"} onClick={() => setFilter("closed")} label="Closed" tone="gray" />
-        </div>
-        <VehicleAutocomplete
-          vehicles={vehicles}
-          value={vehicleId}
-          onChange={setVehicleId}
-          placeholder="All vehicles"
-          allLabel="All vehicles"
-        />
-      </div>
-
-      {/* Table */}
-      <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-sm text-gray-500 dark:text-gray-400">
-            Loading EMI plans…
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState onCreate={openCreate} hasAnyPlans={(hub?.rows.length ?? 0) > 0} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50/80 dark:bg-gray-800/50">
-                <tr>
-                  <Th>Vehicle</Th>
-                  <Th>Lender</Th>
-                  <Th className="text-right">EMI / month</Th>
-                  <Th className="text-right">Outstanding</Th>
-                  <Th className="text-center">Progress</Th>
-                  <Th>Next due</Th>
-                  <Th className="text-center">Status</Th>
-                  <Th className="text-right">Actions</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100/50 dark:divide-gray-800/50">
-                {filtered.map((r, i) => (
-                  <Row key={r.id ? String(r.id) : `row-${i}`} row={r} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
       {/* EMI calendar — day details modal */}
@@ -592,18 +580,20 @@ function KpiCard({
     red: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
   };
   return (
-    <div className="rounded-2xl border border-gray-200/80 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.02]">
-      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${TINTS[tint]} mb-2`}>
-        {icon}
+    <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
+      <div className="flex items-center gap-2">
+        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md ${TINTS[tint]} flex-shrink-0`}>
+          {icon}
+        </span>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
+          {label}
+        </p>
       </div>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-        {label}
-      </p>
-      <p className="text-xl font-black text-gray-900 dark:text-white mt-0.5">
+      <p className="text-lg font-black text-gray-900 dark:text-white leading-none mt-1">
         {value}
       </p>
       {hint && (
-        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 truncate">
           {hint}
         </p>
       )}

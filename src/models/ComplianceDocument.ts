@@ -18,7 +18,10 @@ const complianceDocumentSchema = new Schema(
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true },
     type: { type: String, required: true }, // kept as string to support route_permit variants
     expiryDate: { type: Date },
+    // `documentUrl` is kept for back-compat (single primary file URL,
+    // mirrors documentUrls[0]). New code should read `documentUrls`.
     documentUrl: { type: String },
+    documentUrls: { type: [String], default: [] },
     status: { type: String, enum: COMPLIANCE_STATUS, default: "GREEN" },
     isActive: { type: Boolean, default: true },
     archivedAt: { type: Date },

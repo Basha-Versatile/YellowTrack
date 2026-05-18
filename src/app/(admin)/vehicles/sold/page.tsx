@@ -104,11 +104,11 @@ export default function SoldVehiclesPage() {
   if (loading) return <VehiclesListSkeleton view="list" />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sold Vehicles</h1>
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Sold Vehicles</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {pagination.total} vehicle{pagination.total !== 1 ? "s" : ""} sold {totalProceeds > 0 && <>· total proceeds &#8377;{totalProceeds.toLocaleString("en-IN")}</>}
           </p>

@@ -69,7 +69,51 @@ export async function updateDocumentUrl(
 ) {
   return ComplianceDocument.findOneAndUpdate(
     tenantFilter(ctx, { _id: id }),
-    { documentUrl },
+    { documentUrl, documentUrls: [documentUrl] },
+  );
+}
+
+// Append one or more URLs to documentUrls (preserves any existing files)
+// and re-syncs the legacy documentUrl pointer to the first item so older
+// readers continue to work.
+export async function appendDocumentUrls(
+  ctx: ScopedContext,
+  id: string,
+  urls: string[],
+) {
+  if (urls.length === 0) return null;
+  const existing = await ComplianceDocument.findOne(
+    tenantFilter(ctx, { _id: id }),
+  ).lean();
+  if (!existing) return null;
+  const e = existing as Record<string, unknown>;
+  const current = (e.documentUrls as string[] | undefined) ?? (e.documentUrl ? [e.documentUrl as string] : []);
+  const next = [...current, ...urls];
+  return ComplianceDocument.findOneAndUpdate(
+    tenantFilter(ctx, { _id: id }),
+    { documentUrls: next, documentUrl: next[0] },
+    { new: true },
+  );
+}
+
+// Remove a specific URL from documentUrls (and clear documentUrl if the
+// removed file was the primary one).
+export async function removeDocumentUrl(
+  ctx: ScopedContext,
+  id: string,
+  url: string,
+) {
+  const existing = await ComplianceDocument.findOne(
+    tenantFilter(ctx, { _id: id }),
+  ).lean();
+  if (!existing) return null;
+  const e = existing as Record<string, unknown>;
+  const current = (e.documentUrls as string[] | undefined) ?? (e.documentUrl ? [e.documentUrl as string] : []);
+  const next = current.filter((u) => u !== url);
+  return ComplianceDocument.findOneAndUpdate(
+    tenantFilter(ctx, { _id: id }),
+    { documentUrls: next, documentUrl: next[0] ?? null },
+    { new: true },
   );
 }
 

@@ -119,31 +119,31 @@ export default function VehiclesPage() {
   if (loading) return <VehiclesListSkeleton view={view} />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vehicles</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Vehicles</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             {pagination.total} vehicle{pagination.total !== 1 ? "s" : ""} in your fleet
           </p>
         </div>
         <Link
           href="/vehicles/onboard"
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-brand-400 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-500 to-brand-400 px-4 py-2 text-xs font-bold text-white shadow shadow-brand-500/25 hover:shadow-brand-500/40 transition-all"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           Onboard Vehicle
         </Link>
       </div>
 
       {/* Active / Sold Tabs */}
-      <div className="inline-flex p-1 rounded-xl bg-gray-100 dark:bg-gray-800/50">
+      <div className="inline-flex p-1 rounded-lg bg-gray-100 dark:bg-gray-800/50">
         {(["ALL", "SOLD"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => { setLifecycleTab(tab); fetchVehicles(1, { overrideLifecycle: tab }); }}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${lifecycleTab === tab ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
+            className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${lifecycleTab === tab ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
           >
             {tab === "ALL" ? "All Vehicles" : "Sold"}
           </button>
@@ -151,26 +151,26 @@ export default function VehiclesPage() {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="rounded-xl border border-gray-200/80 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.02]">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total</p>
-          <p className="text-xl font-black text-gray-900 dark:text-white mt-1">{pagination.total}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total</p>
+          <p className="text-lg font-black text-gray-900 dark:text-white leading-none mt-1">{pagination.total}</p>
         </div>
-        <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/5">
-          <p className="text-[10px] font-semibold text-emerald-500/60 uppercase tracking-wider">Compliant</p>
-          <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{greenCount}</p>
+        <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-3 py-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+          <p className="text-[10px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-wider">Compliant</p>
+          <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none mt-1">{greenCount}</p>
         </div>
-        <div className="rounded-xl border border-amber-200/60 bg-amber-50/50 p-4 dark:border-amber-500/20 dark:bg-amber-500/5">
-          <p className="text-[10px] font-semibold text-amber-500/60 uppercase tracking-wider">Expiring</p>
-          <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1">{yellowCount}</p>
+        <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 px-3 py-2.5 dark:border-amber-500/20 dark:bg-amber-500/5">
+          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Expiring</p>
+          <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-1">{yellowCount}</p>
         </div>
-        <div className="rounded-xl border border-red-200/60 bg-red-50/50 p-4 dark:border-red-500/20 dark:bg-red-500/5">
-          <p className="text-[10px] font-semibold text-red-500/60 uppercase tracking-wider">Critical</p>
-          <p className="text-xl font-black text-red-600 dark:text-red-400 mt-1">{redCount}</p>
+        <div className="rounded-lg border border-red-200/60 bg-red-50/50 px-3 py-2.5 dark:border-red-500/20 dark:bg-red-500/5">
+          <p className="text-[10px] font-bold text-red-600/70 dark:text-red-400/70 uppercase tracking-wider">Critical</p>
+          <p className="text-lg font-black text-red-600 dark:text-red-400 leading-none mt-1">{redCount}</p>
         </div>
-        <div className="rounded-xl border border-brand-200/60 bg-brand-25 p-4 dark:border-brand-500/20 dark:bg-brand-500/5 col-span-2 sm:col-span-1">
-          <p className="text-[10px] font-semibold text-brand-500/60 uppercase tracking-wider">Pending Fines</p>
-          <p className="text-xl font-black text-brand-600 dark:text-brand-400 mt-1">&#8377;{totalPending.toLocaleString("en-IN")}</p>
+        <div className="rounded-lg border border-brand-200/60 bg-brand-25 px-3 py-2.5 dark:border-brand-500/20 dark:bg-brand-500/5 col-span-2 sm:col-span-1">
+          <p className="text-[10px] font-bold text-brand-600/70 dark:text-brand-400/70 uppercase tracking-wider">Pending Fines</p>
+          <p className="text-lg font-black text-brand-600 dark:text-brand-400 leading-none mt-1">&#8377;{totalPending.toLocaleString("en-IN")}</p>
         </div>
       </div>
 

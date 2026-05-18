@@ -130,37 +130,37 @@ export default function FASTagPage() {
   if (loading) return <FASTagSkeleton />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <Image src="/images/fastag.png" alt="FASTag" width={100} height={20} className="h-14 w-60" />
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage FASTags, recharge, and track toll transactions</p>
+          <Image src="/images/fastag.png" alt="FASTag" width={100} height={20} className="h-12 w-52" />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Manage FASTags, recharge, and track toll transactions</p>
         </div>
         <button onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-brand-400 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
-          <Plus className="w-4 h-4" />
+          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-500 to-brand-400 px-4 py-2 text-xs font-bold text-white shadow shadow-brand-500/25 hover:shadow-brand-500/40 transition-all">
+          <Plus className="w-3.5 h-3.5" />
           Create FASTag
         </button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.02]">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total Tags</p>
-          <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{stats.total}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Tags</p>
+          <p className="text-lg font-black text-gray-900 dark:text-white leading-none mt-1">{stats.total}</p>
         </div>
-        <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
-          <p className="text-[10px] font-semibold text-emerald-500/60 uppercase tracking-wider">Active</p>
-          <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.active}</p>
+        <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-3 py-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+          <p className="text-[10px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-wider">Active</p>
+          <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none mt-1">{stats.active}</p>
         </div>
-        <div className="rounded-2xl border border-brand-200/60 bg-brand-25 p-5 dark:border-brand-500/20 dark:bg-brand-500/5">
-          <p className="text-[10px] font-semibold text-brand-500/60 uppercase tracking-wider">Total Balance</p>
-          <p className="text-2xl font-black text-brand-600 dark:text-brand-400 mt-1">&#8377;{stats.totalBalance.toLocaleString("en-IN")}</p>
+        <div className="rounded-lg border border-brand-200/60 bg-brand-25 px-3 py-2.5 dark:border-brand-500/20 dark:bg-brand-500/5">
+          <p className="text-[10px] font-bold text-brand-600/70 dark:text-brand-400/70 uppercase tracking-wider">Total Balance</p>
+          <p className="text-lg font-black text-brand-600 dark:text-brand-400 leading-none mt-1">&#8377;{stats.totalBalance.toLocaleString("en-IN")}</p>
         </div>
-        <div className="rounded-2xl border border-red-200/60 bg-red-50/50 p-5 dark:border-red-500/20 dark:bg-red-500/5">
-          <p className="text-[10px] font-semibold text-red-500/60 uppercase tracking-wider">Low Balance</p>
-          <p className="text-2xl font-black text-red-600 dark:text-red-400 mt-1">{stats.lowBalance}</p>
+        <div className="rounded-lg border border-red-200/60 bg-red-50/50 px-3 py-2.5 dark:border-red-500/20 dark:bg-red-500/5">
+          <p className="text-[10px] font-bold text-red-600/70 dark:text-red-400/70 uppercase tracking-wider">Low Balance</p>
+          <p className="text-lg font-black text-red-600 dark:text-red-400 leading-none mt-1">{stats.lowBalance}</p>
         </div>
       </div>
 

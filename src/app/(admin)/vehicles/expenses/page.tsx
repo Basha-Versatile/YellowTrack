@@ -1,6 +1,5 @@
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
-import dynamic from "next/dynamic";
 import { vehicleAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -10,13 +9,11 @@ import DatePicker from "@/components/ui/DatePicker";
 import { pickValidatedFiles } from "@/lib/file-validation";
 import {
   Plus, Download, AlertTriangle, Wrench, Car, CheckCircle2,
-  MoreHorizontal, BarChart3, PieChart, FileText,
+  MoreHorizontal, BarChart3, FileText,
   ImageIcon, Upload, Banknote, X, Receipt,
 } from "lucide-react";
 import { VehicleAutocomplete } from "@/components/vehicles/VehicleAutocomplete";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
-
-const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 interface VehicleBasic { id: string; registrationNumber: string; make: string; model: string; }
 interface ExpenseItem { source: string; date: string; vehicleId: string; vehicle: VehicleBasic | null; title: string; amount: number; handlingCharges?: number; proofUrls: string[]; category: string; }
@@ -427,22 +424,14 @@ function VehicleExpensesContent() {
     return m;
   })();
 
-  const barCategories = report?.timeline?.map((t) => new Date(t.period + "-01").toLocaleDateString("en-IN", { month: "short", year: "2-digit" })) || [];
-  const barSeries = activeCategories.map(([key]) => ({
-    name: CATEGORY_LABELS[key] || key,
-    data: report?.timeline?.map((t) => (typeof t[key] === "number" ? t[key] : 0) as number) || [],
-    color: CATEGORY_COLORS[key]?.dot || "#6b7280",
-  }));
-  const donutSeries = activeCategories.map(([, v]) => v);
-  const donutLabels = activeCategories.map(([k]) => CATEGORY_LABELS[k] || k);
-  const donutColors = activeCategories.map(([k]) => CATEGORY_COLORS[k]?.dot || "#6b7280");
+  // Trend chart + category donut moved to the main Dashboard.
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Expenses Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vehicles Expenses</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Track all vehicle-related spending with detailed analytics</p>
         </div>
         <div className="flex items-center gap-2">
@@ -595,61 +584,6 @@ function VehicleExpensesContent() {
             })}
           </div>
 
-          {/* Charts — 3D Glassy */}
-          {report.timeline.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-              {/* Bar Chart — 3D Glass Card */}
-              <div className="lg:col-span-2 relative group" style={{ perspective: "1200px" }}>
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5 rounded-3xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity" />
-                <div className="relative rounded-3xl bg-white/60 dark:bg-gray-800/30 backdrop-blur-2xl border border-white/40 dark:border-gray-600/30 p-7 shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transform transition-transform duration-500 group-hover:rotate-x-1 group-hover:-translate-y-1">
-                  {/* Shine effect */}
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-                  <div className="absolute top-0 left-0 bottom-0 w-px bg-gradient-to-b from-white/40 via-white/10 to-transparent" />
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-5 flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                      <BarChart3 className="w-3.5 h-3.5 text-white" />
-                    </span>
-                    Monthly Expense Trend
-                  </h3>
-                  <ReactApexChart type="bar" height={300} options={{
-                    chart: { stacked: true, toolbar: { show: false }, fontFamily: "inherit", background: "transparent" },
-                    xaxis: { categories: barCategories, labels: { style: { fontSize: "10px" } } },
-                    yaxis: { labels: { formatter: (v: number) => `\u20B9${(v / 1000).toFixed(0)}K`, style: { fontSize: "10px" } } },
-                    plotOptions: { bar: { borderRadius: 8, columnWidth: "50%" } },
-                    legend: { position: "top", fontSize: "11px", fontWeight: 600 },
-                    tooltip: { y: { formatter: (v: number) => `\u20B9${v.toLocaleString("en-IN")}` }, theme: "light" },
-                    grid: { borderColor: "#e5e7eb30", strokeDashArray: 4 },
-                    dataLabels: { enabled: false },
-                  }} series={barSeries} />
-                </div>
-              </div>
-
-              {/* Donut Chart — 3D Glass Card */}
-              <div className="relative group" style={{ perspective: "1200px" }}>
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-red-500/5 rounded-3xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity" />
-                <div className="relative rounded-3xl bg-white/60 dark:bg-gray-800/30 backdrop-blur-2xl border border-white/40 dark:border-gray-600/30 p-7 shadow-[0_8px_32px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)] transform transition-transform duration-500 group-hover:-rotate-x-1 group-hover:-translate-y-1">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-                  <div className="absolute top-0 right-0 bottom-0 w-px bg-gradient-to-b from-white/40 via-white/10 to-transparent" />
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-5 flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                      <PieChart className="w-3.5 h-3.5 text-white" />
-                    </span>
-                    Category Split
-                  </h3>
-                {donutSeries.length > 0 ? (
-                  <ReactApexChart type="donut" height={280} options={{
-                    labels: donutLabels, colors: donutColors,
-                    legend: { position: "bottom", fontSize: "11px", fontWeight: 600 },
-                    plotOptions: { pie: { donut: { size: "68%", labels: { show: true, total: { show: true, label: "Total", fontSize: "11px", fontWeight: "700", formatter: () => `\u20B9${(report.summary.totalSpent / 1000).toFixed(0)}K` } } } } },
-                    tooltip: { y: { formatter: (v: number) => `\u20B9${v.toLocaleString("en-IN")}` } },
-                    dataLabels: { enabled: false },
-                    stroke: { width: 3, colors: ["#fff"] },
-                  }} series={donutSeries} />
-                ) : <p className="text-sm text-gray-400 text-center py-10">No data</p>}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Expense Table — 3D Glass */}
           <div className="relative group" style={{ perspective: "1200px" }}>

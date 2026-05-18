@@ -343,7 +343,7 @@ const AppSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div
-        className={`px-5 pt-7 pb-4 flex bg-gray-900 ${
+        className={`px-5 pt-7 pb-4 flex bg-gradient-to-br from-emerald-950 via-teal-900 to-emerald-950 ${
           !expanded ? "justify-center" : "justify-start"
         }`}
       >

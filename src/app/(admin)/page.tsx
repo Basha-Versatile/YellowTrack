@@ -1,9 +1,12 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { vehicleAPI, driverAPI, notificationAPI } from "@/lib/api";
 import Link from "next/link";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
-import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, type LucideIcon } from "lucide-react";
+import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, BarChart3, PieChart as PieIcon, type LucideIcon } from "lucide-react";
+
+const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 interface DashboardStats {
   totalVehicles: number;
@@ -21,20 +24,49 @@ interface DriverStats {
   documents: { green: number; yellow: number; orange: number; red: number };
 }
 
+interface ExpenseReport {
+  summary: { totalSpent: number; breakdown: Record<string, number> };
+  timeline: Array<{ period: string; [key: string]: string | number }>;
+}
+
+// Same palette/labels the Expenses page uses — kept here so the dashboard
+// chart matches the source-of-truth report card.
+const CATEGORY_LABELS: Record<string, string> = {
+  challans: "Challans",
+  services: "Services",
+  fastag: "FASTag",
+  compliance: "Compliance",
+  emi: "EMI",
+  invoices: "Invoices",
+};
+const CATEGORY_COLORS_HEX: Record<string, string> = {
+  challans: "#ef4444",
+  services: "#3b82f6",
+  fastag: "#f59e0b",
+  compliance: "#10b981",
+  emi: "#a855f7",
+  invoices: "#06b6d4",
+};
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
+  const [expenseReport, setExpenseReport] = useState<ExpenseReport | null>(null);
   // const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Year-to-date expense window — matches the Expenses page default.
+    const now = new Date();
+    const from = new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0];
+    const to = now.toISOString().split("T")[0];
     Promise.all([
       vehicleAPI.getStats().then((r) => r.data.data),
       driverAPI.getStats().then((r) => r.data.data).catch(() => null),
       notificationAPI.getUnreadCount().then((r) => r.data.data.count).catch(() => 0),
+      vehicleAPI.getExpenseReport({ from, to }).then((r) => r.data.data).catch(() => null),
     ])
-      .then(([s, ds]) => { setStats(s); setDriverStats(ds); // setUnreadNotifs(n);
-      })
+      .then(([s, ds, , er]) => { setStats(s); setDriverStats(ds); setExpenseReport(er); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -57,124 +89,264 @@ export default function DashboardPage() {
   const totalDAll = dAll.green + dAll.yellow + dAll.orange + dAll.red;
   const dlPct = totalDAll > 0 ? Math.round((dAll.green / totalDAll) * 100) : 0;
 
+  // Pre-compute health hints so tiles can show one extra useful number.
+  const vehiclesOk = vc.green;
+  const vehiclesIssues = vc.yellow + vc.orange + vc.red;
+  const driversOk = dAll.green;
+  const driversIssues = dAll.yellow + dAll.orange + dAll.red;
+
   return (
-    <div className="space-y-6">
-      {/* ── HERO BANNER ── */}
-      <div className="relative rounded-2xl overflow-hidden border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
-        {/* decorative accents — very subtle, theme-agnostic */}
-        <div className="pointer-events-none absolute top-0 right-0 w-96 h-96 rounded-full bg-yellow-500/5 dark:bg-yellow-500/10 blur-[100px]" />
-        <div className="pointer-events-none absolute bottom-0 left-1/4 w-72 h-72 rounded-full bg-yellow-400/5 blur-[80px]" />
-        <div className="pointer-events-none absolute top-10 right-16 w-48 h-48 rounded-full border border-yellow-500/10" />
-        <div className="pointer-events-none absolute top-6 right-12 w-48 h-48 rounded-full border border-yellow-500/5" />
-
-        <div className="relative z-10 px-6 sm:px-8 py-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-            <div>
-              <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight">Dashboard</h1>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Fleet compliance overview at a glance</p>
-            </div>
-            <div className="flex gap-3">
-              <Link href="/vehicles/onboard"
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all">
-                <Plus className="w-4 h-4" />
-                Onboard Vehicle
-              </Link>
-              <Link href="/drivers/add"
-                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10 transition-all">
-                <UserPlus className="w-4 h-4" />
-                Add Driver
-              </Link>
-            </div>
-          </div>
-
-          {/* Stat Cards inside hero */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard Icon={Truck} label="Vehicles" value={`${stats?.totalVehicles || 0}`} href="/vehicles" />
-            <StatCard Icon={Users} label="Drivers" value={`${driverStats?.totalDrivers || 0}`} href="/drivers" />
-            <StatCard Icon={AlertTriangle} label="Pending Challans" value={`₹${(stats?.challans?.pending?.amount || 0).toLocaleString("en-IN")}`} sub={`${stats?.challans?.pending?.count || 0} challans`} href="/challans" accent />
-            <StatCard Icon={CheckCircle2} label="Paid Challans" value={`₹${(stats?.challans?.paid?.amount || 0).toLocaleString("en-IN")}`} sub={`${stats?.challans?.paid?.count || 0} of ${stats?.challans?.total || 0}`} success />
-          </div>
+    <div className="space-y-4">
+      {/* ── HEADER ROW ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Dashboard</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">Fleet compliance overview at a glance</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/vehicles/onboard"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2 text-xs font-bold text-white shadow shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all">
+            <Plus className="w-3.5 h-3.5" />
+            Onboard Vehicle
+          </Link>
+          <Link href="/drivers/add"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10 transition-all">
+            <UserPlus className="w-3.5 h-3.5" />
+            Add Driver
+          </Link>
         </div>
       </div>
 
+      {/* ── COMPACT STAT CHIPS ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <StatChip
+          Icon={Truck}
+          label="Vehicles"
+          value={`${stats?.totalVehicles || 0}`}
+          sub={totalVDocs > 0 ? `${vehiclesOk} valid · ${vehiclesIssues} issue${vehiclesIssues === 1 ? "" : "s"}` : undefined}
+          href="/vehicles"
+          tint="brand"
+        />
+        <StatChip
+          Icon={Users}
+          label="Drivers"
+          value={`${driverStats?.totalDrivers || 0}`}
+          sub={totalDAll > 0 ? `${driversOk} valid · ${driversIssues} issue${driversIssues === 1 ? "" : "s"}` : undefined}
+          href="/drivers"
+          tint="indigo"
+        />
+        <StatChip
+          Icon={AlertTriangle}
+          label="Pending Challans"
+          value={`₹${(stats?.challans?.pending?.amount || 0).toLocaleString("en-IN")}`}
+          sub={`${stats?.challans?.pending?.count || 0} open`}
+          href="/challans"
+          tint="red"
+        />
+        <StatChip
+          Icon={CheckCircle2}
+          label="Paid Challans"
+          value={`₹${(stats?.challans?.paid?.amount || 0).toLocaleString("en-IN")}`}
+          sub={`${stats?.challans?.paid?.count || 0} of ${stats?.challans?.total || 0}`}
+          tint="emerald"
+        />
+      </div>
+
       {/* ── COMPLIANCE SECTIONS ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {/* Vehicle Compliance */}
-        <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-          <div className="relative bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400 px-6 py-5 overflow-hidden">
-            <div className="absolute top-3 right-6 w-24 h-24 rounded-full border border-white/10" />
-            <div className="absolute -bottom-4 right-20 w-20 h-20 rounded-full border border-white/5" />
-            <div className="relative z-10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
-                  <Truck className="w-5.5 h-5.5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Vehicle Compliance</h3>
-                  <p className="text-white/70 text-xs">{totalVDocs} documents across {stats?.totalVehicles || 0} vehicles</p>
-                </div>
+        <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                <Truck className="w-4 h-4 text-white" />
               </div>
-              <div className="text-right">
-                <p className="text-3xl font-black text-white">{vcPct}%</p>
-                <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium">Compliant</p>
+              <div>
+                <h3 className="text-sm font-bold text-white leading-tight">Vehicle Compliance</h3>
+                <p className="text-white/80 text-[10px]">{totalVDocs} docs · {stats?.totalVehicles || 0} vehicles</p>
               </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xl font-black text-white leading-none">{vcPct}%</p>
+              <p className="text-[9px] text-white/70 uppercase tracking-wider font-bold mt-0.5">Compliant</p>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-4">
             <ComplianceSection
-              icon={<FileText className="w-3.5 h-3.5" />}
+              icon={<FileText className="w-3 h-3" />}
               title="Document Status"
               counts={vc}
               total={totalVDocs}
               basePath="/compliance"
             />
 
-            <Link href="/compliance" className="mt-5 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
+            <Link href="/compliance" className="mt-4 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
               View Vehicle Compliance
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
         </div>
 
         {/* Driver Compliance */}
-        <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-          <div className="relative bg-gradient-to-r from-indigo-500 via-indigo-400 to-violet-400 px-6 py-5 overflow-hidden">
-            <div className="absolute top-3 right-6 w-24 h-24 rounded-full border border-white/10" />
-            <div className="absolute -bottom-4 right-20 w-20 h-20 rounded-full border border-white/5" />
-            <div className="relative z-10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/20">
-                  <Users className="w-5.5 h-5.5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Driver Compliance</h3>
-                  <p className="text-white/70 text-xs">{totalDAll} documents across {driverStats?.totalDrivers || 0} drivers</p>
-                </div>
+        <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                <Users className="w-4 h-4 text-white" />
               </div>
-              <div className="text-right">
-                <p className="text-3xl font-black text-white">{dlPct}%</p>
-                <p className="text-[10px] text-white/60 uppercase tracking-wider font-medium">Compliant</p>
+              <div>
+                <h3 className="text-sm font-bold text-white leading-tight">Driver Compliance</h3>
+                <p className="text-white/80 text-[10px]">{totalDAll} docs · {driverStats?.totalDrivers || 0} drivers</p>
               </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xl font-black text-white leading-none">{dlPct}%</p>
+              <p className="text-[9px] text-white/70 uppercase tracking-wider font-bold mt-0.5">Compliant</p>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-4">
             <ComplianceSection
-              icon={<FileText className="w-3.5 h-3.5" />}
+              icon={<FileText className="w-3 h-3" />}
               title="Document Status"
               counts={dAll}
               total={totalDAll}
               basePath="/drivers/compliance"
             />
 
-            <Link href="/drivers/compliance" className="mt-5 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
+            <Link href="/drivers/compliance" className="mt-4 flex items-center justify-center gap-1.5 w-full py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
               View Driver Compliance
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
         </div>
       </div>
+
+      {/* ── EXPENSE CHARTS (moved from /vehicles/expenses) ── */}
+      {expenseReport && (() => {
+        const activeCategories = Object.entries(expenseReport.summary.breakdown).filter(
+          ([, v]) => (v as number) > 0,
+        );
+        if (activeCategories.length === 0) return null;
+        const barCategories = expenseReport.timeline.map((t) =>
+          new Date(String(t.period) + "-01").toLocaleDateString("en-IN", {
+            month: "short",
+            year: "2-digit",
+          }),
+        );
+        const barSeries = activeCategories.map(([key]) => ({
+          name: CATEGORY_LABELS[key] || key,
+          data: expenseReport.timeline.map((t) =>
+            typeof t[key] === "number" ? (t[key] as number) : 0,
+          ),
+          color: CATEGORY_COLORS_HEX[key] || "#6b7280",
+        }));
+        const donutSeries = activeCategories.map(([, v]) => v as number);
+        const donutLabels = activeCategories.map(
+          ([k]) => CATEGORY_LABELS[k] || k,
+        );
+        const donutColors = activeCategories.map(
+          ([k]) => CATEGORY_COLORS_HEX[k] || "#6b7280",
+        );
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Bar Chart */}
+            <div className="lg:col-span-2 rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-4">
+              <h3 className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                  <BarChart3 className="w-3 h-3 text-white" />
+                </span>
+                Monthly Expense Trend
+              </h3>
+              <ReactApexChart
+                type="bar"
+                height={280}
+                options={{
+                  chart: {
+                    stacked: true,
+                    toolbar: { show: false },
+                    fontFamily: "inherit",
+                    background: "transparent",
+                  },
+                  xaxis: {
+                    categories: barCategories,
+                    labels: { style: { fontSize: "10px" } },
+                  },
+                  yaxis: {
+                    labels: {
+                      formatter: (v: number) => `₹${(v / 1000).toFixed(0)}K`,
+                      style: { fontSize: "10px" },
+                    },
+                  },
+                  plotOptions: { bar: { borderRadius: 6, columnWidth: "50%" } },
+                  legend: { position: "top", fontSize: "11px", fontWeight: 600 },
+                  tooltip: {
+                    y: {
+                      formatter: (v: number) =>
+                        `₹${v.toLocaleString("en-IN")}`,
+                    },
+                    theme: "light",
+                  },
+                  grid: { borderColor: "#e5e7eb30", strokeDashArray: 4 },
+                  dataLabels: { enabled: false },
+                }}
+                series={barSeries}
+              />
+            </div>
+
+            {/* Donut Chart */}
+            <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-4">
+              <h3 className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-md bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+                  <PieIcon className="w-3 h-3 text-white" />
+                </span>
+                Category Split
+              </h3>
+              <ReactApexChart
+                type="donut"
+                height={260}
+                options={{
+                  labels: donutLabels,
+                  colors: donutColors,
+                  legend: {
+                    position: "bottom",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                  },
+                  plotOptions: {
+                    pie: {
+                      donut: {
+                        size: "68%",
+                        labels: {
+                          show: true,
+                          total: {
+                            show: true,
+                            label: "Total",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            formatter: () =>
+                              `₹${(expenseReport.summary.totalSpent / 1000).toFixed(0)}K`,
+                          },
+                        },
+                      },
+                    },
+                  },
+                  tooltip: {
+                    y: {
+                      formatter: (v: number) =>
+                        `₹${v.toLocaleString("en-IN")}`,
+                    },
+                  },
+                  dataLabels: { enabled: false },
+                  stroke: { width: 3, colors: ["#fff"] },
+                }}
+                series={donutSeries}
+              />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── QUICK ACTIONS ── */}
       {/*<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -204,60 +376,65 @@ export default function DashboardPage() {
 
 /* ── Sub-components ── */
 
-function StatCard({ Icon, label, value, sub, href, accent, success }: { Icon: LucideIcon; label: string; value: string; sub?: string; href?: string; accent?: boolean; success?: boolean }) {
-  const wrapperCls = accent
-    ? "bg-red-50 border border-red-200 dark:bg-red-500/10 dark:border-red-500/20"
-    : success
-      ? "bg-emerald-50 border border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/20"
-      : "bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10";
-
-  const iconCls = accent
-    ? "text-red-500 dark:text-red-400"
-    : success
-      ? "text-emerald-500 dark:text-emerald-400"
-      : "text-gray-400 dark:text-white/40";
-
-  const labelCls = "text-gray-500 dark:text-white/40";
-
-  const valueCls = accent
-    ? "text-red-600 dark:text-red-400"
-    : success
-      ? "text-emerald-600 dark:text-emerald-400"
-      : "text-gray-900 dark:text-white";
-
-  const subCls = "text-gray-400 dark:text-white/30";
+function StatChip({
+  Icon,
+  label,
+  value,
+  sub,
+  href,
+  tint,
+}: {
+  Icon: LucideIcon;
+  label: string;
+  value: string;
+  sub?: string;
+  href?: string;
+  tint: "brand" | "indigo" | "red" | "emerald";
+}) {
+  const palette = {
+    brand: {
+      iconBg: "bg-yellow-100 text-yellow-600 dark:bg-yellow-500/15 dark:text-yellow-400",
+      value: "text-gray-900 dark:text-white",
+      ring: "hover:border-yellow-300 dark:hover:border-yellow-500/30",
+    },
+    indigo: {
+      iconBg: "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400",
+      value: "text-gray-900 dark:text-white",
+      ring: "hover:border-indigo-300 dark:hover:border-indigo-500/30",
+    },
+    red: {
+      iconBg: "bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400",
+      value: "text-red-600 dark:text-red-400",
+      ring: "hover:border-red-300 dark:hover:border-red-500/30",
+    },
+    emerald: {
+      iconBg: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400",
+      value: "text-emerald-600 dark:text-emerald-400",
+      ring: "hover:border-emerald-300 dark:hover:border-emerald-500/30",
+    },
+  }[tint];
 
   const content = (
-    <div className={`rounded-xl px-4 py-4 h-full flex flex-col ${wrapperCls}`}>
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className={`w-4 h-4 ${iconCls}`} strokeWidth={1.5} />
-        <span className={`text-[11px] uppercase tracking-wider font-medium ${labelCls}`}>{label}</span>
+    <div className={`rounded-xl border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02] transition-all ${palette.ring} ${href ? "cursor-pointer hover:shadow-md" : ""}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <span className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${palette.iconBg}`}>
+          <Icon className="w-3.5 h-3.5" strokeWidth={2} />
+        </span>
+        <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 truncate">
+          {label}
+        </span>
       </div>
-      <p className={`text-2xl font-black ${valueCls}`}>{value}</p>
-      <p className={`text-[11px] mt-0.5 ${subCls} ${sub ? "" : "invisible"}`} aria-hidden={!sub}>
-        {sub ?? "—"}
-      </p>
+      <p className={`text-xl font-black leading-none ${palette.value}`}>{value}</p>
+      {sub && (
+        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5">{sub}</p>
+      )}
     </div>
   );
   return href ? (
-    <Link href={href} className="block h-full hover:opacity-80 transition-opacity">{content}</Link>
+    <Link href={href} className="block h-full">{content}</Link>
   ) : (
     content
   );
-}
-
-function StatusTile({ label, sublabel, count, dotColor, bgColor, textColor, href }: { label: string; sublabel: string; count: number; dotColor: string; bgColor: string; textColor: string; href?: string }) {
-  const content = (
-    <div className={`rounded-xl px-4 py-3.5 ${bgColor} transition-all hover:scale-[1.02] ${href ? "cursor-pointer" : ""}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
-        <span className={`text-xs font-bold ${textColor}`}>{label}</span>
-      </div>
-      <p className={`text-2xl font-black ${textColor}`}>{count}</p>
-      <p className="text-[10px] text-gray-400 mt-0.5">{sublabel}</p>
-    </div>
-  );
-  return href ? <Link href={href} className="block">{content}</Link> : content;
 }
 
 type ComplianceCounts = { green: number; yellow: number; orange: number; red: number };
@@ -275,29 +452,133 @@ function ComplianceSection({
   total: number;
   basePath?: string;
 }) {
+  // Donut geometry: standard SVG technique using strokeDasharray. Radius 40
+  // on a 100×100 viewBox; circumference = 2πr ≈ 251.327. We rotate the
+  // <svg> by -90deg so segments start at 12 o'clock.
+  const RADIUS = 40;
+  const CIRC = 2 * Math.PI * RADIUS;
+  const segments = [
+    { key: "GREEN" as const, label: "Valid", sublabel: "> 30 days", count: counts.green, color: "#10b981" },
+    { key: "YELLOW" as const, label: "Expiring", sublabel: "≤ 30 days", count: counts.yellow, color: "#f59e0b" },
+    { key: "ORANGE" as const, label: "Critical", sublabel: "≤ 7 days", count: counts.orange, color: "#d97706", blink: true },
+    { key: "RED" as const, label: "Expired", sublabel: "≤ 0 days", count: counts.red, color: "#ef4444" },
+  ];
+  let cumulative = 0;
+  const drawn = segments.map((s) => {
+    const portion = total > 0 ? s.count / total : 0;
+    const dash = portion * CIRC;
+    const offset = -cumulative * CIRC;
+    cumulative += portion;
+    return { ...s, dash, offset, portion };
+  });
   const tileHref = (status: "GREEN" | "YELLOW" | "ORANGE" | "RED") =>
     basePath ? `${basePath}?status=${status}` : undefined;
+
+  const [hoveredKey, setHoveredKey] = useState<typeof segments[number]["key"] | null>(null);
+  const hovered = hoveredKey ? drawn.find((d) => d.key === hoveredKey) : null;
+  const hoveredPct = hovered ? Math.round(hovered.portion * 100) : 0;
+
   return (
     <div>
       <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
         {icon}
         {title}
       </h4>
-      <div className="h-3 rounded-full bg-gray-100 dark:bg-gray-800 flex overflow-hidden mb-6">
-        {total > 0 && (
-          <>
-            {counts.green > 0 && <div className="bg-emerald-500 transition-all duration-700" style={{ width: `${(counts.green / total) * 100}%` }} />}
-            {counts.yellow > 0 && <div className="bg-amber-400 transition-all duration-700" style={{ width: `${(counts.yellow / total) * 100}%` }} />}
-            {counts.orange > 0 && <div className="bg-amber-500 animate-blink transition-all duration-700" style={{ width: `${(counts.orange / total) * 100}%` }} />}
-            {counts.red > 0 && <div className="bg-red-500 transition-all duration-700" style={{ width: `${(counts.red / total) * 100}%` }} />}
-          </>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <StatusTile label="Valid" sublabel="> 30 days" count={counts.green} dotColor="bg-emerald-500" bgColor="bg-emerald-50 dark:bg-emerald-500/10" textColor="text-emerald-700 dark:text-emerald-400" href={tileHref("GREEN")} />
-        <StatusTile label="Expiring" sublabel="≤ 30 days" count={counts.yellow} dotColor="bg-amber-400" bgColor="bg-amber-50 dark:bg-amber-500/10" textColor="text-amber-700 dark:text-amber-400" href={tileHref("YELLOW")} />
-        <StatusTile label="Critical" sublabel="≤ 7 days" count={counts.orange} dotColor="bg-amber-500 animate-blink" bgColor="bg-amber-50 dark:bg-amber-500/10" textColor="text-amber-700 dark:text-amber-400" href={tileHref("ORANGE")} />
-        <StatusTile label="Expired" sublabel="≤ 0 days" count={counts.red} dotColor="bg-red-500" bgColor="bg-red-50 dark:bg-red-500/10" textColor="text-red-700 dark:text-red-400" href={tileHref("RED")} />
+
+      <div className="flex flex-col sm:flex-row items-center gap-5">
+        {/* Donut */}
+        <div className="relative w-36 h-36 flex-shrink-0">
+          <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+            <circle
+              cx="50"
+              cy="50"
+              r={RADIUS}
+              fill="none"
+              stroke="#e5e7eb"
+              strokeWidth="12"
+              className="dark:opacity-20"
+            />
+            {total > 0 &&
+              drawn
+                .filter((d) => d.count > 0)
+                .map((d) => {
+                  const isHover = hoveredKey === d.key;
+                  return (
+                    <circle
+                      key={d.key}
+                      cx="50"
+                      cy="50"
+                      r={RADIUS}
+                      fill="none"
+                      stroke={d.color}
+                      strokeWidth={isHover ? 14 : 12}
+                      strokeDasharray={`${d.dash} ${CIRC - d.dash}`}
+                      strokeDashoffset={d.offset}
+                      onMouseEnter={() => setHoveredKey(d.key)}
+                      onMouseLeave={() => setHoveredKey(null)}
+                      className={`cursor-pointer transition-[stroke-width] duration-150 ${d.blink ? "animate-blink" : ""}`}
+                      style={{ opacity: hoveredKey && !isHover ? 0.45 : 1 }}
+                    >
+                      <title>{`${d.label}: ${d.count}`}</title>
+                    </circle>
+                  );
+                })}
+          </svg>
+          {/* Center label — swaps to hovered segment info on hover */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
+            {hovered ? (
+              <>
+                <span
+                  className="text-[9px] uppercase tracking-wider font-bold leading-tight"
+                  style={{ color: hovered.color }}
+                >
+                  {hovered.label}
+                </span>
+                <span className="text-2xl font-black text-gray-900 dark:text-white leading-none mt-1">
+                  {hovered.count}
+                </span>
+                <span className="text-[9px] text-gray-400 mt-0.5">{hoveredPct}%</span>
+              </>
+            ) : (
+              <>
+                <span className="text-[9px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400">Total</span>
+                <span className="text-2xl font-black text-gray-900 dark:text-white leading-none mt-1">{total}</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Legend — clickable rows that deep-link into the compliance page.
+            Hovering a legend row also drives the donut highlight. */}
+        <div className="flex-1 w-full grid grid-cols-2 gap-1.5">
+          {segments.map((s) => {
+            const href = tileHref(s.key);
+            const row = (
+              <div
+                onMouseEnter={() => setHoveredKey(s.key)}
+                onMouseLeave={() => setHoveredKey(null)}
+                className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg transition-colors ${hoveredKey === s.key ? "bg-gray-100 dark:bg-gray-800/60" : "hover:bg-gray-50 dark:hover:bg-gray-800/40"}`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.blink ? "animate-blink" : ""}`}
+                    style={{ backgroundColor: s.color }}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300 leading-tight truncate">{s.label}</p>
+                    <p className="text-[9px] text-gray-400 leading-tight">{s.sublabel}</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-gray-900 dark:text-white flex-shrink-0">{s.count}</span>
+              </div>
+            );
+            return href ? (
+              <Link key={s.key} href={href} className="block">{row}</Link>
+            ) : (
+              <div key={s.key}>{row}</div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

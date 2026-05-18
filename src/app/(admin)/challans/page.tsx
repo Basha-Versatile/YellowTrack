@@ -146,60 +146,52 @@ export default function ChallansPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Challans</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Traffic fines &amp; payment management &mdash; grouped by vehicle</p>
+        <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Challans</h1>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Traffic fines &amp; payment management &mdash; grouped by vehicle</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.02]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-gray-500" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-3.5 h-3.5 text-gray-500" />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total</p>
-              <p className="text-2xl font-black text-gray-900 dark:text-white">{allChallans.length}</p>
-            </div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">Total</p>
           </div>
+          <p className="text-lg font-black text-gray-900 dark:text-white leading-none mt-1">{allChallans.length}</p>
         </div>
-        <div className="rounded-2xl border border-red-200/60 bg-red-50/50 p-5 dark:border-red-500/20 dark:bg-red-500/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-red-600 dark:text-red-400" />
+        <div className="rounded-lg border border-red-200/60 bg-red-50/50 px-3 py-2.5 dark:border-red-500/20 dark:bg-red-500/5">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-red-100 dark:bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <Clock className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-red-500/60 uppercase tracking-wider">Pending</p>
-              <p className="text-2xl font-black text-red-600 dark:text-red-400">&#8377;{totalPending.toLocaleString("en-IN")}</p>
-            </div>
+            <p className="text-[10px] font-bold text-red-600/70 dark:text-red-400/70 uppercase tracking-wider truncate">Pending</p>
           </div>
-          <p className="text-[11px] text-red-500/50 mt-2">{pendingCount} unpaid challan{pendingCount !== 1 ? "s" : ""}</p>
+          <p className="text-lg font-black text-red-600 dark:text-red-400 leading-none mt-1">&#8377;{totalPending.toLocaleString("en-IN")}</p>
+          <p className="text-[10px] text-red-600/60 mt-1">{pendingCount} unpaid</p>
         </div>
-        <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
-              <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+        <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-3 py-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+              <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-emerald-500/60 uppercase tracking-wider">Paid</p>
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">&#8377;{totalPaid.toLocaleString("en-IN")}</p>
-            </div>
+            <p className="text-[10px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-wider truncate">Paid</p>
           </div>
-          <p className="text-[11px] text-emerald-500/50 mt-2">{paidCount} cleared</p>
+          <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none mt-1">&#8377;{totalPaid.toLocaleString("en-IN")}</p>
+          <p className="text-[10px] text-emerald-600/60 mt-1">{paidCount} cleared</p>
         </div>
-        <div className="rounded-2xl border border-brand-200/60 bg-brand-25 p-5 dark:border-brand-500/20 dark:bg-brand-500/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-500/20 flex items-center justify-center">
-              <Banknote className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+        <div className="rounded-lg border border-brand-200/60 bg-brand-25 px-3 py-2.5 dark:border-brand-500/20 dark:bg-brand-500/5">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-brand-100 dark:bg-brand-500/20 flex items-center justify-center flex-shrink-0">
+              <Banknote className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-brand-500/60 uppercase tracking-wider">Grand Total</p>
-              <p className="text-2xl font-black text-brand-600 dark:text-brand-400">&#8377;{(totalPending + totalPaid).toLocaleString("en-IN")}</p>
-            </div>
+            <p className="text-[10px] font-bold text-brand-600/70 dark:text-brand-400/70 uppercase tracking-wider truncate">Grand Total</p>
           </div>
+          <p className="text-lg font-black text-brand-600 dark:text-brand-400 leading-none mt-1">&#8377;{(totalPending + totalPaid).toLocaleString("en-IN")}</p>
         </div>
       </div>
 

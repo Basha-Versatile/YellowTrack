@@ -36,6 +36,7 @@ interface ComplianceDoc {
   status: string;
   expiryDate: string | null;
   documentUrl: string | null;
+  documentUrls?: string[];
   daysUntilExpiry: number | null;
 }
 
@@ -418,7 +419,7 @@ export default function VehicleDetailPage() {
   // Renew
   const [renewingDoc, setRenewingDoc] = useState<string | null>(null);
   const [renewExpiry, setRenewExpiry] = useState("");
-  const [renewFile, setRenewFile] = useState<File | null>(null);
+  const [renewFiles, setRenewFiles] = useState<File[]>([]);
   const [renewLoading, setRenewLoading] = useState(false);
   const [renewLifetime, setRenewLifetime] = useState(false);
   const [editLifetime, setEditLifetime] = useState(false);
@@ -643,8 +644,8 @@ export default function VehicleDetailPage() {
     if (!renewLifetime && !renewExpiry) return;
     setRenewLoading(true);
     try {
-      await complianceAPI.renewDocument(docId, { expiryDate: renewLifetime ? undefined : renewExpiry, type: docType, lifetime: renewLifetime }, renewFile || undefined);
-      setRenewingDoc(null); setRenewExpiry(""); setRenewFile(null); setRenewLifetime(false);
+      await complianceAPI.renewDocument(docId, { expiryDate: renewLifetime ? undefined : renewExpiry, type: docType, lifetime: renewLifetime }, renewFiles.length > 0 ? renewFiles : undefined);
+      setRenewingDoc(null); setRenewExpiry(""); setRenewFiles([]); setRenewLifetime(false);
       toast.success("Document Renewed", "Old document archived, new one created");
       fetchVehicle();
     } catch (err) { console.error(err); toast.error("Renew Failed", "Could not renew document"); }
@@ -801,10 +802,10 @@ export default function VehicleDetailPage() {
   const qrSrc = `${process.env.NEXT_PUBLIC_API_URL}/vehicles/${vehicle.id}/qr.png`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ── HERO HEADER ── */}
       <div className="relative rounded-2xl overflow-hidden">
-        <div className={`bg-gradient-to-r ${theme.gradient} p-6 sm:p-8`}>
+        <div className={`bg-gradient-to-r ${theme.gradient} p-5 sm:p-6`}>
           {/* Decorative */}
           <div className="absolute top-4 right-8 w-24 h-24 rounded-full border border-white/10" />
           <div className="absolute bottom-4 right-20 w-16 h-16 rounded-full border border-white/5" />
@@ -1215,50 +1216,77 @@ export default function VehicleDetailPage() {
                         </p>
                       </div>
                     </div>
-                    {/* Document file + actions */}
-                    <div className="mt-3 ml-2 flex items-center gap-2 flex-wrap">
-                      {doc.documentUrl && (
-                        <a href={(resolveImageUrl(doc.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-500 hover:text-brand-600 transition-colors">
-                          <ExternalLink className="w-3 h-3" strokeWidth={2} />
-                          View File
-                        </a>
-                      )}
-                      {doc.documentUrl ? (
+                    {/* Document files + actions */}
+                    {(() => {
+                      const urls = (doc.documentUrls && doc.documentUrls.length > 0)
+                        ? doc.documentUrls
+                        : (doc.documentUrl ? [doc.documentUrl] : []);
+                      const hasFiles = urls.length > 0;
+                      return (
                         <>
-                          <span className="text-gray-300 dark:text-gray-600">|</span>
-                          <button onClick={() => { setRenewingDoc(renewingDoc === doc.id ? null : doc.id); setRenewExpiry(todayISO()); setRenewFile(null); }}
-                            className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1 transition-colors">
-                            <RefreshCw className="w-3 h-3" strokeWidth={2} />
-                            Renew
-                          </button>
-                          <span className="text-gray-300 dark:text-gray-600">|</span>
-                          <button onClick={() => openDocHistory(vehicle.id, doc.type)}
-                            className="text-[11px] font-medium text-gray-600 dark:text-gray-300 hover:text-brand-500 flex items-center gap-1 transition-colors">
-                            <Clock className="w-3 h-3" strokeWidth={2} />
-                            History
-                          </button>
+                          {hasFiles && (
+                            <div className="mt-2 ml-2 flex items-center gap-1 flex-wrap">
+                              {urls.map((url, idx) => (
+                                <span key={`${url}-${idx}`} className="inline-flex items-center gap-1 rounded-md bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 group">
+                                  <a href={(resolveImageUrl(url) ?? "")} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 hover:text-brand-800 dark:hover:text-brand-300">
+                                    <FileText className="w-3 h-3" />
+                                    File {idx + 1}
+                                    <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                                  </a>
+                                  <button
+                                    type="button"
+                                    title="Remove this file"
+                                    onClick={() => {
+                                      if (!confirm("Remove this file from the document?")) return;
+                                      complianceAPI.removeDocumentFile(doc.id, url).then(() => fetchVehicle()).catch(console.error);
+                                    }}
+                                    className="text-brand-700/60 hover:text-red-500 ml-0.5"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 ml-2 flex items-center gap-2 flex-wrap">
+                            <label className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-500 hover:text-brand-600 cursor-pointer transition-colors">
+                              <Upload className="w-3 h-3" strokeWidth={2} />
+                              {hasFiles ? "Add File" : "Upload Document"}
+                              <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => {
+                                const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m));
+                                if (fs.length > 0) {
+                                  complianceAPI.uploadDocument(doc.id, fs).then(() => fetchVehicle()).catch(console.error);
+                                }
+                              }} />
+                            </label>
+                            {hasFiles && (
+                              <>
+                                <span className="text-gray-300 dark:text-gray-600">|</span>
+                                <button onClick={() => { setRenewingDoc(renewingDoc === doc.id ? null : doc.id); setRenewExpiry(todayISO()); setRenewFiles([]); }}
+                                  className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1 transition-colors">
+                                  <RefreshCw className="w-3 h-3" strokeWidth={2} />
+                                  Renew
+                                </button>
+                                <span className="text-gray-300 dark:text-gray-600">|</span>
+                                <button onClick={() => openDocHistory(vehicle.id, doc.type)}
+                                  className="text-[11px] font-medium text-gray-600 dark:text-gray-300 hover:text-brand-500 flex items-center gap-1 transition-colors">
+                                  <Clock className="w-3 h-3" strokeWidth={2} />
+                                  History
+                                </button>
+                              </>
+                            )}
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            <button onClick={() => { if (confirm(`Remove this ${docTypeLabel(doc.type)} document? This cannot be undone.`)) handleDeleteCompliance(doc.id); }}
+                              disabled={deletingCompliance === doc.id}
+                              className="text-[11px] font-medium text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors disabled:opacity-50">
+                              <Trash2 className="w-3 h-3" strokeWidth={2} />
+                              {deletingCompliance === doc.id ? "Removing…" : "Delete"}
+                            </button>
+                          </div>
                         </>
-                      ) : (
-                        <label className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-500 hover:text-brand-600 cursor-pointer transition-colors">
-                          <Upload className="w-3 h-3" strokeWidth={2} />
-                          Upload Document
-                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => {
-                            const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
-                            if (f) {
-                              complianceAPI.uploadDocument(doc.id, f).then(() => fetchVehicle()).catch(console.error);
-                            }
-                          }} />
-                        </label>
-                      )}
-                      <span className="text-gray-300 dark:text-gray-600">|</span>
-                      <button onClick={() => { if (confirm(`Remove this ${docTypeLabel(doc.type)} document? This cannot be undone.`)) handleDeleteCompliance(doc.id); }}
-                        disabled={deletingCompliance === doc.id}
-                        className="text-[11px] font-medium text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors disabled:opacity-50">
-                        <Trash2 className="w-3 h-3" strokeWidth={2} />
-                        {deletingCompliance === doc.id ? "Removing…" : "Delete"}
-                      </button>
-                    </div>
+                      );
+                    })()}
 
 
                   </div>
@@ -2027,7 +2055,7 @@ export default function VehicleDetailPage() {
       {/* Renew Modal */}
       {renewingDoc && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setRenewingDoc(null); setRenewExpiry(""); setRenewFile(null); }} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setRenewingDoc(null); setRenewExpiry(""); setRenewFiles([]); }} />
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-500 to-green-500 px-6 py-5">
               <h3 className="text-lg font-bold text-white">Renew Document</h3>
@@ -2048,22 +2076,27 @@ export default function VehicleDetailPage() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Upload New Document <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
-                <label className={`flex flex-col items-center justify-center py-6 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${renewFile ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/5" : "border-gray-200 dark:border-gray-700 hover:border-emerald-400"}`}>
-                  {renewFile ? (
-                    <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
-                      <Check className="w-4 h-4" strokeWidth={2} />
-                      <span className="font-medium truncate max-w-[200px]">{renewFile.name}</span>
-                      <button type="button" onClick={(e) => { e.preventDefault(); setRenewFile(null); }} className="text-red-500 hover:text-red-600 ml-1">&times;</button>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className="w-6 h-6 text-gray-300 dark:text-gray-600" strokeWidth={1.5} />
-                      <span className="text-xs text-gray-400 mt-1">Click to upload (PDF, JPG, PNG)</span>
-                    </>
-                  )}
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m)); if (f) setRenewFile(f); }} />
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Upload New Document(s) <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
+                <label className={`flex flex-col items-center justify-center py-5 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${renewFiles.length > 0 ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/5" : "border-gray-200 dark:border-gray-700 hover:border-emerald-400"}`}>
+                  <Upload className={`w-5 h-5 ${renewFiles.length > 0 ? "text-emerald-500" : "text-gray-300 dark:text-gray-600"}`} strokeWidth={1.5} />
+                  <span className={`text-xs mt-1 ${renewFiles.length > 0 ? "text-emerald-700 dark:text-emerald-400 font-medium" : "text-gray-400"}`}>
+                    {renewFiles.length === 0 ? "Click to upload (PDF, JPG, PNG)" : `Add more (${renewFiles.length} selected)`}
+                  </span>
+                  <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length > 0) setRenewFiles((prev) => [...prev, ...fs]); }} />
                 </label>
+                {renewFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {renewFiles.map((f, idx) => (
+                      <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-medium">
+                        <FileText className="w-3 h-3" />
+                        <span className="truncate max-w-[160px]">{f.name}</span>
+                        <button type="button" onClick={() => setRenewFiles((prev) => prev.filter((_, i) => i !== idx))} className="text-emerald-700/60 hover:text-red-500 ml-0.5" title="Remove">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex gap-3">
                 <button
@@ -2075,7 +2108,7 @@ export default function VehicleDetailPage() {
                     <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Renewing...</>
                   ) : "Renew Document"}
                 </button>
-                <button onClick={() => { setRenewingDoc(null); setRenewExpiry(""); setRenewFile(null); setRenewLifetime(false); }}
+                <button onClick={() => { setRenewingDoc(null); setRenewExpiry(""); setRenewFiles([]); setRenewLifetime(false); }}
                   className="h-11 px-5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-all">
                   Cancel
                 </button>

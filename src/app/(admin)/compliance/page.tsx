@@ -162,6 +162,21 @@ export default function ComplianceOverviewPage() {
     [allItems],
   );
 
+  // Per-chip counts honor the OTHER active filters (group + search) — that
+  // way the number on each chip matches what you'd actually see after
+  // clicking it. "All docs" is total across types under the same filters.
+  const docTypeCounts = useMemo(() => {
+    const search = regSearch.trim().toLowerCase();
+    const scoped = allItems.filter((it) => {
+      if (groupFilter !== "ALL" && it.group?.id !== groupFilter) return false;
+      if (search && !it.registrationNumber.toLowerCase().includes(search)) return false;
+      return true;
+    });
+    const counts: Record<string, number> = { ALL: scoped.length };
+    for (const it of scoped) counts[it.doc.type] = (counts[it.doc.type] ?? 0) + 1;
+    return counts;
+  }, [allItems, groupFilter, regSearch]);
+
   // Apply filters once, then bucket.
   const filtered = useMemo(() => {
     const search = regSearch.trim().toLowerCase();
@@ -203,67 +218,65 @@ export default function ComplianceOverviewPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Compliance Inbox</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Compliance</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             Every fleet document that needs attention — sorted by urgency
           </p>
         </div>
         <Link
           href="/vehicles"
-          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-all"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-all"
         >
-          <Truck className="w-4 h-4" />
+          <Truck className="w-3.5 h-3.5" />
           View Vehicles
         </Link>
       </div>
 
       {/* KPI tiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.02]">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Compliance Rate</p>
-          <div className="flex items-end gap-2 mt-2">
-            <span className={`text-3xl font-black ${complianceRate >= 80 ? "text-emerald-600 dark:text-emerald-400" : complianceRate >= 50 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
-              {complianceRate}%
-            </span>
-          </div>
-          <div className="mt-3 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Compliance Rate</p>
+          <p className={`text-lg font-black leading-none mt-1 ${complianceRate >= 80 ? "text-emerald-600 dark:text-emerald-400" : complianceRate >= 50 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
+            {complianceRate}%
+          </p>
+          <div className="mt-1.5 h-1 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-700 ${complianceRate >= 80 ? "bg-gradient-to-r from-emerald-400 to-emerald-500" : complianceRate >= 50 ? "bg-gradient-to-r from-amber-400 to-amber-500" : "bg-gradient-to-r from-red-400 to-red-500"}`}
               style={{ width: `${complianceRate}%` }}
             />
           </div>
-          <p className="text-[11px] text-gray-400 mt-2">{fleetValid} of {fleetTotal} docs valid</p>
+          <p className="text-[10px] text-gray-400 mt-1">{fleetValid} of {fleetTotal} docs valid</p>
         </div>
         <button
           type="button"
           onClick={() => setFocus(focus === "expired" ? null : "expired")}
-          className={`rounded-2xl border p-5 text-left transition-all ${focus === "expired" ? "border-red-400 ring-2 ring-red-200 dark:ring-red-500/20" : "border-red-200/60 hover:border-red-300"} bg-red-50/50 dark:border-red-500/20 dark:bg-red-500/5`}
+          className={`rounded-lg border px-3 py-2.5 text-left transition-all ${focus === "expired" ? "border-red-400 ring-2 ring-red-200 dark:ring-red-500/20" : "border-red-200/60 hover:border-red-300"} bg-red-50/50 dark:border-red-500/20 dark:bg-red-500/5`}
         >
-          <p className="text-xs font-semibold text-red-600/60 dark:text-red-400/60 uppercase tracking-wider flex items-center gap-1.5"><AlertOctagon className="w-3.5 h-3.5" /> Expired</p>
-          <p className="text-3xl font-black text-red-600 dark:text-red-400 mt-2">{fleetExpired}</p>
-          <p className="text-[11px] text-red-600/50 dark:text-red-400/50 mt-1">Past expiry — act now</p>
+          <p className="text-[10px] font-bold text-red-600/70 dark:text-red-400/70 uppercase tracking-wider flex items-center gap-1"><AlertOctagon className="w-3 h-3" /> Expired</p>
+          <p className="text-lg font-black text-red-600 dark:text-red-400 leading-none mt-1">{fleetExpired}</p>
+          <p className="text-[10px] text-red-600/60 dark:text-red-400/60 mt-1">Past expiry — act now</p>
         </button>
         <button
           type="button"
           onClick={() => setFocus(focus === "critical" ? null : "critical")}
-          className={`rounded-2xl border p-5 text-left transition-all ${focus === "critical" ? "border-amber-400 ring-2 ring-amber-200 dark:ring-amber-500/20" : "border-amber-200/60 hover:border-amber-300"} bg-amber-50/50 dark:border-amber-500/20 dark:bg-amber-500/5`}
+          className={`rounded-lg border px-3 py-2.5 text-left transition-all ${focus === "critical" ? "border-amber-400 ring-2 ring-amber-200 dark:ring-amber-500/20" : "border-amber-200/60 hover:border-amber-300"} bg-amber-50/50 dark:border-amber-500/20 dark:bg-amber-500/5`}
         >
-          <p className="text-xs font-semibold text-amber-700/70 dark:text-amber-400/70 uppercase tracking-wider flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 animate-blink" /> Critical</p>
-          <p className="text-3xl font-black text-amber-600 dark:text-amber-400 mt-2 animate-blink">{fleetCritical}</p>
-          <p className="text-[11px] text-amber-600/60 dark:text-amber-400/60 mt-1">≤ 7 days remaining</p>
+          <p className="text-[10px] font-bold text-amber-700/80 dark:text-amber-400/80 uppercase tracking-wider flex items-center gap-1"><AlertTriangle className="w-3 h-3 animate-blink" /> Critical</p>
+          <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-1 animate-blink">{fleetCritical}</p>
+          <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-1">≤ 7 days remaining</p>
         </button>
         <button
           type="button"
           onClick={() => setFocus(focus === "expiring" ? null : "expiring")}
-          className={`rounded-2xl border p-5 text-left transition-all ${focus === "expiring" ? "border-amber-400 ring-2 ring-amber-200 dark:ring-amber-500/20" : "border-amber-200/60 hover:border-amber-300"} bg-amber-50/30 dark:border-amber-500/15 dark:bg-amber-500/[0.03]`}
+          className={`rounded-lg border px-3 py-2.5 text-left transition-all ${focus === "expiring" ? "border-amber-400 ring-2 ring-amber-200 dark:ring-amber-500/20" : "border-amber-200/60 hover:border-amber-300"} bg-amber-50/30 dark:border-amber-500/15 dark:bg-amber-500/[0.03]`}
         >
-          <p className="text-xs font-semibold text-amber-600/60 dark:text-amber-400/60 uppercase tracking-wider flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Expiring</p>
-          <p className="text-3xl font-black text-amber-600 dark:text-amber-400 mt-2">{fleetExpiring}</p>
-          <p className="text-[11px] text-amber-600/50 dark:text-amber-400/50 mt-1">8 – 30 days out</p>
+          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> Expiring</p>
+          <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-1">{fleetExpiring}</p>
+          <p className="text-[10px] text-amber-600/60 dark:text-amber-400/60 mt-1">8 – 30 days out</p>
         </button>
       </div>
 
@@ -272,17 +285,23 @@ export default function ComplianceOverviewPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setDocTypeFilter("ALL")}
-            className={`text-xs font-semibold px-3 h-8 rounded-lg border transition-colors ${docTypeFilter === "ALL" ? "bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100" : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"}`}
+            className={`text-xs font-semibold px-3 h-8 rounded-lg border transition-colors inline-flex items-center gap-1.5 ${docTypeFilter === "ALL" ? "bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100" : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"}`}
           >
             All docs
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${docTypeFilter === "ALL" ? "bg-white/20 text-white dark:bg-gray-900/15 dark:text-gray-900" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
+              {docTypeCounts.ALL ?? 0}
+            </span>
           </button>
           {docTypes.map((t) => (
             <button
               key={t}
               onClick={() => setDocTypeFilter(docTypeFilter === t ? "ALL" : t)}
-              className={`text-xs font-semibold px-3 h-8 rounded-lg border transition-colors ${docTypeFilter === t ? "bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100" : `${DOC_TINT[t] ?? "bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-300"} border-transparent hover:opacity-80`}`}
+              className={`text-xs font-semibold px-3 h-8 rounded-lg border transition-colors inline-flex items-center gap-1.5 ${docTypeFilter === t ? "bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100" : `${DOC_TINT[t] ?? "bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-300"} border-transparent hover:opacity-80`}`}
             >
               {docLabel(t)}
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${docTypeFilter === t ? "bg-white/20 text-white dark:bg-gray-900/15 dark:text-gray-900" : "bg-black/5 dark:bg-white/10"}`}>
+                {docTypeCounts[t] ?? 0}
+              </span>
             </button>
           ))}
         </div>

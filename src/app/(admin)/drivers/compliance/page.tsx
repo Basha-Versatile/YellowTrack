@@ -97,42 +97,42 @@ export default function DriverCompliancePage() {
   if (loading) return <DriverComplianceSkeleton />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Driver Compliance</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">License &amp; document compliance for all drivers</p>
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Driver Compliance</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">License &amp; document compliance for all drivers</p>
         </div>
-        <Link href="/drivers" className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 transition-all">
-          <Users className="w-4 h-4" />
+        <Link href="/drivers" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 transition-all">
+          <Users className="w-3.5 h-3.5" />
           View Drivers
         </Link>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.02]">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Compliance Rate</p>
-          <p className={`text-3xl font-black mt-2 ${complianceRate >= 80 ? "text-emerald-600 dark:text-emerald-400" : complianceRate >= 50 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>{complianceRate}%</p>
-          <div className="mt-3 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Compliance Rate</p>
+          <p className={`text-lg font-black leading-none mt-1 ${complianceRate >= 80 ? "text-emerald-600 dark:text-emerald-400" : complianceRate >= 50 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>{complianceRate}%</p>
+          <div className="mt-1.5 h-1 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
             <div className={`h-full rounded-full transition-all duration-700 ${complianceRate >= 80 ? "bg-gradient-to-r from-emerald-400 to-emerald-500" : complianceRate >= 50 ? "bg-gradient-to-r from-amber-400 to-amber-500" : "bg-gradient-to-r from-red-400 to-red-500"}`} style={{ width: `${complianceRate}%` }} />
           </div>
         </div>
-        <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
-          <p className="text-xs font-semibold text-emerald-600/60 uppercase tracking-wider">Valid</p>
-          <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-2">{counts.GREEN}</p>
-          <p className="text-[11px] text-emerald-600/50 mt-1">All docs &amp; license OK</p>
+        <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-3 py-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+          <p className="text-[10px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-wider">Valid</p>
+          <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none mt-1">{counts.GREEN}</p>
+          <p className="text-[10px] text-emerald-600/60 mt-1">All docs &amp; license OK</p>
         </div>
-        <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 p-5 dark:border-amber-500/20 dark:bg-amber-500/5">
-          <p className="text-xs font-semibold text-amber-600/60 uppercase tracking-wider">Expiring</p>
-          <p className="text-3xl font-black text-amber-600 dark:text-amber-400 mt-2">{counts.YELLOW}</p>
-          <p className="text-[11px] text-amber-600/50 mt-1">Within 30 days</p>
+        <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 px-3 py-2.5 dark:border-amber-500/20 dark:bg-amber-500/5">
+          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Expiring</p>
+          <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-1">{counts.YELLOW}</p>
+          <p className="text-[10px] text-amber-600/60 mt-1">Within 30 days</p>
         </div>
-        <div className="rounded-2xl border border-red-200/60 bg-red-50/50 p-5 dark:border-red-500/20 dark:bg-red-500/5">
-          <p className="text-xs font-semibold text-red-600/60 uppercase tracking-wider">Expired</p>
-          <p className="text-3xl font-black text-red-600 dark:text-red-400 mt-2">{counts.RED}</p>
-          <p className="text-[11px] text-red-600/50 mt-1">Immediate action needed</p>
+        <div className="rounded-lg border border-red-200/60 bg-red-50/50 px-3 py-2.5 dark:border-red-500/20 dark:bg-red-500/5">
+          <p className="text-[10px] font-bold text-red-600/70 dark:text-red-400/70 uppercase tracking-wider">Expired</p>
+          <p className="text-lg font-black text-red-600 dark:text-red-400 leading-none mt-1">{counts.RED}</p>
+          <p className="text-[10px] text-red-600/60 mt-1">Immediate action needed</p>
         </div>
       </div>
 

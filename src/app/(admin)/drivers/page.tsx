@@ -111,74 +111,74 @@ export default function DriversPage() {
   if (loading) return <DriversListSkeleton view={view} />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Drivers</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage fleet drivers</p>
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Drivers</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Manage fleet drivers</p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowExport(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-all"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-all"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-3.5 h-3.5" />
             Export
           </button>
           <Link
             href="/drivers/add"
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-brand-400 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-500 to-brand-400 px-4 py-2 text-xs font-bold text-white shadow shadow-brand-500/25 hover:shadow-brand-500/40 transition-all"
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-3.5 h-3.5" />
             Add Driver
           </Link>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.02]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center">
-              <Users className="w-5 h-5 text-brand-500" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center flex-shrink-0">
+              <Users className="w-3.5 h-3.5 text-brand-500" />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total</p>
-              <p className="text-2xl font-black text-gray-900 dark:text-white">{drivers.length}</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
-              <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold text-emerald-500/60 uppercase tracking-wider">Active</p>
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{activeCount}</p>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total</p>
+              <p className="text-lg font-black text-gray-900 dark:text-white leading-none mt-0.5">{drivers.length}</p>
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 p-5 dark:border-amber-500/20 dark:bg-amber-500/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+        <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-3 py-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+              <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-amber-500/60 uppercase tracking-wider">Expiring</p>
-              <p className="text-2xl font-black text-amber-600 dark:text-amber-400">{expiringCount}</p>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-wider">Active</p>
+              <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none mt-0.5">{activeCount}</p>
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-red-200/60 bg-red-50/50 p-5 dark:border-red-500/20 dark:bg-red-500/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+        <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 px-3 py-2.5 dark:border-amber-500/20 dark:bg-amber-500/5">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-red-500/60 uppercase tracking-wider">Expired</p>
-              <p className="text-2xl font-black text-red-600 dark:text-red-400">{expiredCount}</p>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Expiring</p>
+              <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-0.5">{expiringCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-lg border border-red-200/60 bg-red-50/50 px-3 py-2.5 dark:border-red-500/20 dark:bg-red-500/5">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-red-100 dark:bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-red-600/70 dark:text-red-400/70 uppercase tracking-wider">Expired</p>
+              <p className="text-lg font-black text-red-600 dark:text-red-400 leading-none mt-0.5">{expiredCount}</p>
             </div>
           </div>
         </div>
