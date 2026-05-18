@@ -60,15 +60,6 @@ const DOC_LABELS: Record<string, string> = {
   TAX: "Road Tax",
 };
 
-const DOC_SHORT: Record<string, string> = {
-  RC: "RC",
-  INSURANCE: "INS",
-  PERMIT: "PMT",
-  PUCC: "PUC",
-  FITNESS: "FIT",
-  TAX: "TAX",
-};
-
 const DOC_TINT: Record<string, string> = {
   RC: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
   INSURANCE: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
@@ -80,9 +71,6 @@ const DOC_TINT: Record<string, string> = {
 
 function docLabel(type: string): string {
   return DOC_LABELS[type] || titleCase(type.replace(/_/g, " "));
-}
-function docShort(type: string): string {
-  return DOC_SHORT[type] || type.slice(0, 3).toUpperCase();
 }
 
 type Bucket = "expired" | "critical" | "expiring" | "valid";
