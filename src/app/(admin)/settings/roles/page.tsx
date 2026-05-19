@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { rolesAPI, permissionsAPI } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Shield,
   Plus,
@@ -15,6 +16,7 @@ import {
   ChevronUp,
   AlertCircle,
   CheckCircle2,
+  X,
 } from "lucide-react";
 
 type Role = {
@@ -47,6 +49,15 @@ export default function RolesPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Role | null>(null);
   const [creating, setCreating] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Role | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const load = async () => {
     setLoading(true);
@@ -72,16 +83,22 @@ export default function RolesPage() {
     load();
   }, []);
 
-  const handleDelete = async (role: Role) => {
-    if (!confirm(`Delete role "${role.name}"? This cannot be undone.`)) return;
+  const runDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await rolesAPI.remove(role._id);
+      await rolesAPI.remove(pendingDelete._id);
+      setToast({ type: "success", message: `Role "${pendingDelete.name}" deleted` });
+      setPendingDelete(null);
       await load();
     } catch (err) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         "Failed to delete role";
-      alert(msg);
+      setToast({ type: "error", message: msg });
+      setPendingDelete(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -126,7 +143,7 @@ export default function RolesPage() {
               key={r._id}
               role={r}
               onEdit={() => setEditing(r)}
-              onDelete={() => handleDelete(r)}
+              onDelete={() => setPendingDelete(r)}
             />
           ))}
         </div>
@@ -148,6 +165,55 @@ export default function RolesPage() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        title={`Delete role "${pendingDelete?.name ?? ""}"?`}
+        message="This role and its permission grants will be removed. This cannot be undone."
+        confirmLabel="Delete role"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={deleting}
+        onConfirm={runDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
+
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+    </div>
+  );
+}
+
+function Toast({
+  type,
+  message,
+  onClose,
+}: {
+  type: "success" | "error";
+  message: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed bottom-6 right-6 z-[100000] max-w-sm">
+      <div
+        className={`flex items-center gap-3 rounded-xl border px-4 py-3 shadow-2xl ${
+          type === "success"
+            ? "border-emerald-200 bg-white text-emerald-700 dark:border-emerald-500/30 dark:bg-gray-900 dark:text-emerald-400"
+            : "border-red-200 bg-white text-red-700 dark:border-red-500/30 dark:bg-gray-900 dark:text-red-400"
+        }`}
+      >
+        {type === "success" ? (
+          <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+        ) : (
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        )}
+        <p className="text-sm font-medium">{message}</p>
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

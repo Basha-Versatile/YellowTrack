@@ -30,6 +30,24 @@ const PUBLIC_ADDRESS_FIELDS = [
   "permanentAddressLng",
 ];
 
+// Minimal public payload for the shareable photos gallery — only what the
+// gallery page needs. Does not include compliance, owner phone, etc.
+export async function getVehiclePhotosPublic(vehicleId: string) {
+  const vehicle = await vehicleRepo.findByIdAnyTenant(vehicleId);
+  if (!vehicle) throw new NotFoundError("Vehicle not found");
+  const v = vehicle as Record<string, unknown>;
+  const ownerName = (v.ownerName as string | undefined) ?? null;
+  return {
+    id: String(v._id ?? vehicleId),
+    registrationNumber: v.registrationNumber as string,
+    make: v.make as string,
+    model: v.model as string,
+    ownerName: ownerName ? `${ownerName.charAt(0)}***` : null,
+    profileImage: (v.profileImage as string | null) ?? null,
+    images: (v.images as string[] | undefined) ?? [],
+  };
+}
+
 export async function getVehiclePublic(vehicleId: string) {
   // Public route: cross-tenant by design. URL acts as the access control.
   const vehicle = await vehicleRepo.findByIdAnyTenant(vehicleId);

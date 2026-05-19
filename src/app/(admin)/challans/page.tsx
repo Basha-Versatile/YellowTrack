@@ -20,6 +20,7 @@ interface Challan {
 interface Vehicle {
   id: string;
   registrationNumber: string;
+  ownerName?: string | null;
   make: string;
   model: string;
   profileImage: string | null;
@@ -285,6 +286,9 @@ export default function ChallansPage() {
                     <span className="text-[10px] text-gray-400">{v.challans.length} challan{v.challans.length !== 1 ? "s" : ""}</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">{v.make} {v.model}</p>
+                  {v.ownerName && (
+                    <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 truncate mt-0.5" title={v.ownerName}>{v.ownerName}</p>
+                  )}
                 </div>
                 <div className="flex-shrink-0 text-right">
                   {pendingAmt > 0 && <p className="text-base font-black text-red-600 dark:text-red-400">&#8377;{pendingAmt.toLocaleString("en-IN")} <span className="text-[9px] font-medium text-red-400">({pending.length})</span></p>}
@@ -316,6 +320,9 @@ export default function ChallansPage() {
                   <div className="min-w-0">
                     <Link href={`/vehicles/${v.id}`} className="text-sm font-bold text-gray-900 dark:text-white hover:text-brand-500 font-mono tracking-wide">{v.registrationNumber}</Link>
                     <p className="text-xs text-gray-500">{v.make} {v.model}</p>
+                    {v.ownerName && (
+                      <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 truncate" title={v.ownerName}>{v.ownerName}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between mb-3 pt-3 border-t border-gray-100 dark:border-gray-800">

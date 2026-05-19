@@ -151,7 +151,7 @@ export async function findHubRows(
   const vehicles = await Vehicle.find(
     tenantFilter(ctx, { _id: { $in: vehicleIds } }),
   )
-    .select("_id registrationNumber make model")
+    .select("_id registrationNumber ownerName make model")
     .lean();
   const byId = new Map(vehicles.map((v) => [String(v._id), v]));
 

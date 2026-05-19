@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { superadminAPI } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { TenantDetailSkeleton } from "../../skeletons";
 import {
   ArrowLeft,
@@ -122,6 +123,7 @@ export default function TenantDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [changePlanOpen, setChangePlanOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"delete" | "cancel" | null>(null);
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
@@ -183,18 +185,18 @@ export default function TenantDetailPage() {
     }
   };
 
-  const onDelete = async () => {
+  const runDelete = async () => {
     if (!tenant) return;
-    if (
-      !confirm(
-        `Soft-delete "${tenant.name}"? Records remain in the database but the tenant becomes inaccessible.`,
-      )
-    )
-      return;
+    setPendingAction(null);
     setBusy(true);
     try {
       await superadminAPI.deleteTenant(tenant.id);
       router.push("/superadmin/tenants");
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        "Failed to delete tenant";
+      setToast({ type: "error", message: msg });
     } finally {
       setBusy(false);
     }
@@ -217,14 +219,9 @@ export default function TenantDetailPage() {
     }
   };
 
-  const onCancel = async () => {
+  const runCancel = async () => {
     if (!tenant) return;
-    if (
-      !confirm(
-        `Cancel subscription for "${tenant.name}"? Tenant keeps access until the current end date, then gets blocked.`,
-      )
-    )
-      return;
+    setPendingAction(null);
     setBusy(true);
     try {
       await superadminAPI.cancelTenantSubscription(tenant.id);
@@ -341,7 +338,7 @@ export default function TenantDetailPage() {
                 )}
               </button>
               <button
-                onClick={onDelete}
+                onClick={() => setPendingAction("delete")}
                 disabled={busy}
                 className="inline-flex items-center gap-2 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/15 transition-all disabled:opacity-50"
               >
@@ -421,7 +418,7 @@ export default function TenantDetailPage() {
                 </button>
                 {tenant.planId && tenant.subscriptionStatus !== "CANCELLED" && (
                   <button
-                    onClick={onCancel}
+                    onClick={() => setPendingAction("cancel")}
                     disabled={busy}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 hover:bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/15 disabled:opacity-50"
                   >
@@ -576,7 +573,7 @@ export default function TenantDetailPage() {
                 )}
               </button>
               <button
-                onClick={onDelete}
+                onClick={() => setPendingAction("delete")}
                 disabled={busy}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50 transition-colors shadow-md shadow-red-500/20"
               >
@@ -644,6 +641,30 @@ export default function TenantDetailPage() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={pendingAction === "delete"}
+        title={`Soft-delete "${tenant.name}"?`}
+        message="Records remain in the database but the tenant becomes inaccessible to its users."
+        confirmLabel="Delete tenant"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={busy}
+        onConfirm={runDelete}
+        onCancel={() => setPendingAction(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingAction === "cancel"}
+        title={`Cancel subscription for "${tenant.name}"?`}
+        message="Tenant keeps access until the current end date, then gets blocked from logging in."
+        confirmLabel="Cancel subscription"
+        cancelLabel="Keep"
+        variant="warning"
+        loading={busy}
+        onConfirm={runCancel}
+        onCancel={() => setPendingAction(null)}
+      />
 
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
     </div>

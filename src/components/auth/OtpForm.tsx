@@ -70,7 +70,7 @@ export default function OtpForm() {
   };
 
   const handleSubmit = () => {
-    alert(`Submitted OTP: ${otp.join("")}`);
+    console.log("Submitted OTP:", otp.join(""));
   };
   return (
     <div className="flex flex-col flex-1 lg:w-1/2 w-full">

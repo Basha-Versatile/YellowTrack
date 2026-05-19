@@ -31,6 +31,7 @@ interface Challan {
 interface Vehicle {
   id: string;
   registrationNumber: string;
+  ownerName?: string | null;
   make: string;
   model: string;
   challans: Challan[];
@@ -223,6 +224,9 @@ export default function VehicleChallansPage() {
               <span className="text-sm text-gray-400">{vehicle.challans.length} challan{vehicle.challans.length !== 1 ? "s" : ""}</span>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{vehicle.make} {vehicle.model}</p>
+            {vehicle.ownerName && (
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate mt-0.5" title={vehicle.ownerName}>Owner: {vehicle.ownerName}</p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {selected.size > 0 && (

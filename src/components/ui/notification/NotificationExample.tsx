@@ -7,23 +7,23 @@ import Notification from "./Notification";
 
 export default function NotificationExample() {
   const handleLater = () => {
-    alert("Later button clicked");
+    console.log("Later button clicked");
   };
 
   const handleUpdate = () => {
-    alert("Update Now button clicked");
+    console.log("Update Now button clicked");
   };
 
   const handleCookieSettings = () => {
-    alert("Cookie Settings clicked");
+    console.log("Cookie Settings clicked");
   };
 
   const handleDenyAll = () => {
-    alert("Deny All clicked");
+    console.log("Deny All clicked");
   };
 
   const handleAcceptAll = () => {
-    alert("Accept All clicked");
+    console.log("Accept All clicked");
   };
   return (
     <div className="space-y-5 sm:space-y-6">

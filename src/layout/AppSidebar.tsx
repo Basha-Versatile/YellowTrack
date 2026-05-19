@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
     name: "Vehicles",
     subItems: [
       { name: "All Vehicles", path: "/vehicles", perm: "vehicles:read" },
-      // { name: "Sold Vehicles", path: "/vehicles/sold", perm: "vehicles:read" },
+      { name: "Sold Vehicles", path: "/vehicles/sold", perm: "vehicles:read" },
       { name: "Vehicle Groups", path: "/vehicles/groups", perm: "groups:read" },
       // { name: "Onboard Vehicle", path: "/vehicles/onboard", perm: "vehicles:create" },
       { name: "Compliance", path: "/compliance", perm: "compliance:read" },
@@ -343,16 +343,16 @@ const AppSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div
-        className={`px-5 pt-7 pb-4 flex bg-gradient-to-br from-emerald-950 via-teal-900 to-emerald-950 ${
+        className={`px-5 pt-7 pb-4 flex ${
           !expanded ? "justify-center" : "justify-start"
         }`}
       >
-        <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/images/logo/yellow-track-logo.png" alt="Yellow Track" width={40} height={40} className="flex-shrink-0 rounded-xl object-contain" />
+        <Link href="/" className="flex items-center gap-3">
+          <Image src="/images/logo/yellow-track-logo.png" alt="Yellow Track" width={56} height={56} className="flex-shrink-0 object-contain" />
           {expanded && (
-            <span className="text-lg font-extrabold tracking-tight">
-              <span className="text-yellow-400">Yellow</span>
-              <span className="text-white"> Track</span>
+            <span className="text-xl font-extrabold tracking-tight">
+              <span className="text-yellow-500 dark:text-yellow-400">Yellow</span>
+              <span className="text-gray-900 dark:text-white"> Track</span>
             </span>
           )}
         </Link>

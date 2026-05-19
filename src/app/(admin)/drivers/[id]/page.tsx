@@ -12,6 +12,7 @@ import AddressMapPicker from "@/components/public/AddressMapPicker";
 import { pickValidatedFile } from "@/lib/file-validation";
 import { ChevronLeft, ChevronRight, Pencil, Upload, FileText, Plus, ExternalLink, RefreshCw, Clock, MapPin, Check, User, Users, Bell, CreditCard, Calendar, Car, Navigation, Camera, Phone, X, Trash2 } from "lucide-react";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 type AddressValue = { address: string; lat: number | null; lng: number | null };
 type EditableEC = { name: string; relation: string; phone: string };
@@ -251,6 +252,8 @@ export default function DriverDetailPage() {
   const [hoverPhoto, setHoverPhoto] = useState<{ url: string; x: number; y: number } | null>(null);
   const [togglingVerify, setTogglingVerify] = useState(false);
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
+  const [pendingAddrPhotoDelete, setPendingAddrPhotoDelete] = useState<{ type: "current" | "permanent"; url: string } | null>(null);
+  const [deletingAddrPhoto, setDeletingAddrPhoto] = useState(false);
 
   // Upload form
   const [showUpload, setShowUpload] = useState(false);
@@ -400,13 +403,19 @@ export default function DriverDetailPage() {
     }
   };
 
-  const handleRemoveAddrPhoto = async (type: "current" | "permanent", url: string) => {
+  const runRemoveAddrPhoto = async () => {
+    if (!pendingAddrPhotoDelete) return;
+    const { type, url } = pendingAddrPhotoDelete;
+    setDeletingAddrPhoto(true);
     try {
       const res = await driverAPI.deleteAddressPhoto(id, type, url);
       if (type === "current") setCurrentAddrPhotos(res.data.data.photos);
       else setPermanentAddrPhotos(res.data.data.photos);
+      setPendingAddrPhotoDelete(null);
     } catch {
       toast.error("Remove failed");
+    } finally {
+      setDeletingAddrPhoto(false);
     }
   };
 
@@ -1234,7 +1243,7 @@ export default function DriverDetailPage() {
                       <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={resolveImageUrl(url) ?? undefined} alt="Address proof" className="w-full h-full object-cover" />
-                        <button type="button" onClick={() => handleRemoveAddrPhoto("current", url)}
+                        <button type="button" onClick={() => setPendingAddrPhotoDelete({ type: "current", url })}
                           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <X className="w-3 h-3" />
                         </button>
@@ -1281,7 +1290,7 @@ export default function DriverDetailPage() {
                         <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 group">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={resolveImageUrl(url) ?? undefined} alt="Address proof" className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => handleRemoveAddrPhoto("permanent", url)}
+                          <button type="button" onClick={() => setPendingAddrPhotoDelete({ type: "permanent", url })}
                             className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                             <X className="w-3 h-3" />
                           </button>
@@ -1479,6 +1488,22 @@ export default function DriverDetailPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingAddrPhotoDelete !== null}
+        title="Remove this address proof photo?"
+        message="The photo will be deleted from this driver's address proof. This cannot be undone."
+        confirmLabel="Remove photo"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={deletingAddrPhoto}
+        onConfirm={runRemoveAddrPhoto}
+        onCancel={() => setPendingAddrPhotoDelete(null)}
+        preview={pendingAddrPhotoDelete ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={resolveImageUrl(pendingAddrPhotoDelete.url) ?? undefined} alt="Address proof" className="w-full max-h-48 object-cover" />
+        ) : undefined}
+      />
     </div>
   );
 }

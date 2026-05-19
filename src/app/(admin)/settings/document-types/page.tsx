@@ -306,7 +306,7 @@ export default function DocumentTypesMastersPage() {
       <ConfirmDialog
         isOpen={pendingDelete !== null}
         title={`Delete "${pendingDelete?.name ?? ""}"?`}
-        message="This removes the tracker from your tenant. Vehicles that already have documents of this type will continue to display them, but you won't be able to upload new ones under this label."
+        message="Removes this tracker from your tenant. If any vehicle still has a document of this type, the delete will be blocked — re-label or remove those documents first."
         confirmLabel="Delete"
         cancelLabel="Keep"
         variant="danger"

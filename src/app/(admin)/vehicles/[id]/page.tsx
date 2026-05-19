@@ -20,7 +20,6 @@ import { useToast } from "@/context/ToastContext";
 import Badge from "@/components/ui/badge/Badge";
 import { VehicleDetailSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
-import VehicleEmiPanel from "@/components/vehicles/VehicleEmiPanel";
 import Link from "next/link";
 import { AlertTriangle, Calendar, Car, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, CreditCard, Download, ExternalLink, FileText, ImageIcon, Pencil, Plus, Printer, RefreshCw, Share2, ShieldCheck, Trash2, Upload, User, Wrench, X } from "lucide-react";
 import { GiCarWheel } from "react-icons/gi";
@@ -200,6 +199,10 @@ export default function VehicleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
+  // Confirm + prompt replacements (no native browser dialogs anywhere).
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<{ id: string; label: string } | null>(null);
+  const [confirmRemoveDocFile, setConfirmRemoveDocFile] = useState<{ docId: string; url: string } | null>(null);
+  const [copyLinkPrompt, setCopyLinkPrompt] = useState<{ title: string; url: string } | null>(null);
   const [deletingImage, setDeletingImage] = useState(false);
   const [allGroups, setAllGroups] = useState<Array<{ id: string; name: string; icon: string; color?: string }>>([]);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
@@ -727,7 +730,7 @@ export default function VehicleDetailPage() {
         await navigator.clipboard.writeText(absoluteUrl);
         toast.success("Link Copied", "Image URL copied to clipboard");
       } else {
-        window.prompt("Copy this image link:", absoluteUrl);
+        setCopyLinkPrompt({ title, url: absoluteUrl });
       }
     } catch {
       toast.error("Share Failed", "Could not copy the image link");
@@ -835,18 +838,16 @@ export default function VehicleDetailPage() {
                 )}
                 <div>
                   <div className="flex items-center gap-3 mb-1">
-                    <h1 className="text-3xl sm:text-4xl font-black text-white tracking-wider font-mono">
-                      {vehicle.registrationNumber}
+                    <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
+                      {vehicle.ownerName ? titleCase(vehicle.ownerName) : titleCase(vehicle.make)}
                     </h1>
                     <span className="px-3 py-1 rounded-lg bg-white/20 text-white text-xs font-bold backdrop-blur-sm">
                       {vehicle.overallStatus}
                     </span>
                   </div>
-                  {vehicle.ownerName && (
-                    <p className="text-white text-lg sm:text-xl font-extrabold tracking-tight leading-tight mt-1">
-                      {titleCase(vehicle.ownerName)}
-                    </p>
-                  )}
+                  <p className="text-white/85 text-sm sm:text-base font-bold font-mono tracking-wider mt-0.5">
+                    {vehicle.registrationNumber}
+                  </p>
                   <p className="text-white/50 text-[11px] uppercase tracking-wider font-semibold mt-1">
                     {titleCase(vehicle.make)}
                   </p>
@@ -908,58 +909,64 @@ export default function VehicleDetailPage() {
 
       {/* Sold banner */}
       {vehicle.status === "SOLD" && vehicle.sale && (
-        <div className="rounded-2xl border-2 border-gray-900/10 dark:border-gray-100/10 bg-gradient-to-r from-gray-900 to-gray-800 dark:from-gray-100 dark:to-gray-200 p-5 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-white text-gray-900 dark:bg-gray-900 dark:text-white">Sold</span>
-                <p className="text-white dark:text-gray-900 text-sm font-semibold">
-                  Sold on {new Date(vehicle.sale.saleDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+                  <Check className="w-3 h-3" />
+                  Sold
+                </span>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Sold on{" "}
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {new Date(vehicle.sale.saleDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                  </span>
                 </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                 <div>
-                  <p className="text-white/50 dark:text-gray-500 uppercase tracking-wider font-semibold text-[9px]">Buyer</p>
-                  <p className="text-white dark:text-gray-900 font-semibold mt-0.5 truncate">{vehicle.sale.buyerName}</p>
+                  <p className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[9px]">Buyer</p>
+                  <p className="text-gray-900 dark:text-white font-semibold mt-0.5 truncate">{vehicle.sale.buyerName}</p>
                 </div>
                 <div>
-                  <p className="text-white/50 dark:text-gray-500 uppercase tracking-wider font-semibold text-[9px]">Phone</p>
-                  <p className="text-white dark:text-gray-900 font-semibold mt-0.5 truncate">+91 {vehicle.sale.buyerPhone}</p>
+                  <p className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[9px]">Phone</p>
+                  <p className="text-gray-900 dark:text-white font-semibold mt-0.5 truncate">+91 {vehicle.sale.buyerPhone}</p>
                 </div>
                 {vehicle.sale.buyerEmail && (
                   <div>
-                    <p className="text-white/50 dark:text-gray-500 uppercase tracking-wider font-semibold text-[9px]">Email</p>
-                    <p className="text-white dark:text-gray-900 font-semibold mt-0.5 truncate">{vehicle.sale.buyerEmail}</p>
+                    <p className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[9px]">Email</p>
+                    <p className="text-gray-900 dark:text-white font-semibold mt-0.5 truncate">{vehicle.sale.buyerEmail}</p>
                   </div>
                 )}
                 {vehicle.sale.soldPrice != null && (
                   <div>
-                    <p className="text-white/50 dark:text-gray-500 uppercase tracking-wider font-semibold text-[9px]">Sold Price</p>
-                    <p className="text-white dark:text-gray-900 font-semibold mt-0.5 truncate">&#8377;{vehicle.sale.soldPrice.toLocaleString("en-IN")}</p>
+                    <p className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[9px]">Sold Price</p>
+                    <p className="text-gray-900 dark:text-white font-semibold mt-0.5 truncate">&#8377;{vehicle.sale.soldPrice.toLocaleString("en-IN")}</p>
                   </div>
                 )}
               </div>
               <div className="flex items-center gap-3 mt-3 flex-wrap">
-                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded ${vehicle.sale.pendingChallansCleared ? "bg-emerald-500/30 text-emerald-50 dark:bg-emerald-500/20 dark:text-emerald-700" : "bg-amber-500/30 text-amber-50 dark:bg-amber-500/20 dark:text-amber-700"}`}>
+                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded ${vehicle.sale.pendingChallansCleared ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400" : "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}`}>
                   {vehicle.sale.pendingChallansCleared ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
                   {vehicle.sale.pendingChallansCleared ? "Challans Cleared" : "Challans Pending"}
                 </span>
                 {vehicle.sale.buyerDocumentUrls.length > 0 && (
-                  <span className="text-[10px] text-white/70 dark:text-gray-600 font-medium">{vehicle.sale.buyerDocumentUrls.length} buyer doc{vehicle.sale.buyerDocumentUrls.length !== 1 ? "s" : ""}</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{vehicle.sale.buyerDocumentUrls.length} buyer doc{vehicle.sale.buyerDocumentUrls.length !== 1 ? "s" : ""}</span>
                 )}
                 {vehicle.sale.transferDocumentUrls.length > 0 && (
-                  <span className="text-[10px] text-white/70 dark:text-gray-600 font-medium">{vehicle.sale.transferDocumentUrls.length} transfer doc{vehicle.sale.transferDocumentUrls.length !== 1 ? "s" : ""}</span>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{vehicle.sale.transferDocumentUrls.length} transfer doc{vehicle.sale.transferDocumentUrls.length !== 1 ? "s" : ""}</span>
                 )}
               </div>
               {(vehicle.sale.buyerDocumentUrls.length > 0 || vehicle.sale.transferDocumentUrls.length > 0) && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {vehicle.sale.buyerDocumentUrls.map((u, i) => (
-                    <a key={`b-${i}`} href={resolveImageUrl(u) ?? "#"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white/15 hover:bg-white/25 dark:bg-gray-900/10 dark:hover:bg-gray-900/20 text-[10px] font-semibold text-white dark:text-gray-900 transition-colors">
+                    <a key={`b-${i}`} href={resolveImageUrl(u) ?? "#"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 bg-gray-50 hover:bg-gray-100 text-[10px] font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:bg-gray-800 dark:text-gray-300 transition-colors">
                       <FileText className="w-3 h-3" /> Buyer #{i + 1}
                     </a>
                   ))}
                   {vehicle.sale.transferDocumentUrls.map((u, i) => (
-                    <a key={`t-${i}`} href={resolveImageUrl(u) ?? "#"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white/15 hover:bg-white/25 dark:bg-gray-900/10 dark:hover:bg-gray-900/20 text-[10px] font-semibold text-white dark:text-gray-900 transition-colors">
+                    <a key={`t-${i}`} href={resolveImageUrl(u) ?? "#"} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded border border-gray-200 bg-gray-50 hover:bg-gray-100 text-[10px] font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:bg-gray-800 dark:text-gray-300 transition-colors">
                       <FileText className="w-3 h-3" /> Transfer #{i + 1}
                     </a>
                   ))}
@@ -967,10 +974,10 @@ export default function VehicleDetailPage() {
               )}
             </div>
             <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
-              <button type="button" onClick={openSellModal} className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 dark:bg-gray-900/10 dark:hover:bg-gray-900/20 text-white dark:text-gray-900 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+              <button type="button" onClick={openSellModal} className="px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-transparent dark:text-gray-300 dark:hover:bg-gray-800 text-xs font-semibold flex items-center gap-1.5 transition-colors">
                 <Pencil className="w-3.5 h-3.5" /> Edit Sale
               </button>
-              <button type="button" onClick={() => setConfirmCancelSale(true)} className="px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-white dark:text-red-700 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+              <button type="button" onClick={() => setConfirmCancelSale(true)} className="px-3 py-2 rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-500/10 text-xs font-semibold flex items-center gap-1.5 transition-colors">
                 <X className="w-3.5 h-3.5" /> Cancel Sale
               </button>
             </div>
@@ -1051,14 +1058,47 @@ export default function VehicleDetailPage() {
                 <ImageIcon className="w-4 h-4 text-brand-500" strokeWidth={2} />
                 Vehicle Photos {vehicle.images?.length ? `(${vehicle.images.length})` : ""}
               </h3>
-              <label className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${uploadingImages ? "bg-gray-100 text-gray-400" : "bg-brand-50 text-brand-600 hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-400 dark:hover:bg-brand-500/20"}`}>
-                {uploadingImages ? (
-                  <><svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Uploading...</>
-                ) : (
-                  <><Plus className="w-3 h-3" strokeWidth={2} />Add Photos</>
-                )}
-                <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" disabled={uploadingImages} onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
-              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const url = `${window.location.origin}/public/vehicle/${vehicle.id}/photos`;
+                    const title = `${vehicle.registrationNumber} — Photos`;
+                    if (typeof navigator !== "undefined" && navigator.share) {
+                      try {
+                        await navigator.share({ title, url });
+                        return;
+                      } catch (err) {
+                        const name = (err as { name?: string })?.name;
+                        if (name === "AbortError") return;
+                      }
+                    }
+                    try {
+                      if (navigator.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(url);
+                        toast.success("Link Copied", "Public photos link copied to clipboard");
+                      } else {
+                        setCopyLinkPrompt({ title, url });
+                      }
+                    } catch {
+                      toast.error("Share Failed", "Could not copy the link");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  title="Share a public link to all photos"
+                >
+                  <Share2 className="w-3 h-3" strokeWidth={2} />
+                  Share
+                </button>
+                <label className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${uploadingImages ? "bg-gray-100 text-gray-400" : "bg-brand-50 text-brand-600 hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-400 dark:hover:bg-brand-500/20"}`}>
+                  {uploadingImages ? (
+                    <><svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Uploading...</>
+                  ) : (
+                    <><Plus className="w-3 h-3" strokeWidth={2} />Add Photos</>
+                  )}
+                  <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" disabled={uploadingImages} onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
+                </label>
+              </div>
             </div>
 
             {vehicle.images && vehicle.images.length > 0 ? (
@@ -1237,10 +1277,7 @@ export default function VehicleDetailPage() {
                                   <button
                                     type="button"
                                     title="Remove this file"
-                                    onClick={() => {
-                                      if (!confirm("Remove this file from the document?")) return;
-                                      complianceAPI.removeDocumentFile(doc.id, url).then(() => fetchVehicle()).catch(console.error);
-                                    }}
+                                    onClick={() => setConfirmRemoveDocFile({ docId: doc.id, url })}
                                     className="text-brand-700/60 hover:text-red-500 ml-0.5"
                                   >
                                     <X className="w-2.5 h-2.5" />
@@ -1277,7 +1314,7 @@ export default function VehicleDetailPage() {
                               </>
                             )}
                             <span className="text-gray-300 dark:text-gray-600">|</span>
-                            <button onClick={() => { if (confirm(`Remove this ${docTypeLabel(doc.type)} document? This cannot be undone.`)) handleDeleteCompliance(doc.id); }}
+                            <button onClick={() => setConfirmDeleteDoc({ id: doc.id, label: docTypeLabel(doc.type) })}
                               disabled={deletingCompliance === doc.id}
                               className="text-[11px] font-medium text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors disabled:opacity-50">
                               <Trash2 className="w-3 h-3" strokeWidth={2} />
@@ -1418,13 +1455,6 @@ export default function VehicleDetailPage() {
             )}
           </div>
 
-          {/* EMI Tracker */}
-          <VehicleEmiPanel
-            vehicleId={vehicle.id}
-            vehicleRegistration={vehicle.registrationNumber}
-            vehicleMake={vehicle.make}
-            vehicleModel={vehicle.model}
-          />
         </div>
 
         {/* RIGHT COL */}
@@ -2784,13 +2814,31 @@ export default function VehicleDetailPage() {
                         </p>
                       </div>
                     </div>
-                    {h.documentUrl && (
-                      <a href={(resolveImageUrl(h.documentUrl) ?? "")} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600 flex-shrink-0">
-                        <ExternalLink className="w-3 h-3" strokeWidth={2} />
-                        View
-                      </a>
-                    )}
+                    {h.documentUrl && (() => {
+                      const url = resolveImageUrl(h.documentUrl) ?? "";
+                      const docLabel = historyDocType ? docTypeLabel(historyDocType) : "Document";
+                      const expiry = h.expiryDate
+                        ? new Date(h.expiryDate).toISOString().split("T")[0]
+                        : "lifetime";
+                      // Best-effort original extension from the storage URL.
+                      const ext = (url.split("?")[0].split("#")[0].split(".").pop() ?? "pdf").toLowerCase();
+                      const filename = `${vehicle.registrationNumber}-${docLabel.replace(/\s+/g, "_")}-${expiry}.${ext}`;
+                      return (
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <a href={url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600">
+                            <ExternalLink className="w-3 h-3" strokeWidth={2} />
+                            View
+                          </a>
+                          <a href={url} download={filename}
+                            className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 hover:text-emerald-700"
+                            title="Download this file">
+                            <Download className="w-3 h-3" strokeWidth={2} />
+                            Download
+                          </a>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </>
@@ -2823,6 +2871,88 @@ export default function VehicleDetailPage() {
           ) : undefined
         }
       />
+
+      <ConfirmDialog
+        isOpen={confirmDeleteDoc !== null}
+        title={`Remove this ${confirmDeleteDoc?.label ?? "document"}?`}
+        message="The compliance record (including expiry tracking) will be deleted from this vehicle. This cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={deletingCompliance === confirmDeleteDoc?.id}
+        onConfirm={() => {
+          if (!confirmDeleteDoc) return;
+          handleDeleteCompliance(confirmDeleteDoc.id);
+          setConfirmDeleteDoc(null);
+        }}
+        onCancel={() => setConfirmDeleteDoc(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmRemoveDocFile !== null}
+        title="Remove this file?"
+        message="The file is removed from this compliance document. Other files on the document remain. This cannot be undone."
+        confirmLabel="Remove file"
+        cancelLabel="Keep"
+        variant="danger"
+        onConfirm={() => {
+          if (!confirmRemoveDocFile) return;
+          complianceAPI
+            .removeDocumentFile(confirmRemoveDocFile.docId, confirmRemoveDocFile.url)
+            .then(() => fetchVehicle())
+            .catch(console.error);
+          setConfirmRemoveDocFile(null);
+        }}
+        onCancel={() => setConfirmRemoveDocFile(null)}
+      />
+
+      {/* Copy-link prompt fallback (replaces window.prompt) */}
+      <Modal
+        isOpen={copyLinkPrompt !== null}
+        onClose={() => setCopyLinkPrompt(null)}
+        className="w-[92%] max-w-[480px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="p-6">
+          <h3 className="text-base font-bold text-gray-900 dark:text-white">
+            {copyLinkPrompt?.title || "Share link"}
+          </h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Copy this link and share it manually.
+          </p>
+          <input
+            type="text"
+            readOnly
+            value={copyLinkPrompt?.url ?? ""}
+            onFocus={(e) => e.currentTarget.select()}
+            className="mt-3 w-full h-10 rounded-lg border border-gray-200 bg-gray-50 px-3 text-xs font-mono text-gray-800 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+          />
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setCopyLinkPrompt(null)}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!copyLinkPrompt) return;
+                try {
+                  await navigator.clipboard.writeText(copyLinkPrompt.url);
+                  toast.success("Link Copied", "Copied to clipboard");
+                  setCopyLinkPrompt(null);
+                } catch {
+                  toast.error("Copy Failed", "Select the text and copy manually");
+                }
+              }}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 transition-colors"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

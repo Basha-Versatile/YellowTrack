@@ -4,6 +4,7 @@ import { vehicleGroupAPI } from "@/lib/api";
 import { getVehicleTypeIcon, VEHICLE_TYPE_ICONS } from "@/components/icons/VehicleTypeIcons";
 import { useToast } from "@/context/ToastContext";
 import { VehicleGroupsSkeleton } from "@/components/ui/Skeleton";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import { ChevronLeft, Plus, Pencil, Trash2, LayoutGrid, List } from "lucide-react";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -16,8 +17,6 @@ interface VehicleGroup {
   order: number;
   _count: { vehicles: number };
 }
-
-const COLORS = ["#6366f1", "#3b82f6", "#10b981", "#f59e0b", "#f97316", "#ec4899", "#8b5cf6", "#6b7280", "#ef4444", "#14b8a6"];
 
 export default function VehicleGroupsPage() {
   const toast = useToast();
@@ -32,6 +31,7 @@ export default function VehicleGroupsPage() {
   const [view, setView] = useState<"list" | "grid">("list");
   const [search, setSearch] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<VehicleGroup | null>(null);
 
   const fetchGroups = async () => {
     try { setGroups((await vehicleGroupAPI.getAll()).data.data); }
@@ -76,12 +76,21 @@ export default function VehicleGroupsPage() {
     } finally { setSaving(false); }
   };
 
-  const handleDelete = async (g: VehicleGroup) => {
-    if (g._count.vehicles > 0) { toast.error("Cannot Delete", `${g.name} has ${g._count.vehicles} vehicle${g._count.vehicles > 1 ? "s" : ""} assigned`); return; }
+  const requestDelete = (g: VehicleGroup) => {
+    if (g._count.vehicles > 0) {
+      toast.error("Cannot Delete", `${g.name} has ${g._count.vehicles} vehicle${g._count.vehicles > 1 ? "s" : ""} assigned`);
+      return;
+    }
+    setPendingDelete(g);
+  };
+
+  const runDelete = async () => {
+    if (!pendingDelete) return;
+    const g = pendingDelete;
     setDeleting(g.id);
     try { await vehicleGroupAPI.remove(g.id); toast.success("Deleted", `${g.name} deleted`); await fetchGroups(); }
     catch (err: unknown) { const e = err as { response?: { data?: { message?: string } } }; toast.error("Error", e.response?.data?.message || "Failed"); }
-    finally { setDeleting(null); }
+    finally { setDeleting(null); setPendingDelete(null); }
   };
 
   const filteredGroups = groups.filter((g) => !search || g.name.toLowerCase().includes(search.toLowerCase()));
@@ -147,7 +156,7 @@ export default function VehicleGroupsPage() {
                   <button onClick={() => openEdit(g)} className="rounded-lg p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => handleDelete(g)} disabled={deleting === g.id} className="rounded-lg p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                  <button onClick={() => requestDelete(g)} disabled={deleting === g.id} className="rounded-lg p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-50">
                     {deleting === g.id
                       ? <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                       : <Trash2 className="w-3.5 h-3.5" />}
@@ -176,7 +185,7 @@ export default function VehicleGroupsPage() {
                   <button onClick={() => openEdit(g)} className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                     <Pencil className="w-4 h-4" />
                   </button>
-                  <button onClick={() => handleDelete(g)} disabled={deleting === g.id} className="rounded-lg p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                  <button onClick={() => requestDelete(g)} disabled={deleting === g.id} className="rounded-lg p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-50">
                     {deleting === g.id
                       ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                       : <Trash2 className="w-4 h-4" />}
@@ -187,6 +196,18 @@ export default function VehicleGroupsPage() {
           ); })}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        title={`Delete "${pendingDelete?.name ?? ""}"?`}
+        message="This group will be removed. Existing vehicles must be reassigned first — empty groups only."
+        confirmLabel="Delete group"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={deleting !== null}
+        onConfirm={runDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
 
       {showModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
@@ -223,13 +244,34 @@ export default function VehicleGroupsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Color</label>
-                    <div className="flex gap-2 flex-wrap">
-                      {COLORS.map((c) => (
-                        <button key={c} type="button" onClick={() => setFormColor(c)}
-                          className={`w-8 h-8 rounded-lg transition-all ${formColor === c ? "ring-2 ring-offset-2 ring-brand-400 dark:ring-offset-gray-900" : "hover:scale-110"}`}
-                          style={{ backgroundColor: c }} />
-                      ))}
+                    <div className="flex items-center gap-3">
+                      <label
+                        className="relative w-10 h-10 rounded-lg border-2 border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer hover:ring-2 hover:ring-brand-200 transition-all flex-shrink-0"
+                        title="Pick any color"
+                      >
+                        <span className="absolute inset-0" style={{ backgroundColor: formColor }} />
+                        <input
+                          type="color"
+                          value={formColor}
+                          onChange={(e) => setFormColor(e.target.value)}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        value={formColor}
+                        onChange={(e) => {
+                          const v = e.target.value.trim();
+                          if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v) || v === "" || v.startsWith("#")) {
+                            setFormColor(v);
+                          }
+                        }}
+                        placeholder="#6366f1"
+                        maxLength={7}
+                        className="w-32 h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-mono uppercase text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                      />
                     </div>
+                    <p className="text-[10px] text-gray-400 mt-1.5">Click the swatch to open the color picker, or type a hex code.</p>
                   </div>
                   <div className="flex gap-3 pt-2">
                     <button onClick={handleSave} disabled={saving || !formName.trim()}

@@ -19,7 +19,7 @@ interface Plan {
   claimSettlementRatio: string; rating: number; isRenewal: boolean; features: string[];
 }
 
-interface Vehicle { id: string; registrationNumber: string; make: string; model: string; }
+interface Vehicle { id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; }
 
 export default function InsurancePage() {
   const toast = useToast();
@@ -226,7 +226,7 @@ export default function InsurancePage() {
         <div className="bg-gradient-to-r from-yellow-500 to-yellow-400 px-6 py-5"><h3 className="text-lg font-bold text-white">Upload Insurance Policy</h3><p className="text-white/70 text-sm">Upload a PDF and we&apos;ll extract the details</p></div>
         <div className="p-6 space-y-5">
           <div><label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Vehicle</label>
-            <select value={selectedVehicleId} onChange={(e) => setSelectedVehicleId(e.target.value)} className={inputCls}><option value="">Select vehicle</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>)}</select></div>
+            <select value={selectedVehicleId} onChange={(e) => setSelectedVehicleId(e.target.value)} className={inputCls}><option value="">Select vehicle</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}{v.ownerName ? ` (${v.ownerName})` : ""}</option>)}</select></div>
           <div><label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Insurance PDF</label>
             <label className={`flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${uploadFile ? "border-yellow-300 bg-yellow-50" : "border-gray-200 hover:border-yellow-400"}`}>
               {uploadFile ? <div className="flex items-center gap-2 text-sm text-yellow-700"><Check className="w-5 h-5" /><span className="font-medium truncate max-w-[250px]">{uploadFile.name}</span></div>

@@ -20,11 +20,11 @@ interface Fastag {
   enrolledAt: string;
   expiryDate: string;
   isActive: boolean;
-  vehicle: { id: string; registrationNumber: string; make: string; model: string; profileImage: string | null; group?: { id: string; name: string; icon: string; color?: string } | null };
+  vehicle: { id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; profileImage: string | null; group?: { id: string; name: string; icon: string; color?: string } | null };
   transactions?: Array<{ id: string; type: string; amount: number; balance: number; description: string | null; tollPlaza: string | null; createdAt: string }>;
 }
 
-interface Vehicle { id: string; registrationNumber: string; make: string; model: string; }
+interface Vehicle { id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; }
 
 export default function FASTagPage() {
   const toast = useToast();
@@ -226,6 +226,9 @@ export default function FASTagPage() {
                     <Badge color={f.status === "ACTIVE" ? "success" : f.status === "EXPIRED" ? "error" : "warning"} variant="light" size="sm">{f.status}</Badge>
                     {f.provider && <span className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 font-semibold">{f.provider}</span>}
                   </div>
+                  {f.vehicle.ownerName && (
+                    <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 truncate mt-0.5" title={f.vehicle.ownerName}>{f.vehicle.ownerName}</p>
+                  )}
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                     <span className="font-mono">{f.tagId.slice(0, 4)}****{f.tagId.slice(-4)}</span>
                     <span className="text-gray-300 dark:text-gray-600">&bull;</span>
@@ -278,9 +281,12 @@ export default function FASTagPage() {
                           <GroupIcon className="w-5 h-5" style={f.vehicle.group?.color ? { color: f.vehicle.group.color } : { color: 'white' }} />
                         </div>
                       )}
-                      <div>
+                      <div className="min-w-0">
                         <h3 className="text-sm font-black text-gray-900 dark:text-white font-mono">{f.vehicle.registrationNumber}</h3>
                         <p className="text-xs text-gray-500">{f.vehicle.make} {f.vehicle.model}</p>
+                        {f.vehicle.ownerName && (
+                          <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 truncate" title={f.vehicle.ownerName}>{f.vehicle.ownerName}</p>
+                        )}
                       </div>
                     </div>
                     <Badge color={f.status === "ACTIVE" ? "success" : f.status === "EXPIRED" ? "error" : "warning"} variant="light" size="sm">{f.status}</Badge>
@@ -336,7 +342,7 @@ export default function FASTagPage() {
                 <select value={createForm.vehicleId} onChange={(e) => setCreateForm({ ...createForm, vehicleId: e.target.value })}
                   className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
                   <option value="">Select vehicle</option>
-                  {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>)}
+                  {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}{v.ownerName ? ` (${v.ownerName})` : ""}</option>)}
                 </select>
               </div>
               <div>

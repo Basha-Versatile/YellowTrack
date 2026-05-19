@@ -12,6 +12,7 @@ import { Search, X, Truck, ChevronDown } from "lucide-react";
 export type VehicleOption = {
   id: string;
   registrationNumber: string;
+  ownerName?: string | null;
   make?: string;
   model?: string;
 };
@@ -115,7 +116,7 @@ export function VehicleAutocomplete({
     const q = query.trim().toLowerCase();
     if (!q) return vehicles.slice(0, 50);
     const matches = vehicles.filter((v) => {
-      const haystack = `${v.registrationNumber} ${v.make ?? ""} ${v.model ?? ""}`.toLowerCase();
+      const haystack = `${v.registrationNumber} ${v.make ?? ""} ${v.model ?? ""} ${v.ownerName ?? ""}`.toLowerCase();
       return haystack.includes(q);
     });
     return matches.slice(0, 50);
@@ -282,17 +283,22 @@ export function VehicleAutocomplete({
                         commit(v.id);
                       }}
                       onMouseEnter={() => setActiveIdx(i + 1)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                      className={`w-full flex flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors ${
                         active
                           ? "bg-brand-50 dark:bg-brand-500/10"
                           : "hover:bg-gray-50 dark:hover:bg-gray-800"
                       } ${isSelected ? "font-semibold text-brand-600 dark:text-brand-400" : "text-gray-700 dark:text-gray-200"}`}
                     >
-                      <span className="font-mono tracking-wide">{v.registrationNumber}</span>
-                      {(v.make || v.model) && (
-                        <span className="text-gray-400 dark:text-gray-500 truncate">
-                          — {[v.make, v.model].filter(Boolean).join(" ")}
-                        </span>
+                      <div className="flex items-center gap-2 min-w-0 w-full">
+                        <span className="font-mono tracking-wide">{v.registrationNumber}</span>
+                        {(v.make || v.model) && (
+                          <span className="text-gray-400 dark:text-gray-500 truncate">
+                            — {[v.make, v.model].filter(Boolean).join(" ")}
+                          </span>
+                        )}
+                      </div>
+                      {v.ownerName && (
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate w-full" title={v.ownerName}>{v.ownerName}</span>
                       )}
                     </button>
                   );

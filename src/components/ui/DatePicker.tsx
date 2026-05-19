@@ -11,6 +11,19 @@ interface DatePickerProps {
   minDate?: string;
 }
 
+// flatpickr parses string inputs using `dateFormat` by default. Our values
+// are ISO YYYY-MM-DD, while dateFormat is "d M Y" (display format), so passing
+// the raw string makes flatpickr's parser fail silently and fall back to today.
+// Convert ISO strings to local-midnight Date objects so flatpickr sees an
+// unambiguous value (and avoid `new Date("YYYY-MM-DD")` which is UTC and can
+// shift a day in negative timezones).
+function isoToLocalDate(s: string | undefined): Date | undefined {
+  if (!s) return undefined;
+  const [y, m, d] = s.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return undefined;
+  return new Date(y, m - 1, d);
+}
+
 export default function DatePicker({
   value,
   onChange,
@@ -28,8 +41,8 @@ export default function DatePicker({
 
     fpRef.current = flatpickr(inputRef.current, {
       dateFormat: "d M Y",
-      defaultDate: value || undefined,
-      minDate: minDate || undefined,
+      defaultDate: isoToLocalDate(value),
+      minDate: isoToLocalDate(minDate) || undefined,
       allowInput: false,
       onChange: (selectedDates) => {
         if (selectedDates.length > 0) {
@@ -47,8 +60,9 @@ export default function DatePicker({
 
   useEffect(() => {
     if (!fpRef.current) return;
-    if (value) {
-      fpRef.current.setDate(value, false);
+    const d = isoToLocalDate(value);
+    if (d) {
+      fpRef.current.setDate(d, false);
     } else {
       fpRef.current.clear();
     }

@@ -22,6 +22,7 @@ interface VehicleGroup {
 interface Vehicle {
   id: string;
   registrationNumber: string;
+  ownerName: string | null;
   make: string;
   model: string;
   fuelType: string;
@@ -128,26 +129,27 @@ export default function VehiclesPage() {
             {pagination.total} vehicle{pagination.total !== 1 ? "s" : ""} in your fleet
           </p>
         </div>
-        <Link
-          href="/vehicles/onboard"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-500 to-brand-400 px-4 py-2 text-xs font-bold text-white shadow shadow-brand-500/25 hover:shadow-brand-500/40 transition-all"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Onboard Vehicle
-        </Link>
-      </div>
-
-      {/* Active / Sold Tabs */}
-      <div className="inline-flex p-1 rounded-lg bg-gray-100 dark:bg-gray-800/50">
-        {(["ALL", "SOLD"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => { setLifecycleTab(tab); fetchVehicles(1, { overrideLifecycle: tab }); }}
-            className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${lifecycleTab === tab ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
+        <div className="flex items-center gap-2">
+          {/* Active / Sold Tabs — moved here, left of Onboard Vehicle */}
+          <div className="inline-flex p-1 rounded-lg bg-gray-100 dark:bg-gray-800/50">
+            {(["ALL", "SOLD"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => { setLifecycleTab(tab); fetchVehicles(1, { overrideLifecycle: tab }); }}
+                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${lifecycleTab === tab ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
+              >
+                {tab === "ALL" ? "All Vehicles" : "Sold"}
+              </button>
+            ))}
+          </div>
+          <Link
+            href="/vehicles/onboard"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-500 to-brand-400 px-4 py-2 text-xs font-bold text-white shadow shadow-brand-500/25 hover:shadow-brand-500/40 transition-all"
           >
-            {tab === "ALL" ? "All Vehicles" : "Sold"}
-          </button>
-        ))}
+            <Plus className="w-3.5 h-3.5" />
+            Onboard Vehicle
+          </Link>
+        </div>
       </div>
 
       {/* Quick Stats */}
@@ -285,6 +287,9 @@ export default function VehiclesPage() {
                             <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">Sold</span>
                           )}
                         </div>
+                        {v.ownerName && (
+                          <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 mt-0.5 truncate" title={v.ownerName}>{titleCase(v.ownerName)}</p>
+                        )}
                         <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-semibold mt-0.5 truncate">{titleCase(v.make)}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-300 truncate">{titleCase(v.model)}</p>
                       </div>
@@ -390,6 +395,9 @@ export default function VehiclesPage() {
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">Sold</span>
                     )}
                   </div>
+                  {v.ownerName && (
+                    <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 truncate mt-0.5" title={v.ownerName}>{titleCase(v.ownerName)}</p>
+                  )}
                   <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
                     <span className="text-gray-400 dark:text-gray-500">{titleCase(v.make)}</span>
                     <span className="text-gray-300 dark:text-gray-600">&bull;</span>

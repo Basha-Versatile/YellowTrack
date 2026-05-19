@@ -28,6 +28,7 @@ function titleCase(s: string | null | undefined): string {
 interface SoldVehicle {
   id: string;
   registrationNumber: string;
+  ownerName: string | null;
   make: string;
   model: string;
   fuelType: string;
@@ -170,6 +171,9 @@ export default function SoldVehiclesPage() {
                         </span>
                       )}
                     </div>
+                    {v.ownerName && (
+                      <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 truncate mt-0.5" title={v.ownerName}>{titleCase(v.ownerName)}</p>
+                    )}
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
                       <span className="text-gray-400 dark:text-gray-500">{titleCase(v.make)}</span>
                       <span className="text-gray-300 dark:text-gray-600">&bull;</span>

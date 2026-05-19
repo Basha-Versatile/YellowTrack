@@ -84,7 +84,7 @@ export const GET = withRoute(
           }),
         ).lean(),
         Vehicle.find(tenantFilter(ctx))
-          .select("_id registrationNumber make model")
+          .select("_id registrationNumber ownerName make model")
           .lean(),
       ]);
 
@@ -92,6 +92,7 @@ export const GET = withRoute(
       allVehicles.map((v) => [String(v._id), {
         id: String(v._id),
         registrationNumber: v.registrationNumber,
+        ownerName: (v as { ownerName?: string | null }).ownerName ?? null,
         make: v.make,
         model: v.model,
       }]),

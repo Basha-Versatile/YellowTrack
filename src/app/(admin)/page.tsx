@@ -471,8 +471,14 @@ function ComplianceSection({
     cumulative += portion;
     return { ...s, dash, offset, portion };
   });
-  const tileHref = (status: "GREEN" | "YELLOW" | "ORANGE" | "RED") =>
-    basePath ? `${basePath}?status=${status}` : undefined;
+  const tileHref = (status: "GREEN" | "YELLOW" | "ORANGE" | "RED") => {
+    if (!basePath) return undefined;
+    // Vehicle compliance moved its valid (GREEN) bucket to a dedicated page;
+    // driver compliance still shows valid inline, so only redirect when the
+    // vehicle base path is active.
+    if (status === "GREEN" && basePath === "/compliance") return "/compliance/valid";
+    return `${basePath}?status=${status}`;
+  };
 
   const [hoveredKey, setHoveredKey] = useState<typeof segments[number]["key"] | null>(null);
   const hovered = hoveredKey ? drawn.find((d) => d.key === hoveredKey) : null;

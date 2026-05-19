@@ -6,6 +6,7 @@ import PhotoCapture from "@/components/public/PhotoCapture";
 import AddressMapPicker from "@/components/public/AddressMapPicker";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 import { validateUploadFile } from "@/lib/file-validation";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface DriverData {
   id: string;
@@ -56,6 +57,15 @@ export default function DriverVerifyPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [cameraNotice, setCameraNotice] = useState<string | null>(null);
+  const [pendingAddrPhotoDelete, setPendingAddrPhotoDelete] = useState<{ type: "current" | "permanent"; url: string } | null>(null);
+  const [deletingAddrPhoto, setDeletingAddrPhoto] = useState(false);
+
+  useEffect(() => {
+    if (!cameraNotice) return;
+    const t = setTimeout(() => setCameraNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [cameraNotice]);
 
   // Form state
   const [form, setForm] = useState({
@@ -143,7 +153,7 @@ export default function DriverVerifyPage() {
       const stream = await startAddrStream(facing);
       if (!stream) {
         setAddrCameraOpen(null);
-        alert("Camera access denied or not available. Please allow camera permission in your browser settings, or use the Gallery button to upload a photo.");
+        setCameraNotice("Camera access denied or not available. Please allow camera permission in your browser settings, or use the Gallery button to upload a photo.");
         const input = document.createElement("input");
         input.type = "file"; input.accept = "image/*";
         input.onchange = (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) handleAddressPhoto(type, f); };
@@ -194,12 +204,17 @@ export default function DriverVerifyPage() {
     finally { setUploadingAddrPhoto(null); }
   };
 
-  const handleRemoveAddressPhoto = async (type: "current" | "permanent", url: string) => {
+  const runRemoveAddressPhoto = async () => {
+    if (!pendingAddrPhotoDelete) return;
+    const { type, url } = pendingAddrPhotoDelete;
+    setDeletingAddrPhoto(true);
     try {
       const res = await publicAPI.deleteAddressPhoto(token, type, url);
       if (type === "current") setCurrentAddrPhotos(res.data.data.photos);
       else setPermanentAddrPhotos(res.data.data.photos);
+      setPendingAddrPhotoDelete(null);
     } catch { /* ignore */ }
+    finally { setDeletingAddrPhoto(false); }
   };
 
   const handlePhotoUpload = async (file: File): Promise<string | null> => {
@@ -568,7 +583,7 @@ export default function DriverVerifyPage() {
                   {currentAddrPhotos.map((url, i) => (
                     <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group">
                       <img src={(resolveImageUrl(url) ?? "")} alt="Address" className="w-full h-full object-cover" />
-                      <button type="button" onClick={() => handleRemoveAddressPhoto("current", url)}
+                      <button type="button" onClick={() => setPendingAddrPhotoDelete({ type: "current", url })}
                         className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
                     </div>
                   ))}
@@ -633,7 +648,7 @@ export default function DriverVerifyPage() {
                     {permanentAddrPhotos.map((url, i) => (
                       <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group">
                         <img src={(resolveImageUrl(url) ?? "")} alt="Address" className="w-full h-full object-cover" />
-                        <button type="button" onClick={() => handleRemoveAddressPhoto("permanent", url)}
+                        <button type="button" onClick={() => setPendingAddrPhotoDelete({ type: "permanent", url })}
                           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
                       </div>
                     ))}
@@ -740,6 +755,43 @@ export default function DriverVerifyPage() {
               className="w-18 h-18 rounded-full bg-white/90 hover:bg-white border-4 border-white/30 transition-all active:scale-90 flex items-center justify-center shadow-2xl"
               style={{ width: 72, height: 72 }}>
               <div className="w-14 h-14 rounded-full border-2 border-gray-300" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        isOpen={pendingAddrPhotoDelete !== null}
+        title="Remove this proof photo?"
+        message="The photo will be deleted from your address proof. You can re-upload another one."
+        confirmLabel="Remove photo"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={deletingAddrPhoto}
+        onConfirm={runRemoveAddressPhoto}
+        onCancel={() => setPendingAddrPhotoDelete(null)}
+        preview={pendingAddrPhotoDelete ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={resolveImageUrl(pendingAddrPhotoDelete.url) ?? undefined} alt="Address proof" className="w-full max-h-48 object-cover" />
+        ) : undefined}
+      />
+
+      {cameraNotice && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100000] max-w-md w-[calc(100%-2rem)]">
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-white px-4 py-3 shadow-2xl dark:border-amber-500/30 dark:bg-gray-900">
+            <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+            <p className="text-sm text-gray-800 dark:text-gray-200 flex-1">{cameraNotice}</p>
+            <button
+              type="button"
+              onClick={() => setCameraNotice(null)}
+              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              aria-label="Dismiss"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
         </div>

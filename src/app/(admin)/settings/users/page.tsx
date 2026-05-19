@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { rolesAPI, usersAPI } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Users,
   Search,
@@ -77,6 +78,10 @@ export default function UsersPage() {
     email: string;
     tempPassword: string;
   } | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    user: UserRow;
+    kind: "reset" | "suspend" | "delete";
+  } | null>(null);
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
@@ -146,40 +151,38 @@ export default function UsersPage() {
         setEditing(user);
         return;
       }
-      if (action === "reset") {
-        if (
-          !confirm(
-            `Reset password for ${user.name}? They'll receive a new temporary password by email and be forced to change it on next sign-in.`,
-          )
-        )
-          return;
-        const res = await usersAPI.resetPassword(String(user._id));
-        const temp = (res.data.data as { tempPassword: string }).tempPassword;
-        setInviteResult({
-          name: user.name,
-          email: user.email,
-          tempPassword: temp,
-        });
-        await load();
+      if (action === "reset" || action === "suspend" || action === "delete") {
+        // Defer the destructive bits to a ConfirmDialog (no native dialogs).
+        setPendingAction({ user, kind: action });
         return;
-      }
-      if (action === "suspend") {
-        if (!confirm(`Suspend ${user.name}? They'll be signed out immediately.`))
-          return;
-        await usersAPI.suspend(String(user._id));
-        setToast({ type: "success", message: `${user.name} suspended` });
       }
       if (action === "resume") {
         await usersAPI.resume(String(user._id));
         setToast({ type: "success", message: `${user.name} resumed` });
       }
-      if (action === "delete") {
-        if (
-          !confirm(
-            `Delete ${user.name}? This permanently removes their account. They'll be signed out immediately.`,
-          )
-        )
-          return;
+      await load();
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Action failed";
+      setToast({ type: "error", message: msg });
+    }
+  };
+
+  // Runs the destructive bit after the user confirms via the ConfirmDialog.
+  const runPendingAction = async () => {
+    if (!pendingAction) return;
+    const { user, kind } = pendingAction;
+    setPendingAction(null);
+    try {
+      if (kind === "reset") {
+        const res = await usersAPI.resetPassword(String(user._id));
+        const temp = (res.data.data as { tempPassword: string }).tempPassword;
+        setInviteResult({ name: user.name, email: user.email, tempPassword: temp });
+      } else if (kind === "suspend") {
+        await usersAPI.suspend(String(user._id));
+        setToast({ type: "success", message: `${user.name} suspended` });
+      } else if (kind === "delete") {
         await usersAPI.remove(String(user._id));
         setToast({ type: "success", message: `${user.name} deleted` });
       }
@@ -191,6 +194,29 @@ export default function UsersPage() {
       setToast({ type: "error", message: msg });
     }
   };
+
+  const pendingPrompt = pendingAction
+    ? pendingAction.kind === "reset"
+      ? {
+          title: `Reset password for ${pendingAction.user.name}?`,
+          message: "They'll receive a new temporary password by email and be forced to change it on next sign-in.",
+          confirmLabel: "Reset password",
+          variant: "warning" as const,
+        }
+      : pendingAction.kind === "suspend"
+        ? {
+            title: `Suspend ${pendingAction.user.name}?`,
+            message: "They'll be signed out immediately and won't be able to sign back in until resumed.",
+            confirmLabel: "Suspend",
+            variant: "warning" as const,
+          }
+        : {
+            title: `Delete ${pendingAction.user.name}?`,
+            message: "This permanently removes their account. They'll be signed out immediately. This cannot be undone.",
+            confirmLabel: "Delete",
+            variant: "danger" as const,
+          }
+    : null;
 
   return (
     <div className="space-y-6">
@@ -307,6 +333,17 @@ export default function UsersPage() {
       )}
 
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+
+      <ConfirmDialog
+        isOpen={pendingPrompt !== null}
+        title={pendingPrompt?.title ?? ""}
+        message={pendingPrompt?.message ?? ""}
+        confirmLabel={pendingPrompt?.confirmLabel ?? "Confirm"}
+        cancelLabel="Cancel"
+        variant={pendingPrompt?.variant ?? "danger"}
+        onConfirm={runPendingAction}
+        onCancel={() => setPendingAction(null)}
+      />
     </div>
   );
 }

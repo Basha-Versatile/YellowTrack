@@ -59,11 +59,11 @@ export default function GlobalSearch() {
         driverAPI.getAll(),
       ]);
 
-      const vehicleResults: SearchResult[] = (vehiclesRes.data.data.vehicles || []).map((v: { id: string; registrationNumber: string; make: string; model: string; fuelType: string }) => ({
+      const vehicleResults: SearchResult[] = (vehiclesRes.data.data.vehicles || []).map((v: { id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; fuelType: string }) => ({
         id: v.id,
         type: "vehicle" as const,
         title: v.registrationNumber,
-        subtitle: `${v.make} ${v.model} — ${v.fuelType}`,
+        subtitle: `${v.make} ${v.model} — ${v.fuelType}${v.ownerName ? ` · ${v.ownerName}` : ""}`,
         href: `/vehicles/${v.id}`,
       }));
 

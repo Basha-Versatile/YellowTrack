@@ -23,7 +23,7 @@ export const GET = withRoute(
     const vehicleIds = [...new Set(services.map((s) => String(s.vehicleId)))];
     const vehicles = vehicleIds.length
       ? await Vehicle.find(tenantFilter(ctx, { _id: { $in: vehicleIds } }))
-          .select("_id registrationNumber make model profileImage groupId")
+          .select("_id registrationNumber ownerName make model profileImage groupId")
           .lean()
       : [];
     const groupIds = vehicles

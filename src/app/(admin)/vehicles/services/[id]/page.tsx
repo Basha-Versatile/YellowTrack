@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { vehicleAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import Badge from "@/components/ui/badge/Badge";
 import { ServiceDetailSkeleton } from "@/components/ui/Skeleton";
@@ -18,7 +19,7 @@ interface ServiceRecord {
   nextDueKm: number | null; status: string;
 }
 interface Vehicle {
-  id: string; registrationNumber: string; make: string; model: string; profileImage: string | null;
+  id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; profileImage: string | null;
   group?: { name: string; icon: string; color?: string } | null;
 }
 
@@ -33,6 +34,8 @@ export default function VehicleServiceDetailPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [titleSearch, setTitleSearch] = useState("");
   const [hoverPhoto, setHoverPhoto] = useState<{ url: string; x: number; y: number } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ServiceRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -45,12 +48,16 @@ export default function VehicleServiceDetailPage() {
 
   useEffect(() => { fetchData(); }, [vehicleId]);
 
-  const handleDelete = async (serviceId: string) => {
+  const runDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await vehicleAPI.deleteService(vehicleId, serviceId);
-      setServices((prev) => prev.filter((s) => s.id !== serviceId));
+      await vehicleAPI.deleteService(vehicleId, pendingDelete.id);
+      setServices((prev) => prev.filter((s) => s.id !== pendingDelete.id));
       toast.success("Deleted", "Service record removed");
+      setPendingDelete(null);
     } catch { toast.error("Error", "Failed to delete"); }
+    finally { setDeleting(false); }
   };
 
   const filteredServices = services.filter((svc) => {
@@ -104,6 +111,9 @@ export default function VehicleServiceDetailPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white font-mono tracking-wide">{vehicle.registrationNumber}</h1>
+                {vehicle.ownerName && (
+                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate" title={vehicle.ownerName}>{vehicle.ownerName}</p>
+                )}
                 <p className="text-sm text-gray-500 dark:text-gray-400">{vehicle.make} {vehicle.model} — Service History</p>
               </div>
             </div>
@@ -305,7 +315,7 @@ export default function VehicleServiceDetailPage() {
                       <Link href={`/vehicles/${vehicleId}`} className="text-xs font-medium text-brand-500 hover:text-brand-600 flex items-center gap-1 transition-colors">
                         Edit on vehicle page <ChevronRight className="w-3 h-3" />
                       </Link>
-                      <button onClick={() => handleDelete(svc.id)} className="text-xs font-medium text-red-500 hover:text-red-600 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+                      <button onClick={() => setPendingDelete(svc)} className="text-xs font-medium text-red-500 hover:text-red-600 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
                         <Trash2 className="w-3 h-3" />
                         Delete
                       </button>
@@ -324,6 +334,18 @@ export default function VehicleServiceDetailPage() {
           <img src={hoverPhoto.url} alt="" className="w-44 h-44 rounded-2xl object-cover shadow-2xl ring-4 ring-white dark:ring-gray-900" />
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        title="Delete this service record?"
+        message={pendingDelete ? `"${pendingDelete.title}" will be removed. This cannot be undone.` : ""}
+        confirmLabel="Delete"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={deleting}
+        onConfirm={runDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

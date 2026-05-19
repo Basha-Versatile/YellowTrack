@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { emiAPI, vehicleAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
@@ -18,14 +18,20 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  List as ListIcon,
   X,
   FileSpreadsheet,
+  Filter,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
 type VehicleBasic = {
   id: string;
   registrationNumber: string;
+  ownerName?: string | null;
   make: string;
   model: string;
 };
@@ -49,6 +55,7 @@ type EmiPlanRow = {
   vehicle: {
     id: string;
     registrationNumber: string;
+    ownerName?: string | null;
     make: string;
     model: string;
   } | null;
@@ -103,6 +110,17 @@ export default function EmiHubPage() {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
   const [calSelectedDay, setCalSelectedDay] = useState<number | null>(null);
+  const [emiView, setEmiView] = useState<"list" | "calendar">("list");
+
+  // Per-column header filters (sit on top of the chip strip + vehicle dropdown).
+  const [colFilters, setColFilters] = useState<{
+    vehicle: string;
+    lender: string;
+    statuses: EmiPlanRow["status"][];
+    nextDueFrom: string;
+    nextDueTo: string;
+  }>({ vehicle: "", lender: "", statuses: [], nextDueFrom: "", nextDueTo: "" });
+  const [sortBy, setSortBy] = useState<{ col: "emi" | "outstanding" | "progress" | "nextDue"; dir: "asc" | "desc" } | null>(null);
 
   // Note: `toast` intentionally excluded from deps — useToast returns a new
   // ref each render and would re-fire this loader on every render.
@@ -145,24 +163,77 @@ export default function EmiHubPage() {
   const filtered = useMemo(() => {
     if (!hub) return [];
     let rows = hub.rows;
+
+    // Top-level vehicle dropdown + chip strip (unchanged behaviour).
     if (vehicleId) rows = rows.filter((r) => String(r.vehicleId) === vehicleId);
-    if (filter === "all") return rows;
-    if (filter === "closed") return rows.filter((r) => r.status === "CLOSED");
-    if (filter === "bounced") return rows.filter((r) => r.status === "DEFAULTED");
-    if (filter === "overdue") {
-      return rows.filter((r) => {
+    if (filter === "closed") rows = rows.filter((r) => r.status === "CLOSED");
+    else if (filter === "bounced") rows = rows.filter((r) => r.status === "DEFAULTED");
+    else if (filter === "overdue") {
+      rows = rows.filter((r) => {
         if (r.status !== "ACTIVE") return false;
         const d = daysUntil(r.nextDueDate);
         return d !== null && d < 0;
       });
+    } else if (filter === "due7" || filter === "due30") {
+      const horizon = filter === "due7" ? 7 : 30;
+      rows = rows.filter((r) => {
+        if (r.status !== "ACTIVE") return false;
+        const d = daysUntil(r.nextDueDate);
+        return d !== null && d >= 0 && d <= horizon;
+      });
     }
-    const horizon = filter === "due7" ? 7 : 30;
-    return rows.filter((r) => {
-      if (r.status !== "ACTIVE") return false;
-      const d = daysUntil(r.nextDueDate);
-      return d !== null && d >= 0 && d <= horizon;
-    });
-  }, [hub, filter, vehicleId]);
+
+    // Per-column header filters.
+    if (colFilters.vehicle.trim()) {
+      const q = colFilters.vehicle.trim().toLowerCase();
+      rows = rows.filter((r) =>
+        `${r.vehicle?.registrationNumber ?? ""} ${r.vehicle?.ownerName ?? ""} ${r.vehicle?.make ?? ""} ${r.vehicle?.model ?? ""}`
+          .toLowerCase()
+          .includes(q),
+      );
+    }
+    if (colFilters.lender.trim()) {
+      const q = colFilters.lender.trim().toLowerCase();
+      rows = rows.filter((r) =>
+        `${r.lenderName} ${r.lenderType} ${r.debitBankName ?? ""} ${r.debitAccountMasked ?? ""}`
+          .toLowerCase()
+          .includes(q),
+      );
+    }
+    if (colFilters.statuses.length > 0) {
+      rows = rows.filter((r) => colFilters.statuses.includes(r.status));
+    }
+    if (colFilters.nextDueFrom) {
+      const from = new Date(colFilters.nextDueFrom).getTime();
+      rows = rows.filter((r) => r.nextDueDate != null && new Date(r.nextDueDate).getTime() >= from);
+    }
+    if (colFilters.nextDueTo) {
+      const to = new Date(colFilters.nextDueTo).getTime() + 24 * 60 * 60 * 1000 - 1;
+      rows = rows.filter((r) => r.nextDueDate != null && new Date(r.nextDueDate).getTime() <= to);
+    }
+
+    // Sort (single column).
+    if (sortBy) {
+      const dir = sortBy.dir === "asc" ? 1 : -1;
+      rows = [...rows].sort((a, b) => {
+        const aPending = Math.max(0, a.totalInstallments - a.paidInstallments);
+        const bPending = Math.max(0, b.totalInstallments - b.paidInstallments);
+        const aVal =
+          sortBy.col === "emi" ? a.emiAmount
+          : sortBy.col === "outstanding" ? a.emiAmount * aPending
+          : sortBy.col === "progress" ? (a.totalInstallments ? a.paidInstallments / a.totalInstallments : 0)
+          : a.nextDueDate ? new Date(a.nextDueDate).getTime() : Number.POSITIVE_INFINITY;
+        const bVal =
+          sortBy.col === "emi" ? b.emiAmount
+          : sortBy.col === "outstanding" ? b.emiAmount * bPending
+          : sortBy.col === "progress" ? (b.totalInstallments ? b.paidInstallments / b.totalInstallments : 0)
+          : b.nextDueDate ? new Date(b.nextDueDate).getTime() : Number.POSITIVE_INFINITY;
+        return (aVal - bVal) * dir;
+      });
+    }
+
+    return rows;
+  }, [hub, filter, vehicleId, colFilters, sortBy]);
 
   // Aggregate outstanding + pending count across all ACTIVE plans.
   const hubTotals = useMemo(() => {
@@ -259,13 +330,34 @@ export default function EmiHubPage() {
             Track loan installments, upcoming dues, and defaulters across your fleet.
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2 text-xs font-bold text-white shadow shadow-yellow-500/30 hover:from-yellow-500 hover:to-yellow-600 transition-all"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          New EMI plan
-        </button>
+        <div className="flex items-center gap-2">
+          {/* View toggle: List <-> Calendar */}
+          <div className="inline-flex p-1 rounded-lg bg-gray-100 dark:bg-gray-800/50">
+            <button
+              type="button"
+              onClick={() => setEmiView("list")}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-bold transition-all ${emiView === "list" ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
+            >
+              <ListIcon className="w-3.5 h-3.5" />
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmiView("calendar")}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-bold transition-all ${emiView === "calendar" ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Calendar
+            </button>
+          </div>
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2 text-xs font-bold text-white shadow shadow-yellow-500/30 hover:from-yellow-500 hover:to-yellow-600 transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New EMI plan
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -303,6 +395,7 @@ export default function EmiHubPage() {
         />
       </div>
 
+      {emiView === "list" && (<>
       {/* Filters */}
       <div className="flex items-center flex-wrap gap-2.5 justify-between">
         <div className="flex items-center flex-wrap gap-1.5">
@@ -335,13 +428,77 @@ export default function EmiHubPage() {
             <table className="w-full text-xs">
               <thead className="bg-gray-50/80 dark:bg-gray-800/50">
                 <tr>
-                  <Th>Vehicle</Th>
-                  <Th>Lender</Th>
-                  <Th className="text-right">EMI / month</Th>
-                  <Th className="text-right">Outstanding</Th>
-                  <Th className="text-center">Progress</Th>
-                  <Th>Next due</Th>
-                  <Th className="text-center">Status</Th>
+                  <FilterableTh label="Vehicle" active={colFilters.vehicle.trim() !== ""}>
+                    {(close) => (
+                      <TextFilter
+                        value={colFilters.vehicle}
+                        placeholder="Reg no, owner, make…"
+                        onChange={(v) => setColFilters((p) => ({ ...p, vehicle: v }))}
+                        onClear={() => setColFilters((p) => ({ ...p, vehicle: "" }))}
+                        onClose={close}
+                      />
+                    )}
+                  </FilterableTh>
+                  <FilterableTh label="Lender" active={colFilters.lender.trim() !== ""}>
+                    {(close) => (
+                      <TextFilter
+                        value={colFilters.lender}
+                        placeholder="Lender, bank, A/c…"
+                        onChange={(v) => setColFilters((p) => ({ ...p, lender: v }))}
+                        onClear={() => setColFilters((p) => ({ ...p, lender: "" }))}
+                        onClose={close}
+                      />
+                    )}
+                  </FilterableTh>
+                  <FilterableTh label="EMI / month" align="right" active={sortBy?.col === "emi"}>
+                    {(close) => (
+                      <SortFilter
+                        current={sortBy?.col === "emi" ? sortBy.dir : null}
+                        onPick={(dir) => { setSortBy(dir ? { col: "emi", dir } : null); close(); }}
+                      />
+                    )}
+                  </FilterableTh>
+                  <FilterableTh label="Outstanding" align="right" active={sortBy?.col === "outstanding"}>
+                    {(close) => (
+                      <SortFilter
+                        current={sortBy?.col === "outstanding" ? sortBy.dir : null}
+                        onPick={(dir) => { setSortBy(dir ? { col: "outstanding", dir } : null); close(); }}
+                      />
+                    )}
+                  </FilterableTh>
+                  <FilterableTh label="Progress" align="center" active={sortBy?.col === "progress"}>
+                    {(close) => (
+                      <SortFilter
+                        current={sortBy?.col === "progress" ? sortBy.dir : null}
+                        onPick={(dir) => { setSortBy(dir ? { col: "progress", dir } : null); close(); }}
+                      />
+                    )}
+                  </FilterableTh>
+                  <FilterableTh label="Next due" active={colFilters.nextDueFrom !== "" || colFilters.nextDueTo !== "" || sortBy?.col === "nextDue"}>
+                    {(close) => (
+                      <DateRangeFilter
+                        from={colFilters.nextDueFrom}
+                        to={colFilters.nextDueTo}
+                        sortDir={sortBy?.col === "nextDue" ? sortBy.dir : null}
+                        onChange={(from, to) => setColFilters((p) => ({ ...p, nextDueFrom: from, nextDueTo: to }))}
+                        onSort={(dir) => setSortBy(dir ? { col: "nextDue", dir } : null)}
+                        onClear={() => {
+                          setColFilters((p) => ({ ...p, nextDueFrom: "", nextDueTo: "" }));
+                          if (sortBy?.col === "nextDue") setSortBy(null);
+                        }}
+                        onClose={close}
+                      />
+                    )}
+                  </FilterableTh>
+                  <FilterableTh label="Status" align="center" active={colFilters.statuses.length > 0}>
+                    {(close) => (
+                      <StatusFilter
+                        selected={colFilters.statuses}
+                        onChange={(statuses) => setColFilters((p) => ({ ...p, statuses }))}
+                        onClose={close}
+                      />
+                    )}
+                  </FilterableTh>
                   <Th className="text-right">Actions</Th>
                 </tr>
               </thead>
@@ -354,6 +511,10 @@ export default function EmiHubPage() {
           </div>
         )}
       </div>
+      </>)}
+
+      {emiView === "calendar" && (
+      <>
       {/* EMI Calendar */}
       <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
         <div className="flex items-center justify-between gap-3 flex-wrap px-5 py-4 border-b border-gray-100 dark:border-gray-800">
@@ -440,6 +601,8 @@ export default function EmiHubPage() {
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* EMI calendar — day details modal */}
       <Modal
@@ -468,7 +631,7 @@ export default function EmiHubPage() {
               selectedDayPlans.map((p) => (
                 <Link
                   key={p.id}
-                  href={p.vehicle ? `/vehicles/${p.vehicle.id}` : "#"}
+                  href={p.vehicle ? `/vehicles/${p.vehicle.id}/emi` : "#"}
                   onClick={() => setCalSelectedDay(null)}
                   className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/40 dark:bg-gray-800/30 hover:bg-yellow-50 dark:hover:bg-yellow-500/5 transition-colors"
                 >
@@ -482,6 +645,9 @@ export default function EmiHubPage() {
                       </p>
                       <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${STATUS_TINT[p.status]}`}>{p.status}</span>
                     </div>
+                    {p.vehicle?.ownerName && (
+                      <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 truncate" title={p.vehicle.ownerName}>{p.vehicle.ownerName}</p>
+                    )}
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                       <span className="font-medium text-gray-700 dark:text-gray-300">{p.lenderName}</span>
                       <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
@@ -555,6 +721,187 @@ function Th({
     >
       {children}
     </th>
+  );
+}
+
+// Single uniform "Filter" icon on every column. Click opens a popover whose
+// contents vary by column type (text search / multi-select / date range / sort).
+// `active` highlights the icon when this column is contributing to the filtered
+// result so users can see at a glance which columns are narrowing the list.
+function FilterableTh({
+  label,
+  align = "left",
+  active,
+  children,
+}: {
+  label: string;
+  align?: "left" | "right" | "center";
+  active: boolean;
+  children: (close: () => void) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [open]);
+
+  const justify = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+  return (
+    <th className={`px-5 py-3.5 font-bold text-gray-500 uppercase tracking-wider text-[10px] ${align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left"}`}>
+      <div ref={wrapRef} className={`relative inline-flex items-center gap-1.5 ${justify}`}>
+        <span>{label}</span>
+        <button
+          type="button"
+          onClick={() => setOpen((p) => !p)}
+          className={`inline-flex items-center justify-center w-5 h-5 rounded transition-colors ${active ? "text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-500/15" : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+          title={`Filter ${label}`}
+          aria-label={`Filter ${label}`}
+        >
+          <Filter className="w-3 h-3" strokeWidth={2.2} />
+        </button>
+        {open && (
+          <div className={`absolute top-full mt-1 z-30 ${align === "right" ? "right-0" : "left-0"} min-w-[220px] rounded-xl border border-gray-200 bg-white shadow-xl p-3 dark:border-gray-700 dark:bg-gray-900`}>
+            {children(() => setOpen(false))}
+          </div>
+        )}
+      </div>
+    </th>
+  );
+}
+
+function TextFilter({
+  value, placeholder, onChange, onClear, onClose,
+}: { value: string; placeholder: string; onChange: (v: string) => void; onClear: () => void; onClose: () => void }) {
+  return (
+    <div className="space-y-2">
+      <input
+        type="text"
+        autoFocus
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") onClose(); }}
+        className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-xs text-gray-800 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+      />
+      <div className="flex items-center justify-between">
+        <button type="button" onClick={onClear} className="text-[11px] font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">Clear</button>
+        <button type="button" onClick={onClose} className="text-[11px] font-semibold text-yellow-700 dark:text-yellow-400 hover:underline">Done</button>
+      </div>
+    </div>
+  );
+}
+
+function SortFilter({
+  current, onPick,
+}: { current: "asc" | "desc" | null; onPick: (dir: "asc" | "desc" | null) => void }) {
+  return (
+    <div className="space-y-1">
+      <SortRow icon={<ArrowUp className="w-3.5 h-3.5" />} label="Ascending" active={current === "asc"} onClick={() => onPick(current === "asc" ? null : "asc")} />
+      <SortRow icon={<ArrowDown className="w-3.5 h-3.5" />} label="Descending" active={current === "desc"} onClick={() => onPick(current === "desc" ? null : "desc")} />
+      <SortRow icon={<ArrowUpDown className="w-3.5 h-3.5" />} label="No sort" active={current === null} onClick={() => onPick(null)} />
+    </div>
+  );
+}
+
+function SortRow({
+  icon, label, active, onClick,
+}: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold normal-case transition-colors ${active ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400" : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"}`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function StatusFilter({
+  selected, onChange, onClose,
+}: { selected: EmiPlanRow["status"][]; onChange: (s: EmiPlanRow["status"][]) => void; onClose: () => void }) {
+  const ALL: EmiPlanRow["status"][] = ["ACTIVE", "PAUSED", "DEFAULTED", "CLOSED"];
+  const toggle = (s: EmiPlanRow["status"]) => {
+    onChange(selected.includes(s) ? selected.filter((x) => x !== s) : [...selected, s]);
+  };
+  return (
+    <div className="space-y-1">
+      {ALL.map((s) => {
+        const on = selected.includes(s);
+        return (
+          <button
+            key={s}
+            type="button"
+            onClick={() => toggle(s)}
+            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold normal-case transition-colors ${on ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400" : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"}`}
+          >
+            <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded border ${on ? "border-yellow-500 bg-yellow-500" : "border-gray-300 dark:border-gray-600"}`}>
+              {on && <CheckCircle2 className="w-3 h-3 text-white" />}
+            </span>
+            {s}
+          </button>
+        );
+      })}
+      <div className="flex items-center justify-between pt-1">
+        <button type="button" onClick={() => onChange([])} className="text-[11px] font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">Clear</button>
+        <button type="button" onClick={onClose} className="text-[11px] font-semibold text-yellow-700 dark:text-yellow-400 hover:underline">Done</button>
+      </div>
+    </div>
+  );
+}
+
+function DateRangeFilter({
+  from, to, sortDir, onChange, onSort, onClear, onClose,
+}: {
+  from: string;
+  to: string;
+  sortDir: "asc" | "desc" | null;
+  onChange: (from: string, to: string) => void;
+  onSort: (dir: "asc" | "desc" | null) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="space-y-2 min-w-[240px]">
+      <div>
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">From</p>
+        <input
+          type="date"
+          value={from}
+          onChange={(e) => onChange(e.target.value, to)}
+          className="w-full h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-800 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+        />
+      </div>
+      <div>
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">To</p>
+        <input
+          type="date"
+          value={to}
+          onChange={(e) => onChange(from, e.target.value)}
+          className="w-full h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-800 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+        />
+      </div>
+      <div className="pt-1 border-t border-gray-100 dark:border-gray-800 space-y-1">
+        <SortRow icon={<ArrowUp className="w-3.5 h-3.5" />} label="Earliest first" active={sortDir === "asc"} onClick={() => onSort(sortDir === "asc" ? null : "asc")} />
+        <SortRow icon={<ArrowDown className="w-3.5 h-3.5" />} label="Latest first" active={sortDir === "desc"} onClick={() => onSort(sortDir === "desc" ? null : "desc")} />
+      </div>
+      <div className="flex items-center justify-between pt-1">
+        <button type="button" onClick={onClear} className="text-[11px] font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">Clear</button>
+        <button type="button" onClick={onClose} className="text-[11px] font-semibold text-yellow-700 dark:text-yellow-400 hover:underline">Done</button>
+      </div>
+    </div>
   );
 }
 
@@ -717,8 +1064,9 @@ function Row({ row }: { row: EmiPlanRow }) {
       <td className="px-5 py-3.5">
         {row.vehicle ? (
           <Link
-            href={`/vehicles/${row.vehicleId}`}
+            href={`/vehicles/${row.vehicleId}/emi`}
             className="font-semibold text-gray-900 dark:text-white font-mono text-[11px] hover:text-yellow-700 dark:hover:text-yellow-400"
+            title="Open EMI details for this vehicle"
           >
             {row.vehicle.registrationNumber}
           </Link>
@@ -728,6 +1076,11 @@ function Row({ row }: { row: EmiPlanRow }) {
         <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[140px]">
           {row.vehicle ? `${row.vehicle.make} ${row.vehicle.model}` : ""}
         </div>
+        {row.vehicle?.ownerName && (
+          <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-300 truncate max-w-[160px] mt-0.5" title={row.vehicle.ownerName}>
+            {row.vehicle.ownerName}
+          </div>
+        )}
       </td>
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-1.5 text-gray-800 dark:text-gray-200 font-medium">
@@ -737,6 +1090,20 @@ function Row({ row }: { row: EmiPlanRow }) {
         <div className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-0.5">
           {row.lenderType}
         </div>
+        {(row.debitBankName || row.debitAccountMasked) && (
+          <div
+            className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 mt-1 truncate max-w-[180px]"
+            title={[row.debitBankName, row.debitAccountMasked].filter(Boolean).join(" · ")}
+          >
+            <CreditCard className="w-3 h-3 text-gray-400" />
+            {row.debitBankName && <span className="truncate">{row.debitBankName}</span>}
+            {row.debitAccountMasked && (
+              <span className="font-mono font-semibold text-gray-700 dark:text-gray-300">
+                {row.debitAccountMasked}
+              </span>
+            )}
+          </div>
+        )}
       </td>
       <td className="px-5 py-3.5 text-right font-black text-gray-900 dark:text-white whitespace-nowrap">
         {formatINR(row.emiAmount)}

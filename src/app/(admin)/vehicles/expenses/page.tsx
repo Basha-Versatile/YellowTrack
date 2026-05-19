@@ -15,7 +15,7 @@ import {
 import { VehicleAutocomplete } from "@/components/vehicles/VehicleAutocomplete";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
-interface VehicleBasic { id: string; registrationNumber: string; make: string; model: string; }
+interface VehicleBasic { id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; }
 interface ExpenseItem { source: string; date: string; vehicleId: string; vehicle: VehicleBasic | null; title: string; amount: number; handlingCharges?: number; proofUrls: string[]; category: string; }
 interface ReportData {
   summary: { totalSpent: number; breakdown: Record<string, number> };
@@ -480,44 +480,6 @@ function VehicleExpensesContent() {
         </div>
       </div>
 
-      {/* Filters — glassy */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/20 bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl p-4 shadow-lg shadow-gray-200/30 dark:shadow-none dark:border-gray-700/50">
-        <VehicleAutocomplete
-          vehicles={vehicles}
-          value={vehicleId}
-          onChange={setVehicleId}
-          className="min-w-[220px]"
-          placeholder="All Vehicles"
-          size="sm"
-        />
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
-          className="h-9 rounded-lg border border-gray-200/80 bg-white/80 dark:bg-gray-800/80 backdrop-blur px-3 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:text-white min-w-[150px]">
-          <option value="">All Categories</option>
-          {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <div className="flex gap-1 p-0.5 bg-gray-100/80 dark:bg-gray-800/80 backdrop-blur rounded-lg">
-          {[{ key: "this_month", label: "This Month" }, { key: "last_month", label: "Last Month" }, { key: "this_quarter", label: "Quarter" }, { key: "this_year", label: "Year" }].map((p) => (
-            <button key={p.key} onClick={() => { setPeriod(p.key); setCustomFrom(""); setCustomTo(""); }}
-              className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${period === p.key ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <DatePicker
-            value={customFrom}
-            onChange={(v) => { setCustomFrom(v); if (v) setPeriod("custom"); }}
-            placeholder="From"
-          />
-          <span className="text-xs text-gray-400">to</span>
-          <DatePicker
-            value={customTo}
-            onChange={(v) => { setCustomTo(v); if (v) setPeriod("custom"); }}
-            placeholder="To"
-            minDate={customFrom}
-          />
-        </div>
-      </div>
 
       {loading ? (
         <ExpensesDashboardSkeleton />
@@ -584,6 +546,45 @@ function VehicleExpensesContent() {
             })}
           </div>
 
+          {/* Filters — glassy */}
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/20 bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl p-4 shadow-lg shadow-gray-200/30 dark:shadow-none dark:border-gray-700/50">
+            <VehicleAutocomplete
+              vehicles={vehicles}
+              value={vehicleId}
+              onChange={setVehicleId}
+              className="min-w-[220px]"
+              placeholder="All Vehicles"
+              size="sm"
+            />
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
+              className="h-9 rounded-lg border border-gray-200/80 bg-white/80 dark:bg-gray-800/80 backdrop-blur px-3 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:text-white min-w-[150px]">
+              <option value="">All Categories</option>
+              {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <div className="flex gap-1 p-0.5 bg-gray-100/80 dark:bg-gray-800/80 backdrop-blur rounded-lg">
+              {[{ key: "this_month", label: "This Month" }, { key: "last_month", label: "Last Month" }, { key: "this_quarter", label: "Quarter" }, { key: "this_year", label: "Year" }].map((p) => (
+                <button key={p.key} onClick={() => { setPeriod(p.key); setCustomFrom(""); setCustomTo(""); }}
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${period === p.key ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <DatePicker
+                value={customFrom}
+                onChange={(v) => { setCustomFrom(v); if (v) setPeriod("custom"); }}
+                placeholder="From"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <DatePicker
+                value={customTo}
+                onChange={(v) => { setCustomTo(v); if (v) setPeriod("custom"); }}
+                placeholder="To"
+                minDate={customFrom}
+              />
+            </div>
+          </div>
+
 
           {/* Expense Table — 3D Glass */}
           <div className="relative group" style={{ perspective: "1200px" }}>
@@ -624,7 +625,12 @@ function VehicleExpensesContent() {
                           title={drilldownHref ? "Open service history for this vehicle" : undefined}
                         >
                           <td className="px-5 py-3.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">{new Date(exp.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td>
-                          <td className="px-5 py-3.5 font-semibold text-gray-900 dark:text-white whitespace-nowrap font-mono text-[11px]">{exp.vehicle?.registrationNumber || "—"}</td>
+                          <td className="px-5 py-3.5 whitespace-nowrap">
+                            <div className="font-semibold text-gray-900 dark:text-white font-mono text-[11px]">{exp.vehicle?.registrationNumber || "—"}</div>
+                            {exp.vehicle?.ownerName && (
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[180px]" title={exp.vehicle.ownerName}>{exp.vehicle.ownerName}</div>
+                            )}
+                          </td>
                           <td className="px-5 py-3.5">
                             <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-lg ${c.bg} ${c.text}`}>
                               {(() => { const Icon = CATEGORY_ICONS[exp.category] || MoreHorizontal; return <Icon className="w-3 h-3" />; })()}
@@ -704,7 +710,7 @@ function VehicleExpensesContent() {
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Vehicle <span className="text-red-500">*</span></label>
                     <select value={expVehicleId} onChange={(e) => setExpVehicleId(e.target.value)} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
                       <option value="">Select vehicle</option>
-                      {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>)}
+                      {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}{v.ownerName ? ` (${v.ownerName})` : ""}</option>)}
                     </select>
                   </div>
                   <div>

@@ -5,7 +5,8 @@ import {
   NotFoundError,
 } from "@/lib/errors";
 import type { ScopedContext } from "@/lib/auth/tenant-context";
-import { DocumentType } from "@/models";
+import { ComplianceDocument, DocumentType } from "@/models";
+import { tenantFilter } from "@/lib/auth/tenant-context";
 import * as repo from "../repositories/documentType.repository";
 
 // Built-in compliance trackers shipped on first run. tenantId=null marks them
@@ -105,8 +106,26 @@ export async function update(
 
 export async function remove(ctx: ScopedContext, id: string) {
   const dt = await getById(ctx, id);
-  if ((dt as unknown as { isSystem: boolean }).isSystem) {
+  const docType = dt as unknown as { isSystem: boolean; code: string; name: string };
+  if (docType.isSystem) {
     throw new BadRequestError("Cannot delete a system document type");
+  }
+  // Block deletion when vehicles still have compliance documents of this type.
+  // The doc-type code is stored on each ComplianceDocument.type; count actives
+  // first, fall back to total count if no actives — so archived rows still
+  // protect the type from getting orphaned labels.
+  const activeCount = await ComplianceDocument.countDocuments(
+    tenantFilter(ctx, { type: docType.code, isActive: true }),
+  );
+  const totalCount = activeCount > 0
+    ? activeCount
+    : await ComplianceDocument.countDocuments(
+        tenantFilter(ctx, { type: docType.code }),
+      );
+  if (totalCount > 0) {
+    throw new ConflictError(
+      `Cannot delete "${docType.name}" — ${totalCount} ${totalCount === 1 ? "document is" : "documents are"} still using this type. Remove or re-label them first.`,
+    );
   }
   return repo.remove(ctx, id);
 }

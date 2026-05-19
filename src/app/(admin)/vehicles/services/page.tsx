@@ -17,6 +17,7 @@ import { pickValidatedFiles } from "@/lib/file-validation";
 interface VehicleBasic {
   id: string;
   registrationNumber: string;
+  ownerName?: string | null;
   make: string;
   model: string;
   profileImage: string | null;
@@ -265,6 +266,9 @@ export default function VehicleServicesPage() {
                       <span className="text-[10px] text-gray-400">{data.services.length} service{data.services.length !== 1 ? "s" : ""}</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">{data.vehicle.make} {data.vehicle.model}</p>
+                    {data.vehicle.ownerName && (
+                      <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 truncate mt-0.5" title={data.vehicle.ownerName}>{data.vehicle.ownerName}</p>
+                    )}
                   </div>
                   <div className="hidden sm:flex items-center gap-4 flex-shrink-0 text-center">
                     {data.completed > 0 && <div><p className="text-sm font-bold text-emerald-600">{data.completed}</p><p className="text-[8px] text-gray-400 uppercase">Done</p></div>}
@@ -296,6 +300,9 @@ export default function VehicleServicesPage() {
                       <div className="min-w-0">
                         <h3 className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-brand-600 font-mono tracking-wide">{data.vehicle.registrationNumber}</h3>
                         <p className="text-xs text-gray-500">{data.vehicle.make} {data.vehicle.model}</p>
+                        {data.vehicle.ownerName && (
+                          <p className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 truncate mt-0.5" title={data.vehicle.ownerName}>{data.vehicle.ownerName}</p>
+                        )}
                       </div>
                     </div>
                     <div className="grid grid-cols-4 gap-2 text-center py-3 border-t border-b border-gray-100 dark:border-gray-800">
@@ -336,7 +343,7 @@ export default function VehicleServicesPage() {
                   className="text-sm font-medium text-gray-900 bg-transparent focus:outline-none dark:text-white min-w-[220px] cursor-pointer">
                   <option value="">All Vehicles</option>
                   {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>
+                    <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}{v.ownerName ? ` (${v.ownerName})` : ""}</option>
                   ))}
                 </select>
               </div>
@@ -483,7 +490,7 @@ export default function VehicleServicesPage() {
                   className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
                   <option value="">Select a vehicle</option>
                   {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}</option>
+                    <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}{v.ownerName ? ` (${v.ownerName})` : ""}</option>
                   ))}
                 </select>
               </div>
