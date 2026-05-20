@@ -1,9 +1,9 @@
 "use client";
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 
 import { usePathname } from "next/navigation";
+import { YellowTrackLogo } from "@/components/icons/YellowTrackLogo";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -14,7 +14,7 @@ import {
 } from "../icons/index";
 import { BsFillCarFrontFill } from "react-icons/bs";
 import { MdSpaceDashboard } from "react-icons/md";
-import { Database, Lightbulb, Shield, UsersRound } from "lucide-react";
+import { Activity, Database, Lightbulb, Shield, UsersRound } from "lucide-react";
 
 type NavSubItem = {
   name: string;
@@ -45,7 +45,6 @@ const navItems: NavItem[] = [
     name: "Vehicles",
     subItems: [
       { name: "All Vehicles", path: "/vehicles", perm: "vehicles:read" },
-      { name: "Sold Vehicles", path: "/vehicles/sold", perm: "vehicles:read" },
       { name: "Vehicle Groups", path: "/vehicles/groups", perm: "groups:read" },
       // { name: "Onboard Vehicle", path: "/vehicles/onboard", perm: "vehicles:create" },
       { name: "Compliance", path: "/compliance", perm: "compliance:read" },
@@ -54,6 +53,7 @@ const navItems: NavItem[] = [
       // { name: "Service Costs", path: "/vehicles/services", perm: "services:read" },
       { name: "Expenses", path: "/vehicles/expenses", perm: "expenses:read" },
       { name: "EMI Tracker", path: "/vehicles/emi", perm: "emi:read" },
+      { name: "Sold Vehicles", path: "/vehicles/sold", perm: "vehicles:read" },
     ],
   },
   {
@@ -83,6 +83,12 @@ const navItems: NavItem[] = [
     subItems: [
       { name: "Document Types", path: "/settings/document-types", perm: "settings.documentTypes:manage" },
     ],
+  },
+  {
+    icon: <Activity className="h-5 w-5" />,
+    name: "Activity Log",
+    path: "/activity",
+    perm: "activityLog:read",
   },
   {
     icon: <Lightbulb className="h-5 w-5" />,
@@ -343,18 +349,21 @@ const AppSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div
-        className={`px-5 pt-7 pb-4 flex ${
+        className={`px-5 pt-4 pb-3 h-20 flex items-center overflow-hidden ${
           !expanded ? "justify-center" : "justify-start"
         }`}
       >
-        <Link href="/" className="flex items-center gap-3">
-          <Image src="/images/logo/yellow-track-logo.png" alt="Yellow Track" width={56} height={56} className="flex-shrink-0 object-contain" />
-          {expanded && (
+        <Link href="/" className={`flex items-center h-full ${expanded ? "w-full" : ""}`}>
+          <YellowTrackLogo
+            stretch={expanded}
+            className={`flex-shrink-0 h-full ${expanded ? "w-full" : "w-auto"}`}
+          />
+          {/* {expanded && (
             <span className="text-xl font-extrabold tracking-tight">
               <span className="text-yellow-500 dark:text-yellow-400">Yellow</span>
               <span className="text-gray-900 dark:text-white"> Track</span>
             </span>
-          )}
+          )} */}
         </Link>
       </div>
 

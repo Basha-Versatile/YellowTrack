@@ -48,7 +48,7 @@ export default function DriversPage() {
       "License Number": d.licenseNumber,
       "License Expiry": new Date(d.licenseExpiry).toLocaleDateString("en-IN"),
       "Vehicle Class": d.vehicleClass,
-      Status: d.licenseStatus === "GREEN" ? "Active" : d.licenseStatus === "YELLOW" ? "Expiring" : "Expired",
+      Status: d.licenseStatus === "GREEN" ? "Active" : d.licenseStatus === "YELLOW" ? "Upcoming Expiry" : "Expired",
       "Risk Score": d.riskScore,
       Documents: d.documents?.length || 0,
     }));
@@ -166,7 +166,7 @@ export default function DriversPage() {
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Expiring</p>
+              <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Upcoming Expiry</p>
               <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-0.5">{expiringCount}</p>
             </div>
           </div>
@@ -197,7 +197,7 @@ export default function DriversPage() {
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
               {s !== "ALL" && <span className={`w-1.5 h-1.5 rounded-full ${s === "GREEN" ? "bg-emerald-500" : s === "YELLOW" ? "bg-amber-500" : s === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"}`} />}
-              {s === "ALL" ? "All" : s === "GREEN" ? "Active" : s === "YELLOW" ? "Expiring" : s === "ORANGE" ? "Critical" : "Expired"}
+              {s === "ALL" ? "All" : s === "GREEN" ? "Active" : s === "YELLOW" ? "Upcoming Expiry" : s === "ORANGE" ? "Critical" : "Expired"}
             </button>
           ))}
         </div>
@@ -230,7 +230,7 @@ export default function DriversPage() {
             const grad = ls === "RED" ? "from-red-500 to-rose-600" : ls === "ORANGE" ? "from-red-500 to-rose-600" : ls === "YELLOW" ? "from-amber-500 to-yellow-600" : "from-emerald-500 to-green-600";
             const avatarCls = ls === "RED" ? "bg-gradient-to-br from-red-400 to-red-600" : ls === "ORANGE" ? "bg-gradient-to-br from-red-400 to-red-600 animate-blink" : ls === "YELLOW" ? "bg-gradient-to-br from-yellow-400 to-yellow-500" : "bg-gradient-to-br from-brand-400 to-brand-600";
             const badgeColor = ls === "RED" ? "error" : ls === "ORANGE" ? "error" : ls === "YELLOW" ? "warning" : "success";
-            const badgeLabel = ls === "RED" ? "Expired" : ls === "ORANGE" ? "Critical" : ls === "YELLOW" ? "Expiring" : "Active";
+            const badgeLabel = ls === "RED" ? "Expired" : ls === "ORANGE" ? "Critical" : ls === "YELLOW" ? "Upcoming Expiry" : "Active";
             const shadowClr = ls === "RED" ? "shadow-red-500/10" : ls === "ORANGE" ? "shadow-red-500/10" : ls === "YELLOW" ? "shadow-amber-500/10" : "shadow-emerald-500/10";
             const docCount = driver.documents?.length || 0;
 
@@ -312,7 +312,7 @@ export default function DriversPage() {
             const barCls = ls === "RED" ? "bg-gradient-to-r from-red-500 to-rose-500" : ls === "ORANGE" ? "bg-gradient-to-r from-red-500 to-rose-600" : ls === "YELLOW" ? "bg-gradient-to-r from-amber-500 to-amber-600" : "bg-gradient-to-r from-emerald-500 to-green-500";
             const avatarCls = ls === "RED" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/20" : ls === "ORANGE" ? "bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/20 animate-blink" : ls === "YELLOW" ? "bg-gradient-to-br from-yellow-400 to-yellow-500 shadow-yellow-500/20" : "bg-gradient-to-br from-brand-400 to-brand-600 shadow-brand-500/20";
             const badgeColor = ls === "RED" ? "error" : ls === "ORANGE" ? "error" : ls === "YELLOW" ? "warning" : "success";
-            const badgeLabel = ls === "RED" ? "Expired" : ls === "ORANGE" ? "Critical" : ls === "YELLOW" ? "Expiring" : "Active";
+            const badgeLabel = ls === "RED" ? "Expired" : ls === "ORANGE" ? "Critical" : ls === "YELLOW" ? "Upcoming Expiry" : "Active";
 
             return (
               <div key={driver.id}

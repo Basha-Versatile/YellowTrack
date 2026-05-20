@@ -85,6 +85,15 @@ export async function createDriver(
   });
 }
 
+/**
+ * Suggestions for the "Medical Insurance Provider" field on the driver
+ * edit modal — every distinct, non-empty value already saved on a driver
+ * record in this tenant, sorted alphabetically.
+ */
+export async function listMedicalInsuranceProviders(ctx: ScopedContext) {
+  return driverRepo.findDistinctMedicalInsuranceProviders(ctx);
+}
+
 export async function getAllDrivers(ctx: ScopedContext) {
   const drivers = await driverRepo.findAll(ctx);
   return drivers.map((d) => ({

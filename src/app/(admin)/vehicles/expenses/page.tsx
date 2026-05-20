@@ -59,6 +59,18 @@ const CATEGORY_COLORS_HEX: Record<string, string> = {
   invoices: "#06b6d4",
 };
 
+// Placeholder hints by Log-Expense form category. Keeps the user oriented
+// to what "Title" should contain for each kind of expense.
+const TITLE_PLACEHOLDER: Record<string, string> = {
+  COMPLIANCE: "e.g. RC Renewal, Insurance Premium",
+  SERVICE: "e.g. Oil Change, Brake Pads",
+  TYRE_REPLACEMENT: "e.g. MRF 4 Tyres set, CEAT Rear Tyres",
+  FASTAG: "e.g. FASTag Recharge",
+  CHALLAN: "e.g. Overspeeding Fine",
+  EMI: "e.g. May 2026 EMI",
+  INVOICE: "e.g. Vehicle Invoice",
+};
+
 export default function VehicleExpensesPage() {
   return (
     <Suspense fallback={<ExpensesDashboardSkeleton />}>
@@ -124,7 +136,13 @@ function VehicleExpensesContent() {
   // When the user picks Service → Tyres for a specific vehicle, fetch that
   // vehicle's previous tyre replacement so we can show the "ran X km" hint.
   useEffect(() => {
-    if (!showModal || expForm.category !== "SERVICE" || serviceSubType !== "TYRES" || !expVehicleId) {
+    // Tyre replacement is now its own top-level category, so the "last
+    // replacement" hint loads either when the user picks TYRE_REPLACEMENT
+    // directly or the legacy Service + TYRES sub-type combination.
+    const isTyreFlow =
+      expForm.category === "TYRE_REPLACEMENT" ||
+      (expForm.category === "SERVICE" && serviceSubType === "TYRES");
+    if (!showModal || !isTyreFlow || !expVehicleId) {
       setLastTyreReplacement(null);
       return;
     }
@@ -148,7 +166,12 @@ function VehicleExpensesContent() {
 
   const handleLogExpense = async () => {
     if (!expVehicleId || !expForm.title || !expForm.amount || !expForm.expenseDate) return;
-    const isTyreReplacement = expForm.category === "SERVICE" && serviceSubType === "TYRES";
+    // Top-level "Tyre Replacement" pick OR legacy Service → Tyres sub-type
+    // both flow through the same backend shape: category=SERVICE +
+    // serviceSubType=TYRES.
+    const isTyreReplacement =
+      expForm.category === "TYRE_REPLACEMENT" ||
+      (expForm.category === "SERVICE" && serviceSubType === "TYRES");
     if (isTyreReplacement && (!tyreOdometerKm.trim() || !tyreBrand.trim())) {
       toast.error("Missing fields", "Odometer (km) and brand are required for tyre replacements");
       return;
@@ -156,8 +179,14 @@ function VehicleExpensesContent() {
     setSaving(true);
     try {
       const fd = new FormData();
-      fd.append("category", expForm.category); fd.append("title", expForm.title); fd.append("amount", expForm.amount); fd.append("expenseDate", expForm.expenseDate);
-      if (expForm.handlingCharges) fd.append("handlingCharges", expForm.handlingCharges);
+      const backendCategory = expForm.category === "TYRE_REPLACEMENT" ? "SERVICE" : expForm.category;
+      fd.append("category", backendCategory); fd.append("title", expForm.title); fd.append("amount", expForm.amount); fd.append("expenseDate", expForm.expenseDate);
+      // Handling charges are only meaningful for Compliance entries (e.g.
+      // RTO / agent fees) — guard against stray values being submitted from
+      // other categories.
+      if (expForm.category === "COMPLIANCE" && expForm.handlingCharges) {
+        fd.append("handlingCharges", expForm.handlingCharges);
+      }
       if (expForm.description) fd.append("description", expForm.description);
       for (const f of expProofs) fd.append("proof", f);
       if (isTyreReplacement) {
@@ -715,9 +744,20 @@ function VehicleExpensesContent() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Category <span className="text-red-500">*</span></label>
-                    <select value={expForm.category} onChange={(e) => setExpForm({ ...expForm, category: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                    <select
+                      value={expForm.category}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        // Reset tyre sub-type whenever the user leaves the
+                        // service-family categories so the form stays clean.
+                        if (next !== "SERVICE") setServiceSubType("GENERAL");
+                        setExpForm({ ...expForm, category: next });
+                      }}
+                      className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    >
                       <option value="COMPLIANCE">Compliance</option>
                       <option value="SERVICE">Services</option>
+                      <option value="TYRE_REPLACEMENT">Tyre Replacement</option>
                       <option value="FASTAG">FASTag</option>
                       <option value="CHALLAN">Challans</option>
                       <option value="EMI">EMI</option>
@@ -727,106 +767,100 @@ function VehicleExpensesContent() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Title <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="e.g. RC Renewal, Diesel Fill" value={expForm.title} onChange={(e) => setExpForm({ ...expForm, title: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                  <input type="text" placeholder={TITLE_PLACEHOLDER[expForm.category] || "e.g. RC Renewal, Diesel Fill"} value={expForm.title} onChange={(e) => setExpForm({ ...expForm, title: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
                 </div>
               </section>
 
-              {/* SECTION: Service Details (conditional) */}
-              {expForm.category === "SERVICE" && (
+              {/* SECTION: Tyre Replacement (now a top-level category — show
+                  odometer / brand fields without the sub-type select) */}
+              {expForm.category === "TYRE_REPLACEMENT" && (
                 <section className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 dark:border-blue-500/20 dark:bg-blue-500/5 p-4">
                   <h4 className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-widest flex items-center gap-1.5">
                     <Wrench className="w-3 h-3" />
-                    Service Details
+                    Tyre Details
                   </h4>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Service Type</label>
-                    <select value={serviceSubType} onChange={(e) => setServiceSubType(e.target.value as "GENERAL" | "TYRES")} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                      <option value="GENERAL">General Service</option>
-                      <option value="TYRES">Tyre Replacement</option>
-                    </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Odometer (km) <span className="text-red-500">*</span></label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 45000"
+                        value={tyreOdometerKm}
+                        onChange={(e) => setTyreOdometerKm(e.target.value)}
+                        className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Brand <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        list="tyre-brands"
+                        placeholder="e.g. MRF, CEAT"
+                        value={tyreBrand}
+                        onChange={(e) => setTyreBrand(e.target.value)}
+                        className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                      />
+                      <datalist id="tyre-brands">
+                        <option value="MRF" />
+                        <option value="CEAT" />
+                        <option value="Apollo" />
+                        <option value="JK Tyre" />
+                        <option value="Bridgestone" />
+                        <option value="Michelin" />
+                        <option value="Goodyear" />
+                        <option value="Yokohama" />
+                        <option value="Pirelli" />
+                        <option value="Continental" />
+                      </datalist>
+                    </div>
                   </div>
-                  {serviceSubType === "TYRES" && (
-                    <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Odometer (km) <span className="text-red-500">*</span></label>
-                          <input
-                            type="number"
-                            min="0"
-                            placeholder="e.g. 45000"
-                            value={tyreOdometerKm}
-                            onChange={(e) => setTyreOdometerKm(e.target.value)}
-                            className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                          />
+                  {(() => {
+                    if (!lastTyreReplacement) {
+                      return (
+                        <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800/40 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                          First tyre replacement on record for this vehicle.
                         </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Brand <span className="text-red-500">*</span></label>
-                          <input
-                            type="text"
-                            list="tyre-brands"
-                            placeholder="e.g. MRF, CEAT"
-                            value={tyreBrand}
-                            onChange={(e) => setTyreBrand(e.target.value)}
-                            className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                          />
-                          <datalist id="tyre-brands">
-                            <option value="MRF" />
-                            <option value="CEAT" />
-                            <option value="Apollo" />
-                            <option value="JK Tyre" />
-                            <option value="Bridgestone" />
-                            <option value="Michelin" />
-                            <option value="Goodyear" />
-                            <option value="Yokohama" />
-                            <option value="Pirelli" />
-                            <option value="Continental" />
-                          </datalist>
-                        </div>
+                      );
+                    }
+                    const curKm = Number(tyreOdometerKm) || 0;
+                    const ran = curKm > 0 ? curKm - lastTyreReplacement.odometerKm : null;
+                    return (
+                      <div className="rounded-lg border border-amber-300/60 bg-white dark:border-amber-500/30 dark:bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                        <span className="font-semibold">Last replacement: </span>
+                        {lastTyreReplacement.brand} at {lastTyreReplacement.odometerKm.toLocaleString("en-IN")} km on {new Date(lastTyreReplacement.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}.
+                        {ran != null && ran > 0 && (
+                          <> Outgoing tyres ran <span className="font-bold">{ran.toLocaleString("en-IN")} km</span>.</>
+                        )}
+                        {ran != null && ran < 0 && (
+                          <> <span className="text-red-600 dark:text-red-400 font-semibold">Odometer is lower than last replacement — check entry.</span></>
+                        )}
                       </div>
-                      {(() => {
-                        if (!lastTyreReplacement) {
-                          return (
-                            <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800/40 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
-                              First tyre replacement on record for this vehicle.
-                            </div>
-                          );
-                        }
-                        const curKm = Number(tyreOdometerKm) || 0;
-                        const ran = curKm > 0 ? curKm - lastTyreReplacement.odometerKm : null;
-                        return (
-                          <div className="rounded-lg border border-amber-300/60 bg-white dark:border-amber-500/30 dark:bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-                            <span className="font-semibold">Last replacement: </span>
-                            {lastTyreReplacement.brand} at {lastTyreReplacement.odometerKm.toLocaleString("en-IN")} km on {new Date(lastTyreReplacement.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}.
-                            {ran != null && ran > 0 && (
-                              <> Outgoing tyres ran <span className="font-bold">{ran.toLocaleString("en-IN")} km</span>.</>
-                            )}
-                            {ran != null && ran < 0 && (
-                              <> <span className="text-red-600 dark:text-red-400 font-semibold">Odometer is lower than last replacement — check entry.</span></>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </>
-                  )}
+                    );
+                  })()}
                 </section>
               )}
 
-              {/* SECTION: Amount */}
+              {/* SECTION: Amount — Handling charges are only meaningful for
+                  general Services (mechanic / labour fees etc). Other
+                  categories collapse the layout to amount + total. */}
               <section className="space-y-3">
                 <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Amount</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                <div className={`grid grid-cols-1 gap-3 items-end ${expForm.category === "COMPLIANCE" ? "sm:grid-cols-[1fr_1fr_auto]" : "sm:grid-cols-[1fr_auto]"}`}>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Amount (&#8377;) <span className="text-red-500">*</span></label>
                     <input type="number" min="0" placeholder="0" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Handling (&#8377;)</label>
-                    <input type="number" min="0" placeholder="0" value={expForm.handlingCharges} onChange={(e) => setExpForm({ ...expForm, handlingCharges: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                  </div>
+                  {expForm.category === "COMPLIANCE" && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Handling (&#8377;)</label>
+                      <input type="number" min="0" placeholder="0" value={expForm.handlingCharges} onChange={(e) => setExpForm({ ...expForm, handlingCharges: e.target.value })} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+                    </div>
+                  )}
                   <div className="h-10 flex items-center gap-2 px-4 rounded-lg bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-500/10 dark:to-amber-500/10 border border-yellow-200/70 dark:border-yellow-500/20 min-w-[120px]">
                     <span className="text-[10px] font-bold text-yellow-700 dark:text-yellow-400/80 uppercase tracking-wider">Total</span>
                     <span className="text-sm font-black text-yellow-700 dark:text-yellow-400 font-mono">
-                      &#8377;{((Number(expForm.amount) || 0) + (Number(expForm.handlingCharges) || 0)).toLocaleString("en-IN")}
+                      &#8377;{((Number(expForm.amount) || 0) + (expForm.category === "COMPLIANCE" ? (Number(expForm.handlingCharges) || 0) : 0)).toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>

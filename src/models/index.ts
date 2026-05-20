@@ -85,3 +85,9 @@ export {
   type EMIPaymentAttrs,
   EMI_PAYMENT_STATUSES,
 } from "./EMIPayment";
+export {
+  ActivityLog,
+  type ActivityLogAttrs,
+  type ActivityEntityType,
+  ACTIVITY_ENTITY_TYPES,
+} from "./ActivityLog";

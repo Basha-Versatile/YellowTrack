@@ -60,6 +60,7 @@ export default function DriverVerifyPage() {
   const [cameraNotice, setCameraNotice] = useState<string | null>(null);
   const [pendingAddrPhotoDelete, setPendingAddrPhotoDelete] = useState<{ type: "current" | "permanent"; url: string } | null>(null);
   const [deletingAddrPhoto, setDeletingAddrPhoto] = useState(false);
+  const [medInsProviders, setMedInsProviders] = useState<string[]>([]);
 
   useEffect(() => {
     if (!cameraNotice) return;
@@ -84,6 +85,20 @@ export default function DriverVerifyPage() {
   const [currentAddrPhotos, setCurrentAddrPhotos] = useState<string[]>([]);
   const [permanentAddrPhotos, setPermanentAddrPhotos] = useState<string[]>([]);
   const [uploadingAddrPhoto, setUploadingAddrPhoto] = useState<string | null>(null);
+
+  // Fetch the tenant-scoped list of previously-used insurance providers
+  // (resolved server-side via the verification token) so the datalist
+  // suggestions populate alongside the driver data.
+  useEffect(() => {
+    if (!token) return;
+    publicAPI
+      .getMedicalInsuranceProviders(token)
+      .then((res) => {
+        const list = (res.data as { data?: string[] })?.data ?? [];
+        setMedInsProviders(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setMedInsProviders([]));
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -489,7 +504,22 @@ export default function DriverVerifyPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Medical Insurance Provider</label>
-                <input type="text" value={form.medicalInsuranceName ?? ""} onChange={(e) => setForm({ ...form, medicalInsuranceName: e.target.value })} className={inputClass} placeholder="e.g. ESIC, Star Health" />
+                <input
+                  type="text"
+                  list="med-ins-providers"
+                  value={form.medicalInsuranceName ?? ""}
+                  onChange={(e) => setForm({ ...form, medicalInsuranceName: e.target.value })}
+                  className={inputClass}
+                  placeholder="e.g. ESIC, Star Health"
+                />
+                <datalist id="med-ins-providers">
+                  {medInsProviders.map((p) => <option key={p} value={p} />)}
+                </datalist>
+                {medInsProviders.length > 0 && (
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    {medInsProviders.length} previously used
+                  </p>
+                )}
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Policy / Account Number</label>

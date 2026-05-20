@@ -43,7 +43,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
     icon: "M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   },
   YELLOW: {
-    label: "Expiring Soon",
+    label: "Upcoming Expiry",
     color: "text-amber-600 dark:text-amber-400",
     bg: "bg-amber-50 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/20",
     icon: "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z",
@@ -204,7 +204,7 @@ export default function PublicVehiclePage() {
             {overallStatus === "GREEN"
               ? "All Documents Valid"
               : overallStatus === "YELLOW"
-              ? "Some Documents Expiring"
+              ? "Documents with Upcoming Expiry"
               : "Attention Required"}
           </div>
 

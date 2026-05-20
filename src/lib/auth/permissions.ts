@@ -79,6 +79,9 @@ export const PERMISSIONS = [
   "settings.users:manage",
   "settings.tenant:read",
   "settings.documentTypes:manage",
+
+  // Activity log (tenant-admin audit trail)
+  "activityLog:read",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -207,6 +210,14 @@ export const PERMISSION_GROUPS: Array<{
       { key: "settings.users:manage", label: "Manage users", description: "Invite users and assign roles." },
       { key: "settings.tenant:read", label: "View tenant settings", description: "View workspace details and plan." },
       { key: "settings.documentTypes:manage", label: "Manage document types", description: "Add or edit compliance document trackers (Masters)." },
+    ],
+  },
+  {
+    key: "activity-log",
+    label: "Activity log",
+    description: "Audit trail of every action by users in this workspace.",
+    items: [
+      { key: "activityLog:read", label: "View activity log", description: "See who did what and when across the workspace." },
     ],
   },
 ];

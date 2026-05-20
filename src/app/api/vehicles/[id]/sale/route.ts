@@ -9,6 +9,7 @@ import {
   tenantFilter,
   tenantStamp,
 } from "@/lib/auth/tenant-context";
+import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
 
@@ -94,6 +95,17 @@ export const POST = withRoute<{ id: string }>(
       { isActive: false, unassignedAt: new Date() },
     );
 
+    const regNo = (vehicle as { registrationNumber?: string }).registrationNumber ?? params.id;
+    await logFromRequest(req, ctx, session, {
+      action: existing ? "vehicle.sale.update" : "vehicle.sale.create",
+      entityType: "vehicle_sale",
+      entityId: params.id,
+      entityLabel: regNo,
+      summary: existing
+        ? `Updated sale of ${regNo} to ${buyerName}`
+        : `Sold ${regNo} to ${buyerName}`,
+      metadata: { buyerName, buyerPhone, soldPrice, saleDate },
+    });
     return existing
       ? success(sale, "Sale updated")
       : created(sale, "Vehicle marked as sold");
@@ -102,10 +114,22 @@ export const POST = withRoute<{ id: string }>(
 );
 
 export const DELETE = withRoute<{ id: string }>(
-  async ({ params, session }) => {
+  async ({ req, params, session }) => {
     const ctx = tenantOf(session);
+    let label = params.id;
+    try {
+      const v = await vehicleRepo.findById(ctx, params.id);
+      label = (v as { registrationNumber?: string } | null)?.registrationNumber ?? params.id;
+    } catch { /* ignore */ }
     await VehicleSale.deleteOne(tenantFilter(ctx, { vehicleId: params.id }));
     await vehicleRepo.update(ctx, params.id, { status: "ACTIVE" });
+    await logFromRequest(req, ctx, session, {
+      action: "vehicle.sale.cancel",
+      entityType: "vehicle_sale",
+      entityId: params.id,
+      entityLabel: label,
+      summary: `Cancelled sale of ${label}`,
+    });
     return success(null, "Sale cancelled — vehicle is active again");
   },
   { auth: true },

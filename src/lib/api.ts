@@ -450,6 +450,24 @@ export const driverAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+  getMedicalInsuranceProviders: () =>
+    api.get<{ data: string[] }>("/drivers/medical-insurance-providers"),
+};
+
+// ── Activity log ────────────────────────────────────────────
+export const activityLogAPI = {
+  list: (params: {
+    page?: number;
+    limit?: number;
+    userId?: string;
+    action?: string;
+    entityType?: string;
+    entityId?: string;
+    search?: string;
+    from?: string;
+    to?: string;
+  } = {}) =>
+    api.get("/activity-log", { params }),
 };
 
 // ── Compliance ──────────────────────────────────────────────
@@ -657,6 +675,15 @@ export const emiAPI = {
       status,
       notes: notes ?? null,
     }),
+  markUnpaid: (planId: string, paymentId: string) =>
+    api.post(`/emi/${planId}/payments/${paymentId}`, {
+      action: "mark-unpaid",
+    }),
+  markAllPaidUntil: (planId: string, untilDate?: string) =>
+    api.post(`/emi/${planId}`, {
+      action: "mark-paid-until",
+      ...(untilDate ? { untilDate } : {}),
+    }),
 };
 
 // ── Public (no auth) ────────────────────────────────────────
@@ -683,6 +710,8 @@ export const publicAPI = {
   },
   deleteAddressPhoto: (token: string, type: "current" | "permanent", url: string) =>
     api.delete(`/public/driver/verify/${token}/address-photo`, { data: { type, url } }),
+  getMedicalInsuranceProviders: (token: string) =>
+    api.get<{ data: string[] }>(`/public/driver/verify/${token}/medical-insurance-providers`),
 };
 
 export default api;

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { vehicleAPI, driverAPI, notificationAPI } from "@/lib/api";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
 import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, BarChart3, PieChart as PieIcon, type LucideIcon } from "lucide-react";
 
@@ -190,7 +191,7 @@ export default function DashboardPage() {
 
         {/* Driver Compliance */}
         <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-          <div className="bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-3 flex items-center justify-between">
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
                 <Users className="w-4 h-4 text-white" />
@@ -459,7 +460,7 @@ function ComplianceSection({
   const CIRC = 2 * Math.PI * RADIUS;
   const segments = [
     { key: "GREEN" as const, label: "Valid", sublabel: "> 30 days", count: counts.green, color: "#10b981" },
-    { key: "YELLOW" as const, label: "Expiring", sublabel: "≤ 30 days", count: counts.yellow, color: "#f59e0b" },
+    { key: "YELLOW" as const, label: "Upcoming Expiry", sublabel: "≤ 30 days", count: counts.yellow, color: "#f59e0b" },
     { key: "ORANGE" as const, label: "Critical", sublabel: "≤ 7 days", count: counts.orange, color: "#d97706", blink: true },
     { key: "RED" as const, label: "Expired", sublabel: "≤ 0 days", count: counts.red, color: "#ef4444" },
   ];
@@ -480,6 +481,7 @@ function ComplianceSection({
     return `${basePath}?status=${status}`;
   };
 
+  const router = useRouter();
   const [hoveredKey, setHoveredKey] = useState<typeof segments[number]["key"] | null>(null);
   const hovered = hoveredKey ? drawn.find((d) => d.key === hoveredKey) : null;
   const hoveredPct = hovered ? Math.round(hovered.portion * 100) : 0;
@@ -509,6 +511,7 @@ function ComplianceSection({
                 .filter((d) => d.count > 0)
                 .map((d) => {
                   const isHover = hoveredKey === d.key;
+                  const href = tileHref(d.key);
                   return (
                     <circle
                       key={d.key}
@@ -522,10 +525,11 @@ function ComplianceSection({
                       strokeDashoffset={d.offset}
                       onMouseEnter={() => setHoveredKey(d.key)}
                       onMouseLeave={() => setHoveredKey(null)}
+                      onClick={() => { if (href) router.push(href); }}
                       className={`cursor-pointer transition-[stroke-width] duration-150 ${d.blink ? "animate-blink" : ""}`}
                       style={{ opacity: hoveredKey && !isHover ? 0.45 : 1 }}
                     >
-                      <title>{`${d.label}: ${d.count}`}</title>
+                      <title>{`${d.label}: ${d.count} — click to open`}</title>
                     </circle>
                   );
                 })}

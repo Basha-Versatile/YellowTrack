@@ -7,6 +7,7 @@ import {
   createEmiPlan,
   getEmiPlansForVehicle,
 } from "@/server/services/emi.service";
+import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
 
@@ -50,6 +51,21 @@ export const POST = withRoute<{ id: string }>(
       { ...input, vehicleId: params.id },
       session?.id ?? null,
     );
+    const p = plan as unknown as { id?: unknown; _id?: unknown };
+    await logFromRequest(req, ctx, session, {
+      action: "emi.plan.create",
+      entityType: "emi",
+      entityId: String(p.id ?? p._id ?? ""),
+      entityLabel: `${input.lenderName} — ${input.totalInstallments} × ₹${input.emiAmount.toLocaleString("en-IN")}`,
+      summary: `Created EMI plan with ${input.lenderName} (${input.totalInstallments} × ₹${input.emiAmount.toLocaleString("en-IN")})`,
+      metadata: {
+        vehicleId: params.id,
+        lenderName: input.lenderName,
+        emiAmount: input.emiAmount,
+        totalInstallments: input.totalInstallments,
+        startDate: input.startDate,
+      },
+    });
     return created(plan, "EMI plan created");
   },
   { auth: true },

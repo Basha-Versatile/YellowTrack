@@ -261,7 +261,7 @@ export default function ComplianceOverviewPage() {
           onClick={() => setFocus(focus === "expiring" ? null : "expiring")}
           className={`rounded-lg border px-3 py-2.5 text-left transition-all ${focus === "expiring" ? "border-amber-400 ring-2 ring-amber-200 dark:ring-amber-500/20" : "border-amber-200/60 hover:border-amber-300"} bg-amber-50/30 dark:border-amber-500/15 dark:bg-amber-500/[0.03]`}
         >
-          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> Expiring</p>
+          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> Upcoming Expiry</p>
           <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-1">{fleetExpiring}</p>
           <p className="text-[10px] text-amber-600/60 dark:text-amber-400/60 mt-1">8 – 30 days out</p>
         </button>
@@ -392,7 +392,7 @@ function Th({ children, className = "" }: { children: React.ReactNode; className
 const STATUS_PILL: Record<Bucket, { label: string; tint: string; icon: React.ReactNode; blink?: boolean }> = {
   expired:  { label: "Expired",  tint: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400", icon: <AlertOctagon className="w-3 h-3" /> },
   critical: { label: "Critical", tint: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400", icon: <AlertTriangle className="w-3 h-3" />, blink: true },
-  expiring: { label: "Expiring", tint: "bg-amber-50/60 text-amber-700/80 dark:bg-amber-500/[0.08] dark:text-amber-400/80", icon: <Clock className="w-3 h-3" /> },
+  expiring: { label: "Upcoming Expiry", tint: "bg-amber-50/60 text-amber-700/80 dark:bg-amber-500/[0.08] dark:text-amber-400/80", icon: <Clock className="w-3 h-3" /> },
   valid:    { label: "Valid",    tint: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400", icon: <CheckCircle2 className="w-3 h-3" /> },
 };
 

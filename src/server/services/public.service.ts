@@ -100,6 +100,23 @@ export async function getVehiclePublic(vehicleId: string) {
   };
 }
 
+/**
+ * Resolve which tenant owns a verification token, then list distinct
+ * medical insurance providers within that tenant. Used by the public
+ * driver-verify page so the driver sees the same suggestions the admin
+ * would see when filling out the provider field.
+ */
+export async function getMedicalInsuranceProvidersByToken(token: string) {
+  const driver = await driverRepo.findByVerificationTokenAnyTenant(token);
+  if (!driver) throw new NotFoundError("Invalid verification link");
+  const d = driver as Record<string, unknown>;
+  const tenantId = d.tenantId as string | undefined;
+  if (!tenantId) return [];
+  return driverRepo.findDistinctMedicalInsuranceProviders({
+    tenantId,
+  } as Parameters<typeof driverRepo.findDistinctMedicalInsuranceProviders>[0]);
+}
+
 export async function getDriverByToken(token: string) {
   const driver = await driverRepo.findByVerificationTokenAnyTenant(token);
   if (!driver) throw new NotFoundError("Invalid verification link");

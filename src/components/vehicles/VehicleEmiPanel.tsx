@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { emiAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Banknote,
   Plus,
@@ -106,6 +107,10 @@ export default function VehicleEmiPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [pendingUnpaid, setPendingUnpaid] = useState<EmiPayment | null>(null);
+  const [unpaidLoading, setUnpaidLoading] = useState(false);
+  const [pendingBulkPaid, setPendingBulkPaid] = useState(false);
+  const [bulkPaidLoading, setBulkPaidLoading] = useState(false);
 
   // Note: `toast` is intentionally NOT a dep. useToast() returns a new ref on
   // every render — including it would re-fire the effect → re-render → loop.
@@ -204,8 +209,67 @@ export default function VehicleEmiPanel({
     }
   };
 
+  // How many SCHEDULED/OVERDUE/BOUNCED installments have a due date on or
+  // before today — surface this in the bulk-confirm dialog so the user
+  // knows what they're about to do.
+  const dueTillTodayCount = useMemo(() => {
+    const now = new Date();
+    now.setHours(23, 59, 59, 999);
+    return payments.filter(
+      (p) =>
+        p.status !== "PAID" &&
+        p.status !== "SKIPPED" &&
+        new Date(p.scheduledDate).getTime() <= now.getTime(),
+    ).length;
+  }, [payments]);
+
+  const runMarkAllPaidTillToday = async () => {
+    if (!activePlan) return;
+    setBulkPaidLoading(true);
+    try {
+      const res = await emiAPI.markAllPaidUntil(activePlan.id);
+      const updated = (res?.data as { data?: { updated?: number } })?.data?.updated ?? 0;
+      toast.success(
+        "Marked paid",
+        updated === 0
+          ? "Nothing was due before today"
+          : `${updated} installment${updated === 1 ? "" : "s"} marked paid`,
+      );
+      setPendingBulkPaid(false);
+      await loadPlans();
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Failed to mark all paid";
+      toast.error("Bulk mark failed", msg);
+    } finally {
+      setBulkPaidLoading(false);
+    }
+  };
+
+  const runMarkUnpaid = async () => {
+    if (!activePlan || !pendingUnpaid) return;
+    setUnpaidLoading(true);
+    try {
+      await emiAPI.markUnpaid(activePlan.id, pendingUnpaid.id);
+      toast.success(
+        "Reverted to scheduled",
+        `Installment #${pendingUnpaid.installmentNumber} marked unpaid`,
+      );
+      setPendingUnpaid(null);
+      await loadPlans();
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Failed to revert payment";
+      toast.error("Could not revert", msg);
+    } finally {
+      setUnpaidLoading(false);
+    }
+  };
+
   const handleStatusChange = async (
-    status: "PAUSED" | "DEFAULTED" | "CLOSED" | "ACTIVE",
+    status: "DEFAULTED" | "CLOSED" | "ACTIVE",
   ) => {
     if (!activePlan) return;
     try {
@@ -251,26 +315,12 @@ export default function VehicleEmiPanel({
         {activePlan && activePlan.status === "ACTIVE" && (
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => handleStatusChange("PAUSED")}
-              className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition-colors dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/20"
-            >
-              <Pause className="w-3.5 h-3.5" /> Pause
-            </button>
-            <button
               onClick={() => handleStatusChange("CLOSED")}
               className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
             >
               Close
             </button>
           </div>
-        )}
-        {activePlan && activePlan.status === "PAUSED" && (
-          <button
-            onClick={() => handleStatusChange("ACTIVE")}
-            className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold transition-colors dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
-          >
-            Resume
-          </button>
         )}
         {activePlan &&
           (activePlan.status === "CLOSED" || activePlan.status === "DEFAULTED") && (
@@ -423,16 +473,36 @@ export default function VehicleEmiPanel({
 
           {/* Schedule table */}
           <div className="rounded-xl border border-gray-200/70 dark:border-gray-800 overflow-hidden">
-            <div className="flex items-center justify-between bg-gray-50/80 dark:bg-gray-800/40 px-4 py-2">
+            <div className="flex items-center justify-between bg-gray-50/80 dark:bg-gray-800/40 px-4 py-2 gap-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 Installments
               </p>
-              <Link
-                href="/vehicles/emi"
-                className="text-[10px] font-bold text-yellow-700 dark:text-yellow-400 hover:underline"
-              >
-                Full hub →
-              </Link>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPendingBulkPaid(true)}
+                  disabled={dueTillTodayCount === 0}
+                  className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline disabled:text-gray-400 disabled:hover:no-underline disabled:cursor-not-allowed inline-flex items-center gap-1"
+                  title={
+                    dueTillTodayCount === 0
+                      ? "No installments due on or before today"
+                      : `Mark ${dueTillTodayCount} installment${dueTillTodayCount === 1 ? "" : "s"} paid in bulk`
+                  }
+                >
+                  ✓ Mark all paid till date
+                  {dueTillTodayCount > 0 && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                      {dueTillTodayCount}
+                    </span>
+                  )}
+                </button>
+                <Link
+                  href="/vehicles/emi"
+                  className="text-[10px] font-bold text-yellow-700 dark:text-yellow-400 hover:underline"
+                >
+                  Full hub →
+                </Link>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
@@ -487,7 +557,14 @@ export default function VehicleEmiPanel({
                       </td>
                       <td className="px-4 py-2 text-right">
                         {p.status === "PAID" ? (
-                          <span className="text-[10px] text-gray-400">✓ paid</span>
+                          <button
+                            type="button"
+                            onClick={() => setPendingUnpaid(p)}
+                            className="text-[10px] font-semibold text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 inline-flex items-center gap-1 transition-colors"
+                            title="Revert this installment back to scheduled"
+                          >
+                            <span className="text-emerald-500">✓</span> Mark unpaid
+                          </button>
                         ) : p.status === "SKIPPED" ? (
                           <span className="text-[10px] text-gray-400">—</span>
                         ) : activePlan.status !== "ACTIVE" ? (
@@ -536,6 +613,34 @@ export default function VehicleEmiPanel({
           }}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={pendingUnpaid !== null}
+        title={
+          pendingUnpaid
+            ? `Revert installment #${pendingUnpaid.installmentNumber} to unpaid?`
+            : "Revert this installment?"
+        }
+        message="The linked expense entry will be removed, and the installment will be returned to SCHEDULED. You can mark it paid again later."
+        confirmLabel="Mark unpaid"
+        cancelLabel="Keep paid"
+        variant="warning"
+        loading={unpaidLoading}
+        onConfirm={runMarkUnpaid}
+        onCancel={() => setPendingUnpaid(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingBulkPaid}
+        title={`Mark ${dueTillTodayCount} installment${dueTillTodayCount === 1 ? "" : "s"} as paid?`}
+        message="Every installment scheduled on or before today (that isn't already paid or skipped) will be marked paid and an expense entry will be created for each. You can still revert individual rows later."
+        confirmLabel="Mark all paid"
+        cancelLabel="Cancel"
+        variant="warning"
+        loading={bulkPaidLoading}
+        onConfirm={runMarkAllPaidTillToday}
+        onCancel={() => setPendingBulkPaid(false)}
+      />
     </div>
   );
 }

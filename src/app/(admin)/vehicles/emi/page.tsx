@@ -74,7 +74,7 @@ type HubResponse = {
   };
 };
 
-type FilterKey = "all" | "due7" | "due30" | "overdue" | "bounced" | "closed";
+type FilterKey = "all" | "due7" | "due30" | "overdue" | "closed";
 
 const STATUS_TINT: Record<EmiPlanRow["status"], string> = {
   ACTIVE: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
@@ -110,7 +110,7 @@ export default function EmiHubPage() {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
   const [calSelectedDay, setCalSelectedDay] = useState<number | null>(null);
-  const [emiView, setEmiView] = useState<"list" | "calendar">("list");
+  const [emiView, setEmiView] = useState<"list" | "calendar">("calendar");
 
   // Per-column header filters (sit on top of the chip strip + vehicle dropdown).
   const [colFilters, setColFilters] = useState<{
@@ -167,7 +167,6 @@ export default function EmiHubPage() {
     // Top-level vehicle dropdown + chip strip (unchanged behaviour).
     if (vehicleId) rows = rows.filter((r) => String(r.vehicleId) === vehicleId);
     if (filter === "closed") rows = rows.filter((r) => r.status === "CLOSED");
-    else if (filter === "bounced") rows = rows.filter((r) => r.status === "DEFAULTED");
     else if (filter === "overdue") {
       rows = rows.filter((r) => {
         if (r.status !== "ACTIVE") return false;
@@ -331,23 +330,33 @@ export default function EmiHubPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* View toggle: List <-> Calendar */}
+          {/* View toggle: Calendar (default) on the left, List on the right.
+              The inactive option bounces in a faded-blue tint so users notice
+              the alternate view they can switch to. */}
           <div className="inline-flex p-1 rounded-lg bg-gray-100 dark:bg-gray-800/50">
             <button
               type="button"
-              onClick={() => setEmiView("list")}
-              className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-bold transition-all ${emiView === "list" ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
-            >
-              <ListIcon className="w-3.5 h-3.5" />
-              List
-            </button>
-            <button
-              type="button"
               onClick={() => setEmiView("calendar")}
-              className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-bold transition-all ${emiView === "calendar" ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"}`}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-bold transition-all ${
+                emiView === "calendar"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+                  : "bg-blue-50/70 text-blue-400 hover:bg-blue-100 hover:text-blue-500 dark:bg-blue-500/10 dark:text-blue-300/70 dark:hover:bg-blue-500/15 animate-bounce"
+              }`}
             >
               <Calendar className="w-3.5 h-3.5" />
               Calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmiView("list")}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-bold transition-all ${
+                emiView === "list"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+                  : "bg-blue-50/70 text-blue-400 hover:bg-blue-100 hover:text-blue-500 dark:bg-blue-500/10 dark:text-blue-300/70 dark:hover:bg-blue-500/15 animate-bounce"
+              }`}
+            >
+              <ListIcon className="w-3.5 h-3.5" />
+              List
             </button>
           </div>
           <button
@@ -403,7 +412,6 @@ export default function EmiHubPage() {
           <FilterChip active={filter === "due7"} onClick={() => setFilter("due7")} label="Due in 7d" />
           <FilterChip active={filter === "due30"} onClick={() => setFilter("due30")} label="Due in 30d" />
           <FilterChip active={filter === "overdue"} onClick={() => setFilter("overdue")} label="Overdue" tone="red" />
-          <FilterChip active={filter === "bounced"} onClick={() => setFilter("bounced")} label="Defaulted" tone="red" />
           <FilterChip active={filter === "closed"} onClick={() => setFilter("closed")} label="Closed" tone="gray" />
         </div>
         <VehicleAutocomplete

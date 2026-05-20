@@ -6,6 +6,7 @@ import {
   createDriver,
   getAllDrivers,
 } from "@/server/services/driver.service";
+import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,14 @@ export const POST = withRoute(
     const ctx = tenantOf(session);
     const input = await parseJson(req, createDriverSchema);
     const driver = await createDriver(ctx, input);
+    const d = driver as unknown as { id?: unknown; _id?: unknown; name?: string };
+    await logFromRequest(req, ctx, session, {
+      action: "driver.create",
+      entityType: "driver",
+      entityId: String(d.id ?? d._id ?? ""),
+      entityLabel: d.name ?? input.name,
+      summary: `Created driver ${d.name ?? input.name}`,
+    });
     return created(driver, "Driver created successfully");
   },
   { auth: true },

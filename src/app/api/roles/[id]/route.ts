@@ -8,6 +8,7 @@ import {
   getRoleById,
   updateRole,
 } from "@/server/services/role.service";
+import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
 
@@ -33,16 +34,37 @@ export const PUT = withRoute<{ id: string }>(
     const ctx = tenantOf(session);
     const input = await parseJson(req, updateSchema);
     const role = await updateRole(ctx, params.id, input);
+    const r = role as { name?: string };
+    await logFromRequest(req, ctx, session, {
+      action: "role.update",
+      entityType: "role",
+      entityId: params.id,
+      entityLabel: r.name ?? params.id,
+      summary: `Updated role "${r.name ?? params.id}"`,
+      metadata: input as Record<string, unknown>,
+    });
     return success(role, "Role updated");
   },
   { auth: true },
 );
 
 export const DELETE = withRoute<{ id: string }>(
-  async ({ params, session }) => {
+  async ({ req, params, session }) => {
     await requirePermission(session, "settings.roles:manage");
     const ctx = tenantOf(session);
+    let label = params.id;
+    try {
+      const r = await getRoleById(ctx, params.id);
+      label = (r as { name?: string }).name ?? params.id;
+    } catch { /* ignore */ }
     await deleteRole(ctx, params.id);
+    await logFromRequest(req, ctx, session, {
+      action: "role.delete",
+      entityType: "role",
+      entityId: params.id,
+      entityLabel: label,
+      summary: `Deleted role "${label}"`,
+    });
     return success(null, "Role deleted");
   },
   { auth: true },

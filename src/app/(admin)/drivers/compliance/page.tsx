@@ -36,7 +36,7 @@ function getDocStatus(expiryDate: string) {
   const days = Math.ceil((new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   if (days <= 0) return { status: "RED", days, label: "Expired" };
   if (days <= 7) return { status: "ORANGE", days, label: "Critical" };
-  if (days <= 30) return { status: "YELLOW", days, label: "Expiring" };
+  if (days <= 30) return { status: "YELLOW", days, label: "Upcoming Expiry" };
   return { status: "GREEN", days, label: "Valid" };
 }
 
@@ -125,7 +125,7 @@ export default function DriverCompliancePage() {
           <p className="text-[10px] text-emerald-600/60 mt-1">All docs &amp; license OK</p>
         </div>
         <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 px-3 py-2.5 dark:border-amber-500/20 dark:bg-amber-500/5">
-          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Expiring</p>
+          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Upcoming Expiry</p>
           <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-1">{counts.YELLOW}</p>
           <p className="text-[10px] text-amber-600/60 mt-1">Within 30 days</p>
         </div>
@@ -143,7 +143,7 @@ export default function DriverCompliancePage() {
             <button key={s} onClick={() => setFilter(s)}
               className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${filter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
               {s !== "ALL" && <span className={`w-2 h-2 rounded-full ${s === "RED" ? "bg-red-500" : s === "ORANGE" ? "bg-amber-500 animate-blink" : s === "YELLOW" ? "bg-amber-500" : "bg-emerald-500"}`} />}
-              {s === "ALL" ? "All" : s === "RED" ? "Expired" : s === "ORANGE" ? "Critical" : s === "YELLOW" ? "Expiring" : "Valid"}
+              {s === "ALL" ? "All" : s === "RED" ? "Expired" : s === "ORANGE" ? "Critical" : s === "YELLOW" ? "Upcoming Expiry" : "Valid"}
               <span className="text-xs text-gray-400">{counts[s]}</span>
             </button>
           ))}
@@ -188,7 +188,7 @@ export default function DriverCompliancePage() {
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-brand-500 transition-colors">{driver.name}</h3>
                     <Badge color={driver.overallStatus === "GREEN" ? "success" : driver.overallStatus === "YELLOW" ? "warning" : driver.overallStatus === "ORANGE" ? "warning" : "error"} variant="light" size="sm">
-                      {driver.overallStatus === "GREEN" ? "OK" : driver.overallStatus === "YELLOW" ? "Expiring" : driver.overallStatus === "ORANGE" ? "Critical" : "Expired"}
+                      {driver.overallStatus === "GREEN" ? "OK" : driver.overallStatus === "YELLOW" ? "Upcoming Expiry" : driver.overallStatus === "ORANGE" ? "Critical" : "Expired"}
                     </Badge>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">

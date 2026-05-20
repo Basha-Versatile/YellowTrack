@@ -6,6 +6,7 @@ import {
   getDriverById,
   updateDriver,
 } from "@/server/services/driver.service";
+import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,15 @@ export const PUT = withRoute<{ id: string }>(
     const driver = await updateDriver(ctx, params.id, input, {
       name: session?.email ?? "system",
       role: "ADMIN",
+    });
+    const d = driver as { name?: string };
+    await logFromRequest(req, ctx, session, {
+      action: "driver.update",
+      entityType: "driver",
+      entityId: params.id,
+      entityLabel: d.name ?? params.id,
+      summary: `Updated driver ${d.name ?? params.id}`,
+      metadata: input as Record<string, unknown>,
     });
     return success(driver, "Driver updated successfully");
   },

@@ -16,6 +16,7 @@ import {
   toPublicUser,
   type PublicUser,
 } from "../repositories/auth.repository";
+import { logActivity } from "./activityLog.service";
 
 export type AuthResult = {
   user: PublicUser;
@@ -88,6 +89,28 @@ export async function login(input: {
 
   const publicUser = toPublicUser(doc);
   const tokens = await createTokenPair(publicUser);
+
+  // Record a single "auth.login" entry in the tenant's activity log. SUPERADMIN
+  // accounts have no tenantId so we can't scope the entry — skip those.
+  if (publicUser.tenantId) {
+    await logActivity(
+      { tenantId: publicUser.tenantId } as Parameters<typeof logActivity>[0],
+      {
+        id: publicUser.id,
+        email: publicUser.email,
+        role: publicUser.role,
+        tenantId: publicUser.tenantId,
+      } as Parameters<typeof logActivity>[1],
+      {
+        action: "auth.login",
+        entityType: "auth",
+        entityId: publicUser.id,
+        entityLabel: publicUser.name ?? publicUser.email,
+        summary: `${publicUser.name ?? publicUser.email} signed in`,
+      },
+    );
+  }
+
   return { user: publicUser, ...tokens };
 }
 

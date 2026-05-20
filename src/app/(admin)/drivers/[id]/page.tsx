@@ -254,6 +254,7 @@ export default function DriverDetailPage() {
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const [pendingAddrPhotoDelete, setPendingAddrPhotoDelete] = useState<{ type: "current" | "permanent"; url: string } | null>(null);
   const [deletingAddrPhoto, setDeletingAddrPhoto] = useState(false);
+  const [medInsProviders, setMedInsProviders] = useState<string[]>([]);
 
   // Upload form
   const [showUpload, setShowUpload] = useState(false);
@@ -356,6 +357,15 @@ export default function DriverDetailPage() {
     setCurrentAddrPhotos(driver.currentAddressPhotos || []);
     setPermanentAddrPhotos(driver.permanentAddressPhotos || []);
     setShowEditProfile(true);
+    // Pull the tenant-scoped list of previously-used insurance providers so
+    // the datalist suggestions are populated when the field renders.
+    driverAPI
+      .getMedicalInsuranceProviders()
+      .then((res) => {
+        const list = (res.data as { data?: string[] })?.data ?? [];
+        setMedInsProviders(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setMedInsProviders([]));
   };
 
   const updateEC = (index: number, field: keyof EditableEC, value: string) => {
@@ -525,7 +535,7 @@ export default function DriverDetailPage() {
   const inputClass = "w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-yellow-500 transition-all";
 
   const statusColor = driver.licenseStatus === "GREEN" ? "success" : driver.licenseStatus === "YELLOW" ? "warning" : driver.licenseStatus === "ORANGE" ? "error" : "error";
-  const statusLabel = driver.licenseStatus === "GREEN" ? "Active" : driver.licenseStatus === "YELLOW" ? "Expiring Soon" : driver.licenseStatus === "ORANGE" ? "Critical" : "Expired";
+  const statusLabel = driver.licenseStatus === "GREEN" ? "Active" : driver.licenseStatus === "YELLOW" ? "Upcoming Expiry" : driver.licenseStatus === "ORANGE" ? "Critical" : "Expired";
 
   return (
     <div className="space-y-6">
@@ -853,7 +863,7 @@ export default function DriverDetailPage() {
                               <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{docLabel}</span>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-                                <span className="text-[11px] font-medium text-gray-500">{docStatus === "GREEN" ? "Valid" : docStatus === "YELLOW" ? "Expiring" : docStatus === "ORANGE" ? "Critical" : "Expired"}</span>
+                                <span className="text-[11px] font-medium text-gray-500">{docStatus === "GREEN" ? "Valid" : docStatus === "YELLOW" ? "Upcoming Expiry" : docStatus === "ORANGE" ? "Critical" : "Expired"}</span>
                               </div>
                             </div>
                           </div>
@@ -1188,7 +1198,25 @@ export default function DriverDetailPage() {
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2"><label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">PF Account Number</label><input type="text" placeholder="e.g. AB/CDE/1234567/000/1234567" value={editForm.pfAccountNumber} onChange={(e) => setEditForm({ ...editForm, pfAccountNumber: e.target.value })} className={inputClass} /></div>
-                  <div><label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Medical Insurance Provider</label><input type="text" placeholder="e.g. ESIC, Star Health" value={editForm.medicalInsuranceName} onChange={(e) => setEditForm({ ...editForm, medicalInsuranceName: e.target.value })} className={inputClass} /></div>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Medical Insurance Provider</label>
+                    <input
+                      type="text"
+                      list="med-ins-providers"
+                      placeholder="e.g. ESIC, Star Health"
+                      value={editForm.medicalInsuranceName}
+                      onChange={(e) => setEditForm({ ...editForm, medicalInsuranceName: e.target.value })}
+                      className={inputClass}
+                    />
+                    <datalist id="med-ins-providers">
+                      {medInsProviders.map((p) => <option key={p} value={p} />)}
+                    </datalist>
+                    {medInsProviders.length > 0 && (
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        {medInsProviders.length} provider{medInsProviders.length === 1 ? "" : "s"} used before in this tenant
+                      </p>
+                    )}
+                  </div>
                   <div><label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Policy / Account Number</label><input type="text" placeholder="e.g. ESIC IP / Policy No." value={editForm.medicalInsuranceNumber} onChange={(e) => setEditForm({ ...editForm, medicalInsuranceNumber: e.target.value })} className={inputClass} /></div>
                 </div>
               </div>

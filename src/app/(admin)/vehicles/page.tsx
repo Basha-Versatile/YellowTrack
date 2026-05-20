@@ -3,11 +3,10 @@ import React, { useEffect, useState, useRef } from "react";
 import { vehicleAPI, vehicleGroupAPI } from "@/lib/api";
 import Badge from "@/components/ui/badge/Badge";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { VehiclesListSkeleton } from "@/components/ui/Skeleton";
 import Pagination from "@/components/ui/Pagination";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
-import { Plus, Truck, LayoutGrid, List, ChevronRight, User, CreditCard } from "lucide-react";
+import { Plus, Truck, LayoutGrid, List, ChevronRight, User } from "lucide-react";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
@@ -54,7 +53,6 @@ interface PaginationData {
 const DOC_ABBR: Record<string, string> = { RC: "RC", INSURANCE: "INS", PERMIT: "PMT", PUCC: "PUC", FITNESS: "FIT", TAX: "TAX" };
 
 export default function VehiclesPage() {
-  const router = useRouter();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [search, setSearch] = useState("");
@@ -163,7 +161,7 @@ export default function VehiclesPage() {
           <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none mt-1">{greenCount}</p>
         </div>
         <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 px-3 py-2.5 dark:border-amber-500/20 dark:bg-amber-500/5">
-          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Expiring</p>
+          <p className="text-[10px] font-bold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">Upcoming Expiry</p>
           <p className="text-lg font-black text-amber-600 dark:text-amber-400 leading-none mt-1">{yellowCount}</p>
         </div>
         <div className="rounded-lg border border-red-200/60 bg-red-50/50 px-3 py-2.5 dark:border-red-500/20 dark:bg-red-500/5">
@@ -445,19 +443,6 @@ export default function VehiclesPage() {
                   </span>
                 ) : (
                   <span className="text-xs text-gray-300 dark:text-gray-600 flex-shrink-0">&mdash;</span>
-                )}
-
-                {/* Sell action (active only) */}
-                {v.status !== "SOLD" && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/vehicles/${v.id}?action=sell`); }}
-                    title="Sell vehicle"
-                    className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 hover:bg-gray-900 hover:text-white dark:bg-gray-800 dark:hover:bg-gray-100 dark:hover:text-gray-900 text-[10px] font-bold uppercase tracking-wider text-gray-600 dark:text-gray-300 transition-colors flex-shrink-0"
-                  >
-                    <CreditCard className="w-3 h-3" />
-                    Sell
-                  </button>
                 )}
 
                 {/* Arrow */}

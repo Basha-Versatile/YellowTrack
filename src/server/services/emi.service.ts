@@ -373,6 +373,98 @@ export async function markPaymentStatus(
   return emiRepo.updatePayment(ctx, paymentId, patch);
 }
 
+/**
+ * Bulk-mark every installment whose `scheduledDate <= untilDate` (default
+ * = today) as paid for a single plan. Skips installments that are already
+ * PAID or SKIPPED. Delegates to {@link markPaymentPaid} per row so the
+ * Expense auto-link, paidInstallments counter, and plan auto-close all
+ * stay consistent with the single-row flow.
+ *
+ * Returns the count of installments actually updated.
+ */
+export async function markPaymentsPaidUntil(
+  ctx: ScopedContext,
+  planId: string,
+  untilDate: Date | string | undefined,
+  markedBy: string | null,
+): Promise<{ updated: number; total: number }> {
+  const plan = await emiRepo.findPlanById(ctx, planId);
+  if (!plan) throw new NotFoundError("EMI plan not found");
+
+  const cutoff = untilDate ? new Date(untilDate) : new Date();
+  // End-of-day cutoff so an installment scheduled for "today" still qualifies.
+  cutoff.setHours(23, 59, 59, 999);
+
+  const payments = await emiRepo.findPaymentsByPlan(ctx, planId);
+  const due = payments.filter(
+    (p) =>
+      p.status !== "PAID" &&
+      p.status !== "SKIPPED" &&
+      new Date(p.scheduledDate as unknown as string | Date).getTime() <= cutoff.getTime(),
+  );
+
+  let updated = 0;
+  for (const p of due) {
+    try {
+      await markPaymentPaid(ctx, String(p._id), {}, markedBy);
+      updated += 1;
+    } catch {
+      // Skip rows that fail (eg. race conditions) — keep going so one bad
+      // row doesn't block the rest of the batch.
+    }
+  }
+  return { updated, total: due.length };
+}
+
+/**
+ * Revert a PAID installment back to SCHEDULED. Mirrors markPaymentPaid in
+ * reverse: deletes the linked Expense so spend reports stay in sync,
+ * clears the paid-on fields, decrements the plan's paidInstallments
+ * counter, and re-opens a plan that had been auto-closed.
+ */
+export async function markPaymentUnpaid(
+  ctx: ScopedContext,
+  paymentId: string,
+) {
+  const payment = await emiRepo.findPaymentById(ctx, paymentId);
+  if (!payment) throw new NotFoundError("EMI payment not found");
+  if (payment.status !== "PAID") {
+    throw new ConflictError("Only a paid installment can be reverted");
+  }
+
+  // Wipe the auto-linked Expense row so reports don't double-count once
+  // the user marks it paid again.
+  if (payment.expenseId) {
+    await Expense.deleteOne({ _id: payment.expenseId });
+  }
+
+  const updated = await emiRepo.updatePayment(ctx, paymentId, {
+    status: "SCHEDULED",
+    paidDate: null,
+    paidAmount: null,
+    lateFee: 0,
+    transactionRef: null,
+    proofUrl: null,
+    expenseId: null,
+    markedBy: null,
+  });
+
+  await emiRepo.incrementPaidInstallments(ctx, String(payment.emiPlanId), -1);
+
+  // Plan may have auto-closed when this was the final installment — undo
+  // that and recompute the next due date.
+  const plan = await emiRepo.findPlanById(ctx, String(payment.emiPlanId));
+  if (plan && plan.status === "CLOSED") {
+    await emiRepo.updatePlan(ctx, String(payment.emiPlanId), {
+      status: "ACTIVE",
+      closedAt: null,
+    });
+  }
+  await refreshNextDueDate(ctx, String(payment.emiPlanId));
+
+  return updated;
+}
+
 // ── Hub / summary ───────────────────────────────────────────────────────────
 
 export async function getEmiHub(

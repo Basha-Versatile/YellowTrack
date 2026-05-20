@@ -9,6 +9,7 @@ import {
   calculateComplianceStatus,
   daysUntilExpiry,
 } from "@/server/services/compliance.service";
+import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
 
@@ -65,6 +66,16 @@ export const POST = withRoute<{ id: string }>(
       status: calculateComplianceStatus(finalExpiry),
       isActive: true,
       lastVerifiedAt: new Date(),
+    });
+    await logFromRequest(req, ctx, session, {
+      action: "compliance.create",
+      entityType: "compliance",
+      entityId: String((doc as unknown as { _id?: unknown })._id ?? ""),
+      entityLabel: input.type,
+      summary: input.lifetime
+        ? `Added ${input.type} (lifetime validity)`
+        : `Added ${input.type}${finalExpiry ? ` expiring ${finalExpiry.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}`,
+      metadata: { vehicleId: params.id, lifetime: input.lifetime ?? false, expiryDate: finalExpiry },
     });
     return created(doc, "Compliance document added");
   },

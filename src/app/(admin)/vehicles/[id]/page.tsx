@@ -1245,7 +1245,7 @@ export default function VehicleDetailPage() {
                       </div>
                       <div className="text-right">
                         <Badge color={dt.badge} variant="light" size="sm">
-                          {doc.status === "GREEN" ? "Valid" : doc.status === "YELLOW" ? "Expiring" : doc.status === "ORANGE" ? "Critical" : "Expired"}
+                          {doc.status === "GREEN" ? "Valid" : doc.status === "YELLOW" ? "Upcoming Expiry" : doc.status === "ORANGE" ? "Critical" : "Expired"}
                         </Badge>
                         <p className={`text-xs font-bold mt-1 ${dt.text}`}>
                           {doc.daysUntilExpiry === null

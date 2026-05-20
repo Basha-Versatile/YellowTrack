@@ -5,6 +5,7 @@ import { parseMultipart, manyFiles, firstString } from "@/lib/upload";
 import { tenantOf } from "@/lib/auth/tenant-context";
 import * as complianceRepo from "@/server/repositories/compliance.repository";
 import { calculateComplianceStatus } from "@/server/services/compliance.service";
+import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,16 @@ export const POST = withRoute<{ id: string }>(
       isActive: true,
     });
 
+    await logFromRequest(req, ctx, session, {
+      action: "compliance.renew",
+      entityType: "compliance",
+      entityId: String((newDoc as unknown as { _id?: unknown })._id ?? params.id),
+      entityLabel: oldDoc.type,
+      summary: isLifetime
+        ? `Renewed ${oldDoc.type} to lifetime validity`
+        : `Renewed ${oldDoc.type}${finalExpiry ? ` to ${finalExpiry.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}`,
+      metadata: { lifetime: isLifetime, expiryDate: finalExpiry, filesCount: urls.length },
+    });
     return created(newDoc, "Document renewed successfully");
   },
   { auth: true },

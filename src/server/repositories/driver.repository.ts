@@ -113,6 +113,26 @@ export async function findByVerificationTokenAnyTenant(token: string) {
   return Driver.findOne({ verificationToken: token }).lean();
 }
 
+/**
+ * Distinct list of every non-empty `medicalInsuranceName` ever entered for
+ * a driver in this tenant. Used to power the "previously used providers"
+ * autocomplete on the driver edit modal. Returns sorted strings.
+ */
+export async function findDistinctMedicalInsuranceProviders(
+  ctx: ScopedContext,
+): Promise<string[]> {
+  const values = await Driver.distinct(
+    "medicalInsuranceName",
+    tenantFilter(ctx, {
+      medicalInsuranceName: { $exists: true, $ne: null, $nin: ["", null] },
+    }),
+  );
+  return (values as string[])
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .map((v) => v.trim())
+    .sort((a, b) => a.localeCompare(b));
+}
+
 export async function create(
   ctx: ScopedContext,
   data: Record<string, unknown>,
