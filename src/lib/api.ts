@@ -280,6 +280,7 @@ export const vehicleAPI = {
     groupId?: string;
     vehicleUsage?: "PRIVATE" | "COMMERCIAL";
     lifecycle?: "ACTIVE" | "SOLD";
+    brand?: string;
   }) => api.get("/vehicles", { params }),
   getSale: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/sale`),
   markSold: (vehicleId: string, formData: FormData) =>
@@ -293,6 +294,8 @@ export const vehicleAPI = {
   getById: (id: string) => api.get(`/vehicles/${id}`),
   updateGroup: (vehicleId: string, groupId: string | null) =>
     api.patch(`/vehicles/${vehicleId}/group`, { groupId }),
+  updateBrand: (vehicleId: string, brand: string | null) =>
+    api.patch(`/vehicles/${vehicleId}/brand`, { brand }),
   onboard: (
     registrationNumber: string,
     images?: File[],

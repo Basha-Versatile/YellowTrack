@@ -6,6 +6,7 @@ const vehicleSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     registrationNumber: { type: String, required: true, uppercase: true, trim: true, index: true },
     ownerName: { type: String },
+    brand: { type: String, default: null },
     make: { type: String, required: true },
     model: { type: String, required: true },
     fuelType: { type: String, required: true },

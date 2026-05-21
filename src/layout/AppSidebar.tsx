@@ -349,21 +349,25 @@ const AppSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div
-        className={`px-5 pt-4 pb-3 h-20 flex items-center overflow-hidden ${
-          !expanded ? "justify-center" : "justify-start"
+        className={`flex items-center overflow-hidden transition-all duration-300 ${
+          expanded
+            ? "px-5 pt-4 pb-3 h-30 justify-start"
+            : "px-1 py-1 h-25 justify-center"
         }`}
       >
-        <Link href="/" className={`flex items-center h-full ${expanded ? "w-full" : ""}`}>
+        <Link
+          href="/"
+          aria-label="Yellow Track"
+          className={`flex items-center justify-center ${
+            expanded ? "w-full h-full" : "w-full"
+          }`}
+        >
           <YellowTrackLogo
             stretch={expanded}
-            className={`flex-shrink-0 h-full ${expanded ? "w-full" : "w-auto"}`}
+            className={`flex-shrink-0 ${
+              expanded ? "w-full h-full" : "w-full h-auto"
+            }`}
           />
-          {/* {expanded && (
-            <span className="text-xl font-extrabold tracking-tight">
-              <span className="text-yellow-500 dark:text-yellow-400">Yellow</span>
-              <span className="text-gray-900 dark:text-white"> Track</span>
-            </span>
-          )} */}
         </Link>
       </div>
 

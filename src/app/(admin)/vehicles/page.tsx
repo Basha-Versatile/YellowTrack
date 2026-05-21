@@ -3,10 +3,11 @@ import React, { useEffect, useState, useRef } from "react";
 import { vehicleAPI, vehicleGroupAPI } from "@/lib/api";
 import Badge from "@/components/ui/badge/Badge";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { VehiclesListSkeleton } from "@/components/ui/Skeleton";
 import Pagination from "@/components/ui/Pagination";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
-import { Plus, Truck, LayoutGrid, List, ChevronRight, User } from "lucide-react";
+import { Plus, Truck, LayoutGrid, List, ChevronRight, User, X } from "lucide-react";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
@@ -53,6 +54,10 @@ interface PaginationData {
 const DOC_ABBR: Record<string, string> = { RC: "RC", INSURANCE: "INS", PERMIT: "PMT", PUCC: "PUC", FITNESS: "FIT", TAX: "TAX" };
 
 export default function VehiclesPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const brandFilter = searchParams.get("brand") ?? "";
+
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [search, setSearch] = useState("");
@@ -70,11 +75,13 @@ export default function VehiclesPage() {
   const groupRef = useRef(groupFilter);
   const usageRef = useRef(usageFilter);
   const lifecycleRef = useRef(lifecycleTab);
+  const brandRef = useRef(brandFilter);
   searchRef.current = search;
   filterRef.current = statusFilter;
   groupRef.current = groupFilter;
   usageRef.current = usageFilter;
   lifecycleRef.current = lifecycleTab;
+  brandRef.current = brandFilter;
 
   const fetchVehicles = async (page = 1, opts?: { initial?: boolean; overrideStatus?: string; overrideGroup?: string; overrideUsage?: "ALL" | "PRIVATE" | "COMMERCIAL"; overrideLifecycle?: "ALL" | "SOLD" }) => {
     if (opts?.initial) setLoading(true); else setFetching(true);
@@ -88,6 +95,7 @@ export default function VehiclesPage() {
         groupId: (opts?.overrideGroup ?? groupRef.current) !== "ALL" ? (opts?.overrideGroup ?? groupRef.current) : undefined,
         vehicleUsage: usage !== "ALL" ? usage : undefined,
         lifecycle: lifecycle === "SOLD" ? "SOLD" : undefined,
+        brand: brandRef.current || undefined,
       });
       setVehicles(res.data.data.vehicles);
       setPagination(res.data.data.pagination);
@@ -99,6 +107,20 @@ export default function VehiclesPage() {
     fetchVehicles(1, { initial: true });
     vehicleGroupAPI.getAll().then((res) => setGroups(res.data.data)).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch whenever the URL `?brand=X` param changes (e.g. user clicks a
+  // brand tile on the dashboard, or clears the chip below).
+  useEffect(() => {
+    fetchVehicles(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandFilter]);
+
+  const clearBrandFilter = () => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("brand");
+    const qs = next.toString();
+    router.replace(qs ? `/vehicles?${qs}` : "/vehicles");
+  };
 
   // Debounce live search so every keystroke doesn't hit the API
   const [didMount, setDidMount] = useState(false);
@@ -173,6 +195,19 @@ export default function VehiclesPage() {
           <p className="text-lg font-black text-brand-600 dark:text-brand-400 leading-none mt-1">&#8377;{totalPending.toLocaleString("en-IN")}</p>
         </div>
       </div>
+
+      {/* Active Brand Filter (from dashboard deep-link) */}
+      {brandFilter && (
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Filtered by brand</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 dark:bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 px-3 py-1 text-xs font-bold">
+            {brandFilter}
+            <button onClick={clearBrandFilter} className="hover:text-yellow-900 dark:hover:text-yellow-100" aria-label="Clear brand filter">
+              <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* Group Filter */}
       {groups.length > 0 && (

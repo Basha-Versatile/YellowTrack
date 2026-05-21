@@ -84,6 +84,7 @@ interface Vehicle {
   ownerName: string | null;
   make: string;
   model: string;
+  brand: string | null;
   fuelType: string;
   chassisNumber: string;
   engineNumber: string;
@@ -207,6 +208,9 @@ export default function VehicleDetailPage() {
   const [allGroups, setAllGroups] = useState<Array<{ id: string; name: string; icon: string; color?: string }>>([]);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
+  const [editingBrand, setEditingBrand] = useState(false);
+  const [brandInput, setBrandInput] = useState("");
+  const [savingBrand, setSavingBrand] = useState(false);
 
   const [hoverPhoto, setHoverPhoto] = useState<{ url: string; x: number; y: number } | null>(null);
 
@@ -782,6 +786,23 @@ export default function VehicleDetailPage() {
     finally { setSavingGroup(false); }
   };
 
+  const handleBrandSave = async () => {
+    if (!vehicle) return;
+    const next = brandInput.trim();
+    if ((next || null) === (vehicle.brand || null)) {
+      setEditingBrand(false);
+      return;
+    }
+    setSavingBrand(true);
+    try {
+      await vehicleAPI.updateBrand(vehicle.id, next || null);
+      fetchVehicle();
+      setEditingBrand(false);
+      toast.success("Brand Updated", next ? `Brand set to ${next}` : "Brand cleared");
+    } catch { toast.error("Failed", "Could not update brand"); }
+    finally { setSavingBrand(false); }
+  };
+
   if (loading) return <VehicleDetailSkeleton />;
 
   if (!vehicle) {
@@ -1033,15 +1054,67 @@ export default function VehicleDetailPage() {
                   </div>
                 )}
               </div>
+              {/* Brand tile with inline edit */}
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 relative">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Brand</p>
+                  {!editingBrand && (
+                    <button
+                      onClick={() => { setBrandInput(vehicle.brand || ""); setEditingBrand(true); }}
+                      className="text-brand-500 hover:text-brand-600 transition-colors"
+                      title="Edit brand"
+                    >
+                      <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
+                {editingBrand ? (
+                  <div className="mt-1 flex items-center gap-1">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={brandInput}
+                      onChange={(e) => setBrandInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleBrandSave();
+                        if (e.key === "Escape") setEditingBrand(false);
+                      }}
+                      disabled={savingBrand}
+                      maxLength={50}
+                      placeholder="e.g. Maruti"
+                      className="w-full text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1 focus:border-brand-400 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleBrandSave}
+                      disabled={savingBrand}
+                      className="text-brand-500 hover:text-brand-600 disabled:opacity-50"
+                      title="Save"
+                    >
+                      <Check className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                    <button
+                      onClick={() => setEditingBrand(false)}
+                      disabled={savingBrand}
+                      className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                      title="Cancel"
+                    >
+                      <X className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1 truncate">
+                    {vehicle.brand || <span className="text-gray-400 font-normal">—</span>}
+                  </p>
+                )}
+              </div>
               {[
-                { label: "Owner", value: vehicle.ownerName || "—" },
                 { label: "Chassis No.", value: vehicle.chassisNumber || "—" },
                 { label: "Engine No.", value: vehicle.engineNumber || "—" },
                 { label: "GVW", value: vehicle.gvw ? `${vehicle.gvw} kg` : "—" },
-                { label: "Seating", value: vehicle.seatingCapacity?.toString() || "—" },
+                { label: "Usage", value: vehicle.vehicleUsage === "COMMERCIAL" ? "Commercial" : vehicle.vehicleUsage === "PRIVATE" ? "Private" : "—" },
                 { label: "Fuel Type", value: vehicle.fuelType },
                 { label: "Permit", value: vehicle.permitType || "—" },
-                { label: "Usage", value: vehicle.vehicleUsage === "COMMERCIAL" ? "Commercial" : vehicle.vehicleUsage === "PRIVATE" ? "Private" : "—" },
+                { label: "Seating", value: vehicle.seatingCapacity?.toString() || "—" },
               ].map((item) => (
                 <div key={item.label} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
                   <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{item.label}</p>

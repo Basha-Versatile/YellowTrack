@@ -5,13 +5,26 @@ import { vehicleAPI, driverAPI, notificationAPI } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
-import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, BarChart3, PieChart as PieIcon, type LucideIcon } from "lucide-react";
+import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, BarChart3, PieChart as PieIcon, Disc3, type LucideIcon } from "lucide-react";
+import type { IconType } from "react-icons";
+import {
+  SiAudi, SiBmw, SiFord, SiHonda, SiHyundai, SiKia, SiMahindra,
+  SiMaserati, SiMg, SiNissan, SiSuzuki, SiTata, SiTesla, SiToyota,
+  SiVolkswagen, SiVolvo,
+} from "react-icons/si";
 
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 interface DashboardStats {
   totalVehicles: number;
   compliance: { green: number; yellow: number; orange: number; red: number };
+  byBrand: Array<{ brand: string | null; count: number }>;
+  tyreBrandPerformance: Array<{
+    brand: string;
+    avgKm: number;
+    replacements: number;
+    vehicles: number;
+  }>;
   challans: {
     total: number;
     pending: { count: number; amount: number };
@@ -349,6 +362,113 @@ export default function DashboardPage() {
         );
       })()}
 
+      {/* ── BOTTOM ROW: Fleet by Brand (half) + placeholder for future section (half) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Fleet by Brand */}
+        <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <Truck className="w-3.5 h-3.5 text-gray-600 dark:text-gray-300" strokeWidth={2} />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">Fleet by Brand</h3>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                  Tap a brand to filter the vehicles list
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Brands</p>
+              <p className="text-sm font-black text-gray-900 dark:text-white leading-none mt-0.5">
+                {stats?.byBrand?.filter((b) => b.brand).length ?? 0}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3">
+            {!stats?.byBrand || stats.byBrand.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  No brand data yet. Set the <span className="font-semibold text-gray-700 dark:text-gray-200">Brand</span> field on a vehicle to see counts here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {stats.byBrand.map(({ brand, count }) => (
+                  <BrandCard key={brand ?? "__unbranded"} brand={brand} count={count} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tyre Brand Performance — which tyre brand gives the most km */}
+        <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <Disc3 className="w-3.5 h-3.5 text-gray-600 dark:text-gray-300" strokeWidth={2} />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">Tyre Brand Performance</h3>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                  Avg km per change, ranked highest first
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Brands</p>
+              <p className="text-sm font-black text-gray-900 dark:text-white leading-none mt-0.5">
+                {stats?.tyreBrandPerformance?.length ?? 0}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3">
+            {!stats?.tyreBrandPerformance || stats.tyreBrandPerformance.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  No tyre run-length data yet. Log at least two tyre changes on a vehicle to see brand performance.
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {stats.tyreBrandPerformance.map((t, i) => {
+                  const isBest = i === 0;
+                  return (
+                    <li key={t.brand} className="flex items-center gap-3 py-2.5">
+                      <span className={`flex-shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-xs font-black ${isBest ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-gray-800 dark:text-gray-100 truncate">{t.brand}</p>
+                          {isBest && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+                              Best
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                          {t.replacements} change{t.replacements === 1 ? "" : "s"} · {t.vehicles} vehicle{t.vehicles === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-black text-gray-900 dark:text-white tabular-nums leading-none">
+                          {t.avgKm.toLocaleString("en-IN")}
+                        </p>
+                        <p className="text-[9px] uppercase tracking-wider font-bold text-gray-400 mt-0.5">km avg</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* ── QUICK ACTIONS ── */}
       {/*<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {([
@@ -376,6 +496,77 @@ export default function DashboardPage() {
 }
 
 /* ── Sub-components ── */
+
+// All-gray palette — subtle variation across neutral families for tone-on-tone interest.
+const BRAND_PALETTE = [
+  { avatar: "bg-gray-100 dark:bg-gray-800/60", icon: "text-gray-700 dark:text-gray-200" },
+  { avatar: "bg-slate-100 dark:bg-slate-800/60", icon: "text-slate-700 dark:text-slate-200" },
+  { avatar: "bg-zinc-100 dark:bg-zinc-800/60", icon: "text-zinc-700 dark:text-zinc-200" },
+  { avatar: "bg-stone-100 dark:bg-stone-800/60", icon: "text-stone-700 dark:text-stone-200" },
+  { avatar: "bg-neutral-100 dark:bg-neutral-800/60", icon: "text-neutral-700 dark:text-neutral-200" },
+];
+
+function brandColor(brand: string) {
+  let hash = 0;
+  for (let i = 0; i < brand.length; i++) hash = (hash * 31 + brand.charCodeAt(i)) | 0;
+  return BRAND_PALETTE[Math.abs(hash) % BRAND_PALETTE.length];
+}
+
+// Brand → icon map. Key is lowercase brand name (with typo-aliases). Brands
+// without an entry fall back to the colored letter avatar.
+const BRAND_ICONS: Record<string, IconType> = {
+  audi: SiAudi,
+  bmw: SiBmw,
+  ford: SiFord,
+  honda: SiHonda,
+  hyundai: SiHyundai,
+  kia: SiKia,
+  mahindra: SiMahindra,
+  maserati: SiMaserati,
+  mg: SiMg,
+  nissan: SiNissan,
+  suzuki: SiSuzuki,
+  tata: SiTata,
+  tesla: SiTesla,
+  toyota: SiToyota,
+  volkswagen: SiVolkswagen,
+  vw: SiVolkswagen,
+  volvo: SiVolvo,
+  volovo: SiVolvo, // common typo
+};
+
+function BrandCard({ brand, count }: { brand: string | null; count: number }) {
+  const isUnbranded = !brand;
+  const label = brand ?? "Unbranded";
+  const palette = isUnbranded
+    ? { avatar: "bg-gray-100 dark:bg-gray-800", icon: "text-gray-400 dark:text-gray-500" }
+    : brandColor(label);
+  const Icon = isUnbranded ? null : BRAND_ICONS[label.toLowerCase()] ?? null;
+  const href = isUnbranded ? "/vehicles" : `/vehicles?brand=${encodeURIComponent(label)}`;
+
+  return (
+    <Link
+      href={href}
+      title={`${label} — ${count} vehicle${count === 1 ? "" : "s"}`}
+      className="group flex flex-col items-center text-center rounded-xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-white/[0.02] p-3 transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-sm"
+    >
+      <div className={`flex-shrink-0 w-14 h-14 rounded-xl ${palette.avatar} flex items-center justify-center`}>
+        {Icon ? (
+          <Icon className={`w-9 h-9 ${palette.icon}`} />
+        ) : (
+          <span className={`text-2xl font-black ${palette.icon}`}>{label.charAt(0).toUpperCase()}</span>
+        )}
+      </div>
+      <p className={`mt-2 w-full text-xs font-semibold truncate ${isUnbranded ? "italic text-gray-500 dark:text-gray-400" : "text-gray-800 dark:text-gray-100"}`}>
+        {label}
+      </p>
+      <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+        {count} vehicle{count === 1 ? "" : "s"}
+      </p>
+    </Link>
+  );
+}
+
 
 function StatChip({
   Icon,

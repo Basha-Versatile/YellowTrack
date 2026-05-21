@@ -1,16 +1,19 @@
 import "server-only";
+import { Types } from "mongoose";
 import {
   Challan,
   ComplianceDocument,
   Driver,
   ServicePart,
   Tyre,
+  TyreReplacement,
   Vehicle,
   VehicleDriverMapping,
   VehicleGroup,
   VehicleSale,
 } from "@/models";
 import {
+  ALL_TENANTS,
   type ScopedContext,
   tenantFilter,
   tenantStamp,
@@ -24,6 +27,7 @@ export type VehicleListQuery = {
   groupId?: string;
   vehicleUsage?: "PRIVATE" | "COMMERCIAL";
   lifecycle?: "ACTIVE" | "SOLD";
+  brand?: string;
 };
 
 type Paginated<T> = {
@@ -49,6 +53,7 @@ export async function findAll(
     groupId,
     vehicleUsage,
     lifecycle,
+    brand,
   }: VehicleListQuery,
 ): Promise<Paginated<EnrichedVehicle>> {
   const skip = (page - 1) * limit;
@@ -64,6 +69,9 @@ export async function findAll(
   if (groupId) extras.groupId = groupId;
   if (vehicleUsage) extras.vehicleUsage = vehicleUsage;
   if (lifecycle) extras.status = lifecycle;
+  if (brand) {
+    extras.brand = { $regex: `^${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+  }
 
   if (status) {
     const vehicleIdsWithStatus = await ComplianceDocument.find(
@@ -310,27 +318,97 @@ export async function update(
 }
 
 export async function getDashboardStats(ctx: ScopedContext) {
-  const [totalVehicles, greenDocs, yellowDocs, orangeDocs, redDocs] =
-    await Promise.all([
-      Vehicle.countDocuments(tenantFilter(ctx)),
-      ComplianceDocument.countDocuments(
-        tenantFilter(ctx, { status: "GREEN", isActive: true }),
-      ),
-      ComplianceDocument.countDocuments(
-        tenantFilter(ctx, { status: "YELLOW", isActive: true }),
-      ),
-      ComplianceDocument.countDocuments(
-        tenantFilter(ctx, { status: "ORANGE", isActive: true }),
-      ),
-      ComplianceDocument.countDocuments(
-        tenantFilter(ctx, { status: "RED", isActive: true }),
-      ),
-    ]);
+  const [
+    totalVehicles,
+    greenDocs,
+    yellowDocs,
+    orangeDocs,
+    redDocs,
+    brandAgg,
+    tyreReplacements,
+  ] = await Promise.all([
+    Vehicle.countDocuments(tenantFilter(ctx)),
+    ComplianceDocument.countDocuments(
+      tenantFilter(ctx, { status: "GREEN", isActive: true }),
+    ),
+    ComplianceDocument.countDocuments(
+      tenantFilter(ctx, { status: "YELLOW", isActive: true }),
+    ),
+    ComplianceDocument.countDocuments(
+      tenantFilter(ctx, { status: "ORANGE", isActive: true }),
+    ),
+    ComplianceDocument.countDocuments(
+      tenantFilter(ctx, { status: "RED", isActive: true }),
+    ),
+    Vehicle.aggregate<{ brand: string | null; count: number }>([
+      // Mongoose's aggregate $match does NOT auto-cast string IDs to
+      // ObjectId (unlike find/countDocuments) — must cast manually.
+      {
+        $match:
+          ctx.tenantId === ALL_TENANTS
+            ? {}
+            : { tenantId: new Types.ObjectId(ctx.tenantId) },
+      },
+      {
+        $group: {
+          _id: { $ifNull: ["$brand", null] },
+          count: { $sum: 1 },
+        },
+      },
+      { $project: { _id: 0, brand: "$_id", count: 1 } },
+      { $sort: { count: -1, brand: 1 } },
+    ]),
+    TyreReplacement.find(tenantFilter(ctx))
+      .sort({ vehicleId: 1, date: 1, odometerKm: 1 })
+      .lean(),
+  ]);
 
   const pendingAgg = await Challan.aggregate([
     { $match: tenantFilter(ctx, { status: "PENDING" }) },
     { $group: { _id: null, sum: { $sum: "$amount" }, count: { $sum: 1 } } },
   ]);
+
+  // Fleet-wide tyre brand performance: for each vehicle's sequence of tyre
+  // replacements, the run-length of stint N is odo(N+1) − odo(N). We then
+  // average run-length per brand across the whole fleet — the last stint on
+  // any vehicle is excluded (still running, unknown lifetime).
+  type TR = (typeof tyreReplacements)[number];
+  const byVehicle = new Map<string, TR[]>();
+  for (const r of tyreReplacements) {
+    const v = String(r.vehicleId);
+    const list = byVehicle.get(v);
+    if (list) list.push(r);
+    else byVehicle.set(v, [r]);
+  }
+  const brandStats = new Map<
+    string,
+    { totalKm: number; count: number; vehicleSet: Set<string> }
+  >();
+  for (const [vehicleId, list] of byVehicle) {
+    for (let i = 0; i < list.length - 1; i++) {
+      const km =
+        (list[i + 1].odometerKm as number) - (list[i].odometerKm as number);
+      if (km <= 0) continue;
+      const brand = String(list[i].brand);
+      const acc = brandStats.get(brand) ?? {
+        totalKm: 0,
+        count: 0,
+        vehicleSet: new Set<string>(),
+      };
+      acc.totalKm += km;
+      acc.count += 1;
+      acc.vehicleSet.add(vehicleId);
+      brandStats.set(brand, acc);
+    }
+  }
+  const tyreBrandPerformance = Array.from(brandStats.entries())
+    .map(([brand, s]) => ({
+      brand,
+      avgKm: Math.round(s.totalKm / s.count),
+      replacements: s.count,
+      vehicles: s.vehicleSet.size,
+    }))
+    .sort((a, b) => b.avgKm - a.avgKm);
 
   return {
     totalVehicles,
@@ -340,6 +418,8 @@ export async function getDashboardStats(ctx: ScopedContext) {
       orange: orangeDocs,
       red: redDocs,
     },
+    byBrand: brandAgg,
+    tyreBrandPerformance,
     challans: {
       pendingCount: pendingAgg[0]?.count ?? 0,
       pendingAmount: pendingAgg[0]?.sum ?? 0,
