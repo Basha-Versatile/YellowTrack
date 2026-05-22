@@ -2,7 +2,7 @@ import React from "react";
 
 export default function FaqsThree() {
   return (
-    <div className="grid gird-cols-1 gap-x-8 xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-x-8 xl:grid-cols-2">
       <div className="space-y-3 sm:space-y-5">
         {/* <!-- item--> */}
         <div className="py-4">

@@ -36,7 +36,7 @@ export default function ChatBoxHeader() {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="text-gray-700 hover:text-brand-500 dark:text-gray-400 dark:hover:text-white/90">
+        <button className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100 hover:text-brand-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white/90">
           <svg
             className="stroke-current"
             width="24"
@@ -53,7 +53,7 @@ export default function ChatBoxHeader() {
           </svg>
         </button>
 
-        <button className="text-gray-700 hover:text-brand-500 dark:text-gray-400 dark:hover:text-white/90">
+        <button className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100 hover:text-brand-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white/90">
           <svg
             className="fill-current"
             width="24"

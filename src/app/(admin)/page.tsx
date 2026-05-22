@@ -132,7 +132,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── COMPACT STAT CHIPS ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-2.5">
         <StatChip
           Icon={Truck}
           label="Vehicles"
@@ -751,7 +751,7 @@ function ComplianceSection({
 
         {/* Legend — clickable rows that deep-link into the compliance page.
             Hovering a legend row also drives the donut highlight. */}
-        <div className="flex-1 w-full grid grid-cols-2 gap-1.5">
+        <div className="flex-1 w-full grid grid-cols-1 2xsm:grid-cols-2 gap-1.5">
           {segments.map((s) => {
             const href = tileHref(s.key);
             const row = (

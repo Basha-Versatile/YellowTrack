@@ -340,7 +340,7 @@ export default function PortfolioPerformance() {
       <div className="max-w-full overflow-x-auto custom-scrollbar">
         <div
           id="chartFourteen"
-          className="-ml-4  min-w-[900px] xl:min-w-full pl-2"
+          className="-ml-4  min-w-[900px] lg:min-w-full pl-2"
         >
           <ReactApexChart
             options={options}

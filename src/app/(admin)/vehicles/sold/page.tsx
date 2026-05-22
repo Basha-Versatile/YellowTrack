@@ -205,7 +205,7 @@ export default function SoldVehiclesPage() {
 
                 {/* Sale details */}
                 {sale ? (
-                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-4 grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center gap-1">
                         <User className="w-3 h-3" /> Buyer

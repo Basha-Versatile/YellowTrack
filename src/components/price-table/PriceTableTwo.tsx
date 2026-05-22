@@ -28,7 +28,7 @@ const enterprisePack = [
 
 export default function PriceTableTwo() {
   return (
-    <div className="grid gap-5 gird-cols-1 sm:grid-cols-2 xl:grid-cols-3 xl:gap-6">
+    <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 xl:gap-6">
       {/* <!-- Pricing item --> */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03] xl:p-8">
         <div className="flex items-start justify-between -mb-4">

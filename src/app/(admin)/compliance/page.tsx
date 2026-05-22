@@ -237,7 +237,7 @@ export default function ComplianceOverviewPage() {
       </div>
 
       {/* KPI tiles — 3 alert tiles + Valid documents tile */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-2.5">
         <button
           type="button"
           onClick={() => setFocus(focus === "expired" ? null : "expired")}
@@ -276,8 +276,8 @@ export default function ComplianceOverviewPage() {
       </div>
 
       {/* Filters row */}
-      <div className="flex flex-wrap items-center gap-3 justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:justify-between">
+        <div className="flex items-center gap-2 overflow-x-auto sm:flex-wrap pb-1 sm:pb-0 scrollbar-hide">
           <button
             onClick={() => setDocTypeFilter("ALL")}
             className={`text-xs font-semibold px-3 h-8 rounded-lg border transition-colors inline-flex items-center gap-1.5 ${docTypeFilter === "ALL" ? "bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:border-gray-100" : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"}`}

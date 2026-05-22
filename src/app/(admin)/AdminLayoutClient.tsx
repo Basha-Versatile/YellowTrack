@@ -23,18 +23,18 @@ export default function AdminLayoutClient({
       case "/video-generator":
         return "";
       default:
-        return "p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6";
+        return "p-3 sm:p-4 md:p-6 mx-auto max-w-screen-2xl w-full";
     }
   };
 
   const mainContentMargin = isMobileOpen
     ? "ml-0"
     : isExpanded || isHovered
-    ? "xl:ml-[280px]"
-    : "xl:ml-[80px]";
+    ? "lg:ml-[280px]"
+    : "lg:ml-[80px]";
 
   return (
-    <div className="min-h-screen xl:flex">
+    <div className="min-h-screen lg:flex">
       <AppSidebar />
       <Backdrop />
       <div

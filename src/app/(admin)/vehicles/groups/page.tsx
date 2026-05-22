@@ -168,7 +168,7 @@ export default function VehicleGroupsPage() {
         </div>
       ) : (
         /* Grid View */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {groups.map((g) => { const Icon = getVehicleTypeIcon(g.icon); return (
             <div key={g.id} className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-5 hover:shadow-lg transition-all">
               <div className="flex items-start justify-between">

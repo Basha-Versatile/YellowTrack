@@ -132,7 +132,7 @@ export default function EmailContent() {
               className="flex cursor-pointer items-center px-4 py-4 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/[0.03]"
             >
               {/* Left Section */}
-              <div className="flex items-center w-1/5">
+              <div className="flex items-center w-auto sm:w-1/5 flex-shrink-0">
                 {/* Custom Checkbox */}
                 <Checkbox
                   checked={checkedItems[index]}
@@ -179,7 +179,7 @@ export default function EmailContent() {
               </div>
 
               {/* Middle Section */}
-              <div className="flex items-center w-3/5 gap-3">
+              <div className="flex items-center flex-1 min-w-0 sm:w-3/5 gap-3">
                 <p className="text-sm text-gray-500 truncate">{mail.content}</p>
                 {mail.badge && (
                   <span
@@ -197,7 +197,7 @@ export default function EmailContent() {
               </div>
 
               {/* Right Section */}
-              <div className="w-1/5 text-right">
+              <div className="hidden 2xsm:block 2xsm:w-1/5 text-right flex-shrink-0">
                 <span className="block text-xs text-gray-400">{mail.time}</span>
               </div>
             </div>

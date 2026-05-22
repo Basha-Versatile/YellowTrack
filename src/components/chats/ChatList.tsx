@@ -23,7 +23,7 @@ export default function ChatList({ isOpen, onToggle }: ChatListProps) {
     <div
       className={`flex-col overflow-auto no-scrollbar transition-all duration-300 ${
         isOpen
-          ? "fixed top-0 left-0 z-999999 h-screen bg-white dark:bg-gray-900"
+          ? "fixed top-0 left-0 z-999999 h-screen w-[min(360px,90vw)] sm:w-auto bg-white dark:bg-gray-900"
           : "hidden xl:flex"
       }`}
     >

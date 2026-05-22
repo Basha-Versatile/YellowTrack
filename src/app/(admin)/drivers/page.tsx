@@ -137,7 +137,7 @@ export default function DriversPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-2.5">
         <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center flex-shrink-0">
@@ -185,24 +185,24 @@ export default function DriversPage() {
       </div>
 
       {/* Search + Filter */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col md:flex-row gap-2 md:gap-3">
         <SearchInput
-          className="flex-1"
+          className="md:flex-1"
           value={search}
           onChange={setSearch}
           placeholder="Search by name or license..."
         />
-        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10 overflow-x-auto scrollbar-hide">
           {(["ALL", "GREEN", "YELLOW", "ORANGE", "RED"] as const).map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
+              className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all flex-shrink-0 ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
               {s !== "ALL" && <span className={`w-1.5 h-1.5 rounded-full ${s === "GREEN" ? "bg-emerald-500" : s === "YELLOW" ? "bg-amber-500" : s === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500"}`} />}
               {s === "ALL" ? "All" : s === "GREEN" ? "Active" : s === "YELLOW" ? "Upcoming Expiry" : s === "ORANGE" ? "Critical" : "Expired"}
             </button>
           ))}
         </div>
         {/* View toggle */}
-        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10 self-start">
           <button onClick={() => setView("list")} className={`rounded-lg px-2.5 transition-all ${view === "list" ? "bg-white shadow-sm dark:bg-gray-700" : ""}`}>
             <List className={`w-4 h-4 ${view === "list" ? "text-gray-900 dark:text-white" : "text-gray-400"}`} />
           </button>
@@ -223,7 +223,7 @@ export default function DriversPage() {
         </div>
       ) : view === "cards" ? (
         /* ── CARD VIEW ── */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {paginatedItems.map((driver) => {
             const daysToExpiry = Math.ceil((new Date(driver.licenseExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
             const ls = driver.licenseStatus;

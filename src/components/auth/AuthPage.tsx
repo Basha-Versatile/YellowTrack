@@ -132,7 +132,7 @@ export default function AuthPage() {
 
       {/* Main container */}
       <div className="relative z-10 w-full max-w-[880px] mx-4 sm:mx-6">
-        <div className="relative w-full h-[520px] sm:h-[500px] rounded-2xl overflow-hidden shadow-xl shadow-black/10 dark:shadow-black/50">
+        <div className="relative w-full min-h-[520px] sm:h-[500px] rounded-2xl overflow-hidden shadow-xl shadow-black/10 dark:shadow-black/50">
 
           {/* ── SIGN IN FORM PANEL ── */}
           <div

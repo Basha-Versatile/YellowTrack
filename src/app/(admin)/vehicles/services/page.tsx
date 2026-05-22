@@ -181,7 +181,7 @@ export default function VehicleServicesPage() {
         <div className="space-y-5">
           {/* Stats cards */}
           {services.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-4">
                 <div className="flex items-center gap-2 mb-2"><Wrench className="w-4 h-4 text-brand-500" /><span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Total</span></div>
                 <p className="text-2xl font-black text-gray-900 dark:text-white">{services.length}</p>
@@ -281,7 +281,7 @@ export default function VehicleServicesPage() {
             </div>
           ) : (
             /* Grid View */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {[...vehicleServiceMap.entries()].filter(([, d]) => !svcSearch || d.vehicle.registrationNumber.toLowerCase().includes(svcSearch.toLowerCase())).map(([vid, data]) => {
                 const GroupIcon = data.vehicle.group?.icon ? getVehicleTypeIcon(data.vehicle.group.icon) : Car;
                 return (

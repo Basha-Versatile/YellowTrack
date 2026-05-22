@@ -945,7 +945,7 @@ export default function VehicleDetailPage() {
                   </span>
                 </p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+              <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                 <div>
                   <p className="text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold text-[9px]">Buyer</p>
                   <p className="text-gray-900 dark:text-white font-semibold mt-0.5 truncate">{vehicle.sale.buyerName}</p>

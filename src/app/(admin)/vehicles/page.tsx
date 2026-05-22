@@ -228,29 +228,29 @@ export default function VehiclesPage() {
       )}
 
       {/* Search + Filters + View Toggle */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col md:flex-row gap-2 md:gap-3">
         <SearchInput
-          className="flex-1"
+          className="md:flex-1"
           value={search}
           onChange={setSearch}
           placeholder="Search registration, make, model..."
         />
 
-        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10 overflow-x-auto scrollbar-hide">
           {(["ALL", "PRIVATE", "COMMERCIAL"] as const).map((u) => (
             <button key={u} onClick={() => { setUsageFilter(u); fetchVehicles(1, { overrideUsage: u }); }}
-              className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all ${usageFilter === u ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
+              className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all flex-shrink-0 ${usageFilter === u ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
               {u === "ALL" ? "All" : u === "PRIVATE" ? "Private" : "Commercial"}
             </button>
           ))}
         </div>
 
-        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10 overflow-x-auto scrollbar-hide">
           {(["ALL", "GREEN", "YELLOW", "ORANGE", "RED"] as const).map((s) => {
             const dot = s === "GREEN" ? "bg-emerald-500" : s === "YELLOW" ? "bg-amber-500" : s === "ORANGE" ? "bg-red-500 animate-blink" : s === "RED" ? "bg-red-500" : "";
             return (
               <button key={s} onClick={() => { setStatusFilter(s); fetchVehicles(1, { overrideStatus: s }); }}
-                className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
+                className={`flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-all flex-shrink-0 ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}
               >
                 {s !== "ALL" && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
                 {s === "ALL" ? "All" : s === "GREEN" ? "OK" : s === "YELLOW" ? "Warn" : s === "ORANGE" ? "Critical" : "Expired"}
@@ -280,7 +280,7 @@ export default function VehiclesPage() {
         </div>
       ) : view === "cards" ? (
         /* ── CARD VIEW ── */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
           {vehicles.map((v) => {
             const grad = v.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : v.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : v.overallStatus === "ORANGE" ? "from-red-500 to-rose-600" : "from-red-500 to-rose-600";
             const shadowClr = v.overallStatus === "GREEN" ? "shadow-emerald-500/10" : v.overallStatus === "YELLOW" ? "shadow-amber-500/10" : v.overallStatus === "ORANGE" ? "shadow-red-500/10" : "shadow-red-500/10";
@@ -455,7 +455,7 @@ export default function VehiclesPage() {
                 </div>
 
                 {/* Doc pills (desktop) */}
-                <div className="hidden lg:flex items-center gap-2.5">
+                <div className="hidden md:flex items-center gap-2.5">
                   {v.complianceDocuments.slice(0, 6).map((doc) => {
                     const dotColor = doc.status === "GREEN" ? "bg-emerald-500" : doc.status === "YELLOW" ? "bg-amber-500" : doc.status === "ORANGE" ? "bg-red-500 animate-blink" : "bg-red-500";
                     const textColor = doc.status === "GREEN" ? "text-emerald-600 dark:text-emerald-400" : doc.status === "YELLOW" ? "text-amber-600 dark:text-amber-400" : doc.status === "ORANGE" ? "text-red-600 dark:text-red-400" : "text-red-600 dark:text-red-400";

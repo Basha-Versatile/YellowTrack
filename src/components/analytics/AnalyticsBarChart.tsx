@@ -128,7 +128,7 @@ export default function AnalyticsBarChart() {
         <ChartTab />
       </div>
       <div className="max-w-full overflow-x-auto custom-scrollbar">
-        <div className="-ml-5 min-w-[1300px] xl:min-w-full pl-2">
+        <div className="-ml-5 min-w-[1300px] lg:min-w-full pl-2">
           <ReactApexChart
             options={options}
             series={series}

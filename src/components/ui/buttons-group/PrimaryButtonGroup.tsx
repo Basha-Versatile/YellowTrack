@@ -3,7 +3,7 @@ import React from "react";
 export default function PrimaryButtonGroup() {
   return (
     <div className="max-w-full pb-3 overflow-x-auto custom-scrollbar xsm:pb-0">
-      <div className="min-w-[309px]">
+      <div className="min-w-[280px] 2xsm:min-w-[309px]">
         <div className="inline-flex items-center shadow-theme-xs">
           <button
             type="button"

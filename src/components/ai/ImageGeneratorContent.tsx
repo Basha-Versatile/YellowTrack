@@ -65,7 +65,7 @@ export default function ImageGeneratorContent() {
       {/* <!-- AI Response --> */}
       <div className="mb-6 flex justify-start">
         <div className="max-w-3xl">
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 2xsm:grid-cols-2 gap-3.5">
             <div className="relative">
               <Image
                 width={350}

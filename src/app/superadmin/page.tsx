@@ -100,7 +100,7 @@ export default function SuperadminDashboardPage() {
       <HeroHeader name={user?.name ?? "Super Admin"} now={now} />
 
       {/* KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
           label="Tenants"
           value={stats.tenants}

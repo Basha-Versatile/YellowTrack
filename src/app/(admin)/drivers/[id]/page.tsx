@@ -635,7 +635,7 @@ export default function DriverDetailPage() {
           </div>
 
           {/* Quick Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+          <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-3 mt-6">
             {[
               { label: "License Expiry", value: new Date(driver.licenseExpiry).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }), icon: "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25" },
               { label: "Days to Expiry", value: daysUntilExpiry > 0 ? `${daysUntilExpiry} days` : "Expired", icon: "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z", color: daysUntilExpiry > 30 ? "text-emerald-400" : daysUntilExpiry > 0 ? "text-yellow-400" : "text-red-400" },

@@ -108,7 +108,7 @@ export default function InsurancePage() {
 
   if (loading && step === "list") return (
     <div className="space-y-6"><div className="h-8 w-48 rounded-lg bg-gray-200 dark:bg-gray-800 animate-pulse" />
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">{[1,2,3,4,5].map(i => <div key={i} className="h-24 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />)}</div>
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">{[1,2,3,4,5].map(i => <div key={i} className="h-24 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />)}</div>
       <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />)}</div></div>
   );
 
@@ -168,9 +168,9 @@ export default function InsurancePage() {
         <div><h2 className="text-xl font-bold text-gray-900 dark:text-white">Compare Plans</h2>{plansVehicle && <p className="text-sm text-gray-500">{plansVehicle.registrationNumber} — {plansVehicle.make} {plansVehicle.model}</p>}</div>
       </div>
       {loadingPlans ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{[1,2,3,4,5,6].map(i => <div key={i} className="h-64 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />)}</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">{[1,2,3,4,5,6].map(i => <div key={i} className="h-64 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />)}</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {plans.map((plan) => (
             <div key={plan.id} className="rounded-2xl border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.02] overflow-hidden hover:shadow-lg transition-all">
               {plan.isRenewal && <div className="bg-emerald-500 text-white text-[10px] font-bold text-center py-1 uppercase tracking-wider">Renewal Discount</div>}
@@ -248,7 +248,7 @@ export default function InsurancePage() {
           <Plus className="w-4 h-4" />Add Policy</button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="rounded-2xl border border-gray-200/80 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.02]"><p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total</p><p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{stats.total}</p></div>
         <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 p-5 dark:border-emerald-500/20"><p className="text-[10px] font-semibold text-emerald-500/60 uppercase tracking-wider">Active</p><p className="text-2xl font-black text-emerald-600 mt-1">{stats.active}</p></div>
         <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 p-5 dark:border-amber-500/20"><p className="text-[10px] font-semibold text-amber-500/60 uppercase tracking-wider">Expiring</p><p className="text-2xl font-black text-amber-600 mt-1">{stats.expiring}</p></div>

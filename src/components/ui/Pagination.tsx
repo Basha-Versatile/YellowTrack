@@ -43,9 +43,9 @@ export default function Pagination({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 pt-2">
       {/* Left: Info + Per page */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2">
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Showing{" "}
           <span className="font-semibold text-gray-700 dark:text-gray-300">
@@ -77,7 +77,7 @@ export default function Pagination({
       </div>
 
       {/* Right: Page controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center justify-center gap-1">
         {/* First */}
         <button
           onClick={() => onPageChange(1)}

@@ -94,7 +94,7 @@ export default function NotificationDropdown() {
       <Dropdown
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
-        className="absolute -right-[100px] mt-[17px] flex w-[340px] flex-col rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:w-[380px] sm:-right-4"
+        className="absolute right-0 mt-[17px] flex w-[min(340px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:w-[380px] sm:-right-4"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-800">

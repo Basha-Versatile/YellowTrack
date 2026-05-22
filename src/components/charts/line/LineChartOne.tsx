@@ -121,7 +121,7 @@ export default function LineChartOne() {
   ];
   return (
     <div className="max-w-full overflow-x-auto custom-scrollbar">
-      <div id="chartEight" className="min-w-[1000px] xl:min-w-full">
+      <div id="chartEight" className="min-w-[1000px] lg:min-w-full">
         <ReactApexChart
           options={options}
           series={series}

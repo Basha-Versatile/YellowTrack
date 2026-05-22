@@ -136,7 +136,7 @@ export default function StatisticsChart() {
       </div>
 
       <div className="max-w-full overflow-x-auto custom-scrollbar">
-        <div className="min-w-[1000px] xl:min-w-full">
+        <div className="min-w-[1000px] lg:min-w-full">
           <ReactApexChart
             options={options}
             series={series}

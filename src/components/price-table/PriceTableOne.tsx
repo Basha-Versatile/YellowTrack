@@ -67,7 +67,7 @@ export default function PriceTableOne() {
           </div>
         </div>
 
-        <div className="grid gap-5 gird-cols-1 sm:grid-cols-2 xl:grid-cols-3 xl:gap-6">
+        <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 xl:gap-6">
           {/* <!-- Pricing item --> */}
           <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
             <span className="block mb-3 font-semibold text-gray-800 text-theme-xl dark:text-white/90">

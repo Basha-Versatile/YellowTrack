@@ -59,7 +59,7 @@ export default function Popover({ position, trigger, children }: PopoverProps) {
       {isOpen && (
         <div
           ref={popoverRef}
-          className={`absolute w-[300px]  z-99999 ${positionClasses[position]}`}
+          className={`absolute w-[min(300px,90vw)]  z-99999 ${positionClasses[position]}`}
         >
           <div className="w-full bg-white rounded-xl shadow-theme-lg dark:bg-[#1E2634]">
             {children}

@@ -150,7 +150,7 @@ export default function FunnelChart() {
       </div>
       <div className="overflow-x-auto custom-scrollbar pl-2">
         <ReactApexChart
-          className="-ml-5 min-w-[700px] xl:min-w-full"
+          className="-ml-5 min-w-[700px] lg:min-w-full"
           options={options}
           series={series}
           type="bar"

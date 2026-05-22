@@ -76,7 +76,7 @@ export default function FaqsTwo() {
       />
     ));
   return (
-    <div className="grid gird-cols-1 gap-x-8 gap-y-5 xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-x-8 gap-y-5 xl:grid-cols-2">
       <div className="space-y-3">
         {renderFaqItems(
           accordionTwoData.slice(0, 3),

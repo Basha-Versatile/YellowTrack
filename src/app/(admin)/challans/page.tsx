@@ -155,7 +155,7 @@ export default function ChallansPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-2.5">
         <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
@@ -196,15 +196,15 @@ export default function ChallansPage() {
         </div>
       </div>
 
-      {/* Search + Date Range + Status Filter + View Toggle — single row */}
-      <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-hide" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+      {/* Search + Date Range + Status Filter + View Toggle — wraps on small viewports */}
+      <div className="flex flex-wrap items-center gap-2 md:gap-3 pb-1">
         <SearchInput
-          className="w-52 flex-shrink-0"
+          className="w-full sm:w-52 sm:flex-shrink-0"
           value={search}
           onChange={setSearch}
           placeholder="Search registration no..."
         />
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 sm:flex-shrink-0">
           <Calendar className="w-4 h-4 text-gray-400" />
           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">From</span>
           <DatePicker value={dateFrom} onChange={setDateFrom} placeholder="From date" />
@@ -307,7 +307,7 @@ export default function ChallansPage() {
         </div>
       ) : (
         /* Grid View */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {paginatedVehicles.map((v) => {
             const pending = v.challans.filter((c) => c.status === "PENDING");
             const paid = v.challans.filter((c) => c.status === "PAID");

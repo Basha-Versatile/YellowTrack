@@ -30,7 +30,7 @@ const enterprisePack = [
 
 export default function PriceTableThree() {
   return (
-    <div className="grid gap-5 gird-cols-1 sm:grid-cols-2 xl:grid-cols-3 xl:gap-3 2xl:grid-cols-4">
+    <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 xl:gap-3 2xl:grid-cols-4">
       {/* <!-- Pricing item --> */}
       <div>
         <div className="rounded-2xl bg-white p-6 dark:bg-white/[0.03]">

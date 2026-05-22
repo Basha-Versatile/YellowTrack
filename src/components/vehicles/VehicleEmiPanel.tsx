@@ -380,7 +380,7 @@ export default function VehicleEmiPanel({
           )}
 
           {/* Summary strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+          <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-3 mb-5">
             <Stat
               icon={<Building2 className="w-3.5 h-3.5" />}
               label="Lender"
@@ -418,7 +418,7 @@ export default function VehicleEmiPanel({
           </div>
 
           {/* Loan summary — total / pending / count */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-1 2xsm:grid-cols-3 gap-3 mb-5">
             <SummaryTile
               label="Total amount"
               value={formatINR(summary.totalAmount)}

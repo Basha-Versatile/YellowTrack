@@ -93,7 +93,7 @@ export default function PhotoCapture({ currentPhoto, onUpload }: PhotoCapturePro
   if (cameraOpen) {
     return (
       <div className="flex flex-col items-center gap-4">
-        <div className="relative w-64 h-64 rounded-2xl overflow-hidden border-4 border-yellow-400 shadow-xl">
+        <div className="relative w-[min(16rem,80vw)] aspect-square rounded-2xl overflow-hidden border-4 border-yellow-400 shadow-xl">
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
         </div>
         <canvas ref={canvasRef} className="hidden" />

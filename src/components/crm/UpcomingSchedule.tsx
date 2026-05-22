@@ -62,7 +62,7 @@ export default function UpcomingSchedule() {
       </div>
 
       <div className="max-w-full overflow-x-auto custom-scrollbar">
-        <div className="min-w-[500px] xl:min-w-full">
+        <div className="min-w-[500px] lg:min-w-full">
           <div className="flex flex-col gap-2">
             {/* Item 1 */}
             <div className="flex cursor-pointer items-center gap-9 rounded-lg p-3 hover:bg-gray-50 dark:hover:bg-white/[0.03]">

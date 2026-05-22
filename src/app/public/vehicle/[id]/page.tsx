@@ -247,7 +247,7 @@ export default function PublicVehiclePage() {
             </svg>
             Vehicle Details
           </h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 2xsm:grid-cols-2 gap-3 sm:gap-4">
             <InfoItem label="Registration" value={vehicle.registrationNumber} />
             <InfoItem label="Make & Model" value={`${vehicle.make} ${vehicle.model}`} />
             <InfoItem label="Fuel Type" value={vehicle.fuelType} />

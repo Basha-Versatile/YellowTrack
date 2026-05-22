@@ -134,7 +134,7 @@ export default function FASTagPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <Image src="/images/fastag.png" alt="FASTag" width={100} height={20} className="h-12 w-52" />
+          <Image src="/images/fastag.png" alt="FASTag" width={100} height={20} className="h-8 w-32 sm:h-12 sm:w-52 object-contain" />
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Manage FASTags, recharge, and track toll transactions</p>
         </div>
         <button onClick={openCreate}
@@ -145,7 +145,7 @@ export default function FASTagPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-2.5">
         <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Tags</p>
           <p className="text-lg font-black text-gray-900 dark:text-white leading-none mt-1">{stats.total}</p>
@@ -165,17 +165,17 @@ export default function FASTagPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col md:flex-row gap-2 md:gap-3">
         <SearchInput
-          className="flex-1"
+          className="md:flex-1"
           value={search}
           onChange={setSearch}
           placeholder="Search by tag ID or vehicle..."
         />
-        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10">
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl h-10 overflow-x-auto scrollbar-hide">
           {["ALL", "ACTIVE", "INACTIVE", "EXPIRED"].map((s) => (
             <button key={s} onClick={() => { setStatusFilter(s); setTimeout(() => fetchData(1), 0); }}
-              className={`rounded-lg px-3 text-xs font-semibold transition-all ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
+              className={`rounded-lg px-3 text-xs font-semibold transition-all flex-shrink-0 ${statusFilter === s ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:text-gray-400"}`}>
               {s === "ALL" ? "All" : s}
             </button>
           ))}
@@ -264,7 +264,7 @@ export default function FASTagPage() {
         </div>
       ) : (
         /* ── GRID VIEW ── */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {fastags.map((f) => {
             const GroupIcon = f.vehicle.group?.icon ? getVehicleTypeIcon(f.vehicle.group.icon) : Truck;
             return (

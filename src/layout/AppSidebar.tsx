@@ -343,7 +343,7 @@ const AppSidebar: React.FC = () => {
             : "w-[80px]"
         }
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
-        xl:translate-x-0`}
+        max-w-[85vw] lg:max-w-none lg:translate-x-0`}
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -356,12 +356,12 @@ const AppSidebar: React.FC = () => {
         <Link
           href="/"
           aria-label="Yellow Track"
-          className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-black/10 dark:ring-white/10 shadow-md transition-all duration-300 ${
+          className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-white ring-1 ring-black/10 dark:ring-white/10 shadow-md transition-all duration-300 ${
             expanded ? "size-25" : "size-14"
           }`}
         >
           <Image
-            src="/images/logo/yellow-track-logo.png"
+            src="/images/logo/yellow-track-logo4.jpeg"
             alt="Yellow Track"
             fill
             sizes="80px"

@@ -39,7 +39,7 @@ export function SuperadminDashboardSkeleton() {
     <div className="space-y-6">
       <HeroSkeleton />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
@@ -192,7 +192,7 @@ export function TenantDetailSkeleton() {
       <Skeleton className="h-4 w-24" />
       <HeroSkeleton />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}

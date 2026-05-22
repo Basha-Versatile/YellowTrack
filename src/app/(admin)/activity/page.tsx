@@ -171,8 +171,8 @@ export default function ActivityLogPage() {
 
       {/* Filters */}
       <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex-1 min-w-[200px]">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          <div className="w-full sm:flex-1 sm:min-w-[200px]">
             <SearchInput
               value={search}
               onChange={(v) => { setPage(1); setSearch(v); }}
@@ -183,7 +183,7 @@ export default function ActivityLogPage() {
           <select
             value={userId}
             onChange={(e) => { setPage(1); setUserId(e.target.value); }}
-            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 min-w-[160px]"
+            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 w-full sm:w-auto sm:min-w-[160px]"
           >
             <option value="">All users</option>
             {actors.map((a) => (
@@ -195,7 +195,7 @@ export default function ActivityLogPage() {
           <select
             value={entityType}
             onChange={(e) => { setPage(1); setEntityType(e.target.value); }}
-            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 min-w-[150px]"
+            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 w-full sm:w-auto sm:min-w-[150px]"
           >
             {ENTITY_TYPES.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>

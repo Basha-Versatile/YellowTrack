@@ -354,7 +354,7 @@ export default function OnboardVehiclePage() {
                   <input type="text" name="registrationNumber" placeholder="KA 01 AB 1234" value={mf.registrationNumber} onChange={handleMfChange} className="w-full h-14 rounded-xl border-2 border-gray-300 bg-white px-5 text-xl font-mono font-black tracking-[0.25em] text-gray-900 placeholder:text-gray-300 placeholder:font-normal placeholder:tracking-normal placeholder:text-base focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-600 dark:bg-gray-900 dark:text-white transition-all" />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {([
                     { name: "ownerName", label: "Owner Name", placeholder: "Vehicle owner", req: false },
                     { name: "make", label: "Make", placeholder: "e.g. Tata, Mahindra", req: true },
@@ -415,7 +415,7 @@ export default function OnboardVehiclePage() {
                 {/* Permit Type */}
                 <div className="mt-5">
                   <label className="mb-2.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Permit Type</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-2.5">
                     {[
                       { val: "GOODS", label: "Goods", desc: "Cargo transport", Icon: Package },
                       { val: "PASSENGER", label: "Passenger", desc: "People transport", Icon: Users },
@@ -435,7 +435,7 @@ export default function OnboardVehiclePage() {
                 {/* Technical specs */}
                 <div className="mt-5">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Technical Specs (Optional)</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-3">
                     {([
                       { name: "chassisNumber", label: "Chassis No.", placeholder: "CHAS...", inputType: "text" },
                       { name: "engineNumber", label: "Engine No.", placeholder: "ENG...", inputType: "text" },

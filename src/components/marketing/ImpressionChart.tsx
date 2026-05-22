@@ -133,7 +133,7 @@ export default function ImpressionChart() {
         </div>
       </div>
       <div className="max-w-full overflow-x-auto custom-scrollbar">
-        <div className="min-w-[1000px] xl:min-w-full -ml-4 pl-2">
+        <div className="min-w-[1000px] lg:min-w-full -ml-4 pl-2">
           <ReactApexChart
             options={options}
             series={series}

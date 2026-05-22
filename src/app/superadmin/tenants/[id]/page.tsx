@@ -526,7 +526,7 @@ export default function TenantDetailPage() {
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-2.5">
               {quota.map((q) => (
                 <QuotaUsageCard key={q.resource} usage={q} />
               ))}

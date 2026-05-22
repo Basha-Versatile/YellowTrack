@@ -11,13 +11,13 @@ export default function TicketDetails() {
           </h3>
         </div>
         <ul className="divide-y divide-gray-100 px-6 py-3 dark:divide-gray-800">
-          <li className="grid grid-cols-2 gap-5 py-2.5">
+          <li className="grid grid-cols-1 2xsm:grid-cols-2 gap-2 2xsm:gap-5 py-2.5">
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Customer
             </span>
             <span className="text-gray-700 dark:text-gray-400">John Doe</span>
           </li>
-          <li className="grid grid-cols-2 gap-5 py-2.5">
+          <li className="grid grid-cols-1 2xsm:grid-cols-2 gap-2 2xsm:gap-5 py-2.5">
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Email
             </span>
@@ -25,7 +25,7 @@ export default function TicketDetails() {
               jhondelin@gmail.com
             </span>
           </li>
-          <li className="grid grid-cols-2 gap-5 py-2.5">
+          <li className="grid grid-cols-1 2xsm:grid-cols-2 gap-2 2xsm:gap-5 py-2.5">
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Ticket ID
             </span>
@@ -33,7 +33,7 @@ export default function TicketDetails() {
               #346520
             </span>
           </li>
-          <li className="grid grid-cols-2 gap-5 py-2.5">
+          <li className="grid grid-cols-1 2xsm:grid-cols-2 gap-2 2xsm:gap-5 py-2.5">
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Category
             </span>
@@ -41,7 +41,7 @@ export default function TicketDetails() {
               General Support
             </span>
           </li>
-          <li className="grid grid-cols-2 gap-5 py-2.5">
+          <li className="grid grid-cols-1 2xsm:grid-cols-2 gap-2 2xsm:gap-5 py-2.5">
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Created
             </span>
@@ -49,7 +49,7 @@ export default function TicketDetails() {
               Dec 20, 2028
             </span>
           </li>
-          <li className="grid grid-cols-2 gap-5 py-2.5">
+          <li className="grid grid-cols-1 2xsm:grid-cols-2 gap-2 2xsm:gap-5 py-2.5">
             <span className="text-sm text-gray-500 dark:text-gray-400">
               Status
             </span>

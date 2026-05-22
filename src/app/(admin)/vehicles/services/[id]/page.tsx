@@ -128,7 +128,7 @@ export default function VehicleServiceDetailPage() {
       </div>
 
       {/* Stats — colored cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 2xsm:grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-4 relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-400 to-brand-500" />
           <div className="flex items-center gap-2 mb-2"><Wrench className="w-4 h-4 text-brand-500" /><span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Total</span></div>
