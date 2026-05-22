@@ -350,14 +350,14 @@ const AppSidebar: React.FC = () => {
       {/* Logo */}
       <div
         className={`px-3 flex items-center justify-center transition-all duration-300 ${
-          expanded ? "pt-6 pb-5" : "pt-4 pb-3"
+          expanded ? "pt-2 pb-2" : "pt-4 pb-3"
         }`}
       >
         <Link
           href="/"
           aria-label="Yellow Track"
           className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-black/10 dark:ring-white/10 shadow-md transition-all duration-300 ${
-            expanded ? "size-20" : "size-14"
+            expanded ? "size-25" : "size-14"
           }`}
         >
           <Image
