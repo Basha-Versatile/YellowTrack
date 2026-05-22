@@ -356,7 +356,7 @@ const AppSidebar: React.FC = () => {
         <Link
           href="/"
           aria-label="Yellow Track"
-          className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-white ring-1 ring-black/10 dark:ring-white/10 shadow-md transition-all duration-300 ${
+          className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-white transition-all duration-300 ${
             expanded ? "size-25" : "size-14"
           }`}
         >
