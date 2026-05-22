@@ -1,9 +1,9 @@
 "use client";
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 import { usePathname } from "next/navigation";
-import { YellowTrackLogo } from "@/components/icons/YellowTrackLogo";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -349,24 +349,24 @@ const AppSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div
-        className={`flex items-center overflow-hidden transition-all duration-300 ${
-          expanded
-            ? "px-5 pt-4 pb-3 h-30 justify-start"
-            : "px-1 py-1 h-25 justify-center"
+        className={`px-3 flex items-center justify-center transition-all duration-300 ${
+          expanded ? "pt-6 pb-5" : "pt-4 pb-3"
         }`}
       >
         <Link
           href="/"
           aria-label="Yellow Track"
-          className={`flex items-center justify-center ${
-            expanded ? "w-full h-full" : "w-full"
+          className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-black/10 dark:ring-white/10 shadow-md transition-all duration-300 ${
+            expanded ? "size-20" : "size-14"
           }`}
         >
-          <YellowTrackLogo
-            stretch={expanded}
-            className={`flex-shrink-0 ${
-              expanded ? "w-full h-full" : "w-full h-auto"
-            }`}
+          <Image
+            src="/images/logo/yellow-track-logo.png"
+            alt="Yellow Track"
+            fill
+            sizes="80px"
+            className="object-contain p-1.5"
+            priority
           />
         </Link>
       </div>
