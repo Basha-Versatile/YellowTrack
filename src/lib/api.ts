@@ -406,12 +406,13 @@ export const driverAPI = {
   autoCreate: (licenseNumber: string, dob?: string) =>
     api.post("/drivers/auto", dob ? { licenseNumber, dob } : { licenseNumber }),
   toggleVerification: (id: string) => api.patch(`/drivers/${id}/toggle-verification`),
-  updateDocExpiry: (docId: string, expiryDate?: string, lifetime?: boolean) =>
-    api.put(`/drivers/documents/${docId}/expiry`, { expiryDate, lifetime }),
-  uploadDocument: (driverId: string, file: File, type: string, expiryDate?: string, lifetime?: boolean) => {
+  updateDocExpiry: (docId: string, expiryDate?: string, lifetime?: boolean, issuedDate?: string | null) =>
+    api.put(`/drivers/documents/${docId}/expiry`, { expiryDate, lifetime, issuedDate }),
+  uploadDocument: (driverId: string, file: File, type: string, expiryDate?: string, lifetime?: boolean, issuedDate?: string) => {
     const formData = new FormData();
     formData.append("document", file);
     formData.append("type", type);
+    if (issuedDate) formData.append("issuedDate", issuedDate);
     if (expiryDate) formData.append("expiryDate", expiryDate);
     if (lifetime) formData.append("lifetime", "true");
     return api.post(`/drivers/${driverId}/documents`, formData, {
@@ -485,7 +486,7 @@ export const complianceAPI = {
   },
   removeDocumentFile: (docId: string, url: string) =>
     api.delete(`/compliance/${docId}/upload`, { data: { url } }),
-  updateExpiry: (docId: string, data: { type: string; expiryDate?: string; lifetime?: boolean }) =>
+  updateExpiry: (docId: string, data: { type: string; issuedDate?: string | null; expiryDate?: string; lifetime?: boolean }) =>
     api.put(`/compliance/${docId}`, data),
   renewDocument: (docId: string, data: { expiryDate?: string; type: string; lifetime?: boolean }, files?: File | File[]) => {
     const formData = new FormData();
@@ -502,9 +503,10 @@ export const complianceAPI = {
   },
   getHistory: (vehicleId: string, type: string) =>
     api.get(`/compliance/history/${vehicleId}/${type}`),
-  createDocument: (vehicleId: string, data: { type: string; expiryDate?: string; lifetime?: boolean }, file?: File) => {
+  createDocument: (vehicleId: string, data: { type: string; issuedDate?: string; expiryDate?: string; lifetime?: boolean }, file?: File) => {
     const formData = new FormData();
     formData.append("type", data.type);
+    if (data.issuedDate) formData.append("issuedDate", data.issuedDate);
     if (data.expiryDate) formData.append("expiryDate", data.expiryDate);
     if (data.lifetime) formData.append("lifetime", "true");
     if (file) formData.append("document", file);

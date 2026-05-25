@@ -9,6 +9,7 @@ interface DatePickerProps {
   placeholder?: string;
   className?: string;
   minDate?: string;
+  maxDate?: string;
 }
 
 // flatpickr parses string inputs using `dateFormat` by default. Our values
@@ -30,6 +31,7 @@ export default function DatePicker({
   placeholder = "Select date",
   className = "",
   minDate,
+  maxDate,
 }: DatePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const fpRef = useRef<flatpickr.Instance | null>(null);
@@ -43,6 +45,7 @@ export default function DatePicker({
       dateFormat: "d M Y",
       defaultDate: isoToLocalDate(value),
       minDate: isoToLocalDate(minDate) || undefined,
+      maxDate: isoToLocalDate(maxDate) || undefined,
       allowInput: false,
       onChange: (selectedDates) => {
         if (selectedDates.length > 0) {
@@ -67,6 +70,15 @@ export default function DatePicker({
       fpRef.current.clear();
     }
   }, [value]);
+
+  // Keep min/max constraints reactive — flatpickr accepts undefined to drop them.
+  useEffect(() => {
+    fpRef.current?.set("minDate", isoToLocalDate(minDate) || undefined);
+  }, [minDate]);
+
+  useEffect(() => {
+    fpRef.current?.set("maxDate", isoToLocalDate(maxDate) || undefined);
+  }, [maxDate]);
 
   return (
     <div className="relative">

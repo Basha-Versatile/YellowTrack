@@ -14,6 +14,9 @@ const driverDocumentSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     driverId: { type: Schema.Types.ObjectId, ref: "Driver", required: true },
     type: { type: String, required: true, trim: true, maxlength: 80 },
+    // `issuedDate` is the "valid from" date — when the doc started being
+    // valid. Optional so existing docs without it stay legal.
+    issuedDate: { type: Date },
     expiryDate: { type: Date },
     documentUrl: { type: String },
     status: { type: String, enum: ["GREEN", "YELLOW", "RED"], default: "GREEN" },

@@ -1,5 +1,6 @@
 import { withRoute, parseJson } from "@/lib/api-handler";
 import { success } from "@/lib/http";
+import { BadRequestError } from "@/lib/errors";
 import { tenantOf } from "@/lib/auth/tenant-context";
 import { uploadComplianceDocSchema } from "@/validations/document.schema";
 import * as complianceRepo from "@/server/repositories/compliance.repository";
@@ -18,8 +19,38 @@ export const PUT = withRoute<{ id: string }>(
       : rawExpiry instanceof Date
         ? rawExpiry
         : new Date(rawExpiry);
+    const rawIssued = input.lifetime ? null : (input.issuedDate as Date | string | null | undefined);
+    // `issuedDate` semantics here:
+    //   - `lifetime: true` → clear it (null)
+    //   - explicit value provided → set to that date
+    //   - missing from payload → leave existing value alone (undefined)
+    const finalIssued: Date | null | undefined =
+      input.lifetime
+        ? null
+        : rawIssued === undefined
+          ? undefined
+          : rawIssued === null || rawIssued === ""
+            ? null
+            : rawIssued instanceof Date
+              ? rawIssued
+              : new Date(rawIssued);
+    if (
+      finalIssued instanceof Date &&
+      finalExpiry instanceof Date &&
+      finalIssued > finalExpiry
+    ) {
+      throw new BadRequestError(
+        "Valid-from date cannot be after the expiry date",
+      );
+    }
     const status = calculateComplianceStatus(finalExpiry);
-    const doc = await complianceRepo.updateExpiry(ctx, params.id, finalExpiry, status);
+    const doc = await complianceRepo.updateExpiry(
+      ctx,
+      params.id,
+      finalExpiry,
+      status,
+      finalIssued,
+    );
     const d = doc as { type?: string };
     await logFromRequest(req, ctx, session, {
       action: "compliance.update",

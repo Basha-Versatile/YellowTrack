@@ -33,6 +33,7 @@ export const POST = withRoute<{ id: string }>(
     const { fields, files } = await parseMultipart(req);
     const input = uploadComplianceDocSchema.parse({
       type: firstString(fields, "type"),
+      issuedDate: firstString(fields, "issuedDate"),
       expiryDate: firstString(fields, "expiryDate"),
       lifetime: firstString(fields, "lifetime"),
     });
@@ -53,6 +54,15 @@ export const POST = withRoute<{ id: string }>(
           ? input.expiryDate
           : new Date(input.expiryDate as string)
         : null;
+    const finalIssued: Date | null = input.issuedDate
+      ? input.issuedDate instanceof Date
+        ? input.issuedDate
+        : new Date(input.issuedDate as string)
+      : null;
+
+    if (finalIssued && finalExpiry && finalIssued > finalExpiry) {
+      throw new BadRequestError("Valid-from date cannot be after the expiry date");
+    }
 
     if (!input.lifetime && !finalExpiry && !file) {
       throw new BadRequestError("Provide an expiry date, mark as lifetime, or upload a file");
@@ -61,6 +71,7 @@ export const POST = withRoute<{ id: string }>(
     const doc = await complianceRepo.createOne(ctx, {
       vehicleId: params.id,
       type: input.type,
+      issuedDate: finalIssued,
       expiryDate: finalExpiry,
       documentUrl: file?.url ?? null,
       status: calculateComplianceStatus(finalExpiry),

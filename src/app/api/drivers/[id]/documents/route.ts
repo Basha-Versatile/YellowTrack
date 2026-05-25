@@ -15,9 +15,19 @@ export const POST = withRoute<{ id: string }>(
 
     const input = uploadDriverDocSchema.parse({
       type: firstString(fields, "type"),
+      issuedDate: firstString(fields, "issuedDate"),
       expiryDate: firstString(fields, "expiryDate"),
       lifetime: firstString(fields, "lifetime"),
     });
+
+    if (
+      !input.lifetime &&
+      input.issuedDate instanceof Date &&
+      input.expiryDate instanceof Date &&
+      input.issuedDate > input.expiryDate
+    ) {
+      throw new BadRequestError("Valid-from date cannot be after the expiry date");
+    }
 
     const file = firstFile(files, "document");
     if (!file) throw new BadRequestError("File is required");

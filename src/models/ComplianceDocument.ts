@@ -17,6 +17,10 @@ const complianceDocumentSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true },
     type: { type: String, required: true }, // kept as string to support route_permit variants
+    // `issuedDate` is the "valid from" date — the day the document was
+    // issued / started being valid. Optional because legacy docs were
+    // added before this field existed.
+    issuedDate: { type: Date },
     expiryDate: { type: Date },
     // `documentUrl` is kept for back-compat (single primary file URL,
     // mirrors documentUrls[0]). New code should read `documentUrls`.

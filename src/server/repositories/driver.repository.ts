@@ -204,6 +204,7 @@ export async function updateDocumentExpiry(
   ctx: ScopedContext,
   docId: string,
   expiryDate: Date | string | null,
+  issuedDate?: Date | null,
 ) {
   const prev = await DriverDocument.findOne(
     tenantFilter(ctx, { _id: docId }),
@@ -213,10 +214,15 @@ export async function updateDocumentExpiry(
   const beforeExpiry = prev.expiryDate ?? null;
   let updated;
 
+  // Build the patch so `issuedDate === undefined` leaves the field alone,
+  // while `null` actively clears it (e.g. Lifetime toggle).
+  const issuedPatch: Record<string, unknown> =
+    issuedDate === undefined ? {} : { issuedDate };
+
   if (!expiryDate) {
     updated = await DriverDocument.findOneAndUpdate(
       tenantFilter(ctx, { _id: docId }),
-      { expiryDate: null, status: "GREEN" },
+      { expiryDate: null, status: "GREEN", ...issuedPatch },
       { new: true },
     );
   } else {
@@ -227,7 +233,7 @@ export async function updateDocumentExpiry(
       days <= 0 ? "RED" : days <= 7 ? "ORANGE" : days <= 30 ? "YELLOW" : "GREEN";
     updated = await DriverDocument.findOneAndUpdate(
       tenantFilter(ctx, { _id: docId }),
-      { expiryDate: new Date(expiryDate), status },
+      { expiryDate: new Date(expiryDate), status, ...issuedPatch },
       { new: true },
     );
   }

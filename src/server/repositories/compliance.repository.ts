@@ -122,14 +122,20 @@ export async function updateExpiry(
   id: string,
   expiryDate: Date | null,
   status: string,
+  issuedDate?: Date | null,
 ) {
+  // Build the patch explicitly so passing `undefined` leaves the existing
+  // value untouched, while passing `null` actively clears it (e.g. when the
+  // user turns on Lifetime validity).
+  const patch: Record<string, unknown> = {
+    expiryDate,
+    status,
+    lastVerifiedAt: new Date(),
+  };
+  if (issuedDate !== undefined) patch.issuedDate = issuedDate;
   return ComplianceDocument.findOneAndUpdate(
     tenantFilter(ctx, { _id: id }),
-    {
-      expiryDate,
-      status,
-      lastVerifiedAt: new Date(),
-    },
+    patch,
   );
 }
 

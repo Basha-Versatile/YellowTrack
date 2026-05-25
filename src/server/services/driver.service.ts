@@ -304,7 +304,12 @@ export async function autoCreateDriver(
 export async function uploadDriverDocument(
   ctx: ScopedContext,
   driverId: string,
-  docData: { type: string; expiryDate?: Date | string | null; lifetime: boolean },
+  docData: {
+    type: string;
+    issuedDate?: Date | string | null;
+    expiryDate?: Date | string | null;
+    lifetime: boolean;
+  },
   fileUrl: string,
 ) {
   const driver = await driverRepo.findById(ctx, driverId);
@@ -315,11 +320,17 @@ export async function uploadDriverDocument(
     : docData.expiryDate
       ? new Date(docData.expiryDate)
       : null;
+  const issuedDate = docData.lifetime
+    ? null
+    : docData.issuedDate
+      ? new Date(docData.issuedDate)
+      : null;
   const status = calculateComplianceStatus(expiryDate);
 
   const newData = {
     driverId,
     type: docData.type,
+    issuedDate,
     expiryDate,
     documentUrl: fileUrl,
     status,

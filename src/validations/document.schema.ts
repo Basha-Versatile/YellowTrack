@@ -17,6 +17,7 @@ export const uploadComplianceDocSchema = z.object({
     .min(1, "Document type is required")
     .max(80, "Document type must be at most 80 characters")
     .transform((v) => v.toUpperCase().replace(/[^A-Z0-9 _-]/g, "").replace(/\s+/g, "_")),
+  issuedDate: optionalDate,
   expiryDate: optionalDate,
   lifetime: lifetimeFlag,
 });
@@ -28,6 +29,7 @@ export const uploadDriverDocSchema = z.object({
     .min(1, "Document type is required")
     .max(80, "Document type must be at most 80 characters")
     .transform((v) => v.toUpperCase().replace(/[^A-Z0-9 _-]/g, "").replace(/\s+/g, "_")),
+  issuedDate: optionalDate,
   expiryDate: optionalDate,
   lifetime: lifetimeFlag,
 });

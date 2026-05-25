@@ -181,6 +181,7 @@ function todayISO(): string {
 interface DriverDoc {
   id: string;
   type: string;
+  issuedDate: string | null;
   expiryDate: string | null;
   documentUrl: string | null;
   status: string;
@@ -260,12 +261,14 @@ export default function DriverDetailPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploadType, setUploadType] = useState("DL");
   const [uploadCustomLabel, setUploadCustomLabel] = useState("");
+  const [uploadIssued, setUploadIssued] = useState("");
   const [uploadExpiry, setUploadExpiry] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadLifetime, setUploadLifetime] = useState(false);
   const [editingDocExpiry, setEditingDocExpiry] = useState<string | null>(null);
+  const [docIssuedValue, setDocIssuedValue] = useState("");
   const [docExpiryValue, setDocExpiryValue] = useState("");
   const [savingDocExpiry, setSavingDocExpiry] = useState(false);
   const [editDocLifetime, setEditDocLifetime] = useState(false);
@@ -464,12 +467,23 @@ export default function DriverDetailPage() {
     e.preventDefault();
     if (!uploadFile) { setUploadError("File is required"); return; }
     if (!uploadLifetime && !uploadExpiry) { setUploadError("Expiry date is required (or select Lifetime)"); return; }
+    if (!uploadLifetime && uploadIssued && uploadExpiry && uploadIssued > uploadExpiry) {
+      setUploadError("Valid-from date must be on or before the expiry date");
+      return;
+    }
     const finalType = uploadType === "OTHER" ? uploadCustomLabel.trim() : uploadType;
     if (!finalType) { setUploadError("Please enter a document name"); return; }
     setUploading(true); setUploadError("");
     try {
-      await driverAPI.uploadDocument(id, uploadFile, finalType, uploadLifetime ? undefined : uploadExpiry, uploadLifetime);
-      setShowUpload(false); setUploadFile(null); setUploadExpiry(""); setUploadLifetime(false); setUploadCustomLabel("");
+      await driverAPI.uploadDocument(
+        id,
+        uploadFile,
+        finalType,
+        uploadLifetime ? undefined : uploadExpiry,
+        uploadLifetime,
+        uploadLifetime || !uploadIssued ? undefined : uploadIssued,
+      );
+      setShowUpload(false); setUploadFile(null); setUploadIssued(""); setUploadExpiry(""); setUploadLifetime(false); setUploadCustomLabel("");
       toast.success("Document Uploaded", "Driver document uploaded successfully");
       fetchDriver();
     } catch (err: unknown) {
@@ -495,10 +509,21 @@ export default function DriverDetailPage() {
 
   const handleDocExpiryUpdate = async (docId: string) => {
     if (!editDocLifetime && !docExpiryValue) return;
+    if (!editDocLifetime && docIssuedValue && docExpiryValue && docIssuedValue > docExpiryValue) {
+      toast.error("Invalid dates", "Valid-from date must be on or before the expiry date");
+      return;
+    }
     setSavingDocExpiry(true);
     try {
-      await driverAPI.updateDocExpiry(docId, editDocLifetime ? undefined : docExpiryValue, editDocLifetime);
+      await driverAPI.updateDocExpiry(
+        docId,
+        editDocLifetime ? undefined : docExpiryValue,
+        editDocLifetime,
+        // null = explicitly clear (when user empties an existing issue date).
+        editDocLifetime ? null : docIssuedValue ? docIssuedValue : null,
+      );
       setEditingDocExpiry(null);
+      setDocIssuedValue("");
       setDocExpiryValue("");
       setEditDocLifetime(false);
       toast.success("Expiry Updated", editDocLifetime ? "Document set to lifetime validity" : "Document expiry date updated");
@@ -623,6 +648,7 @@ export default function DriverDetailPage() {
                 const available = DOC_TYPES.filter((dt) => !driver.documents.some((d) => d.type === dt.value));
                 if (available.length === 0) { toast.warning("All Uploaded", "All document types are already uploaded. Use Renew to update."); return; }
                 setUploadType(available[0].value);
+                setUploadIssued("");
                 setUploadExpiry(todayISO());
                 setUploadLifetime(false);
                 setShowUpload(!showUpload);
@@ -688,12 +714,26 @@ export default function DriverDetailPage() {
 
                 <div>
                   <label className="flex items-center gap-2 cursor-pointer mb-2">
-                    <input type="checkbox" checked={uploadLifetime} onChange={(e) => { setUploadLifetime(e.target.checked); if (e.target.checked) setUploadExpiry(""); }}
+                    <input type="checkbox" checked={uploadLifetime} onChange={(e) => { setUploadLifetime(e.target.checked); if (e.target.checked) { setUploadExpiry(""); setUploadIssued(""); } }}
                       className="w-4 h-4 rounded border-gray-300 text-yellow-500 focus:ring-yellow-400" />
                     <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Lifetime validity (no expiry)</span>
                   </label>
                   {!uploadLifetime && (
-                    <DatePicker value={uploadExpiry} onChange={setUploadExpiry} placeholder="Select expiry date" />
+                    <div className="grid grid-cols-1 2xsm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Valid from <span className="text-gray-300 font-normal lowercase">(optional)</span></label>
+                        <DatePicker value={uploadIssued} onChange={setUploadIssued} placeholder="Issue date" maxDate={uploadExpiry || undefined} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Valid to</label>
+                        <DatePicker value={uploadExpiry} onChange={setUploadExpiry} placeholder="Expiry date" minDate={uploadIssued || undefined} />
+                      </div>
+                    </div>
+                  )}
+                  {!uploadLifetime && (
+                    <p className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+                      Past dates are allowed when logging an old or already-expired document.
+                    </p>
                   )}
                 </div>
 
@@ -819,6 +859,7 @@ export default function DriverDetailPage() {
               </h3>
               <button onClick={() => {
                 setUploadType(DOC_TYPES[0].value);
+                setUploadIssued("");
                 setUploadExpiry(todayISO());
                 setUploadLifetime(false);
                 setShowUpload(true);
@@ -834,7 +875,7 @@ export default function DriverDetailPage() {
                   <FileText className="w-12 h-12 text-gray-200 dark:text-gray-700 mx-auto mb-3" strokeWidth={1} />
                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">No documents uploaded yet</p>
                   <p className="text-xs text-gray-400 mb-3">Upload driving license, medical certificate, or other documents</p>
-                  <button onClick={() => { setUploadType(DOC_TYPES[0].value); setUploadExpiry(todayISO()); setUploadLifetime(false); setShowUpload(true); }}
+                  <button onClick={() => { setUploadType(DOC_TYPES[0].value); setUploadIssued(""); setUploadExpiry(todayISO()); setUploadLifetime(false); setShowUpload(true); }}
                     className="inline-flex items-center gap-2 text-sm font-semibold text-yellow-600 dark:text-yellow-400 hover:text-yellow-700">
                     <Plus className="w-4 h-4" />
                     Upload first document
@@ -868,16 +909,22 @@ export default function DriverDetailPage() {
                             </div>
                           </div>
                         </div>
-                        <p className="text-xs text-gray-500 flex items-center gap-1.5 mb-3">
+                        <p className="text-xs text-gray-500 flex items-center gap-1.5 mb-1">
                           <Clock className="w-3.5 h-3.5" />
                           {doc.expiryDate
                             ? <>{new Date(doc.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}{docExpDays !== null && docExpDays > 0 && <span className="text-gray-400">({docExpDays}d left)</span>}</>
                             : <span className="text-emerald-600 dark:text-emerald-400 font-medium">Lifetime</span>}
-                          <button onClick={() => { setEditingDocExpiry(doc.id); setEditDocLifetime(!doc.expiryDate); setDocExpiryValue(doc.expiryDate ? new Date(doc.expiryDate).toISOString().split("T")[0] : ""); }}
-                            className="text-yellow-500 hover:text-yellow-600 ml-1" title="Edit expiry">
+                          <button onClick={() => { setEditingDocExpiry(doc.id); setEditDocLifetime(!doc.expiryDate); setDocExpiryValue(doc.expiryDate ? new Date(doc.expiryDate).toISOString().split("T")[0] : ""); setDocIssuedValue(doc.issuedDate ? new Date(doc.issuedDate).toISOString().split("T")[0] : ""); }}
+                            className="text-yellow-500 hover:text-yellow-600 ml-1" title="Edit validity">
                             <Pencil className="w-3 h-3" />
                           </button>
                         </p>
+                        {doc.issuedDate && (
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-3">
+                            From: {new Date(doc.issuedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          </p>
+                        )}
+                        {!doc.issuedDate && <div className="mb-3" />}
                         <div className="flex items-center gap-3 pt-3 border-t border-gray-200/50 dark:border-gray-700/50">
                           {doc.documentUrl ? (
                             <>
@@ -1388,30 +1435,41 @@ export default function DriverDetailPage() {
       {/* Edit Expiry Modal */}
       {editingDocExpiry && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setEditingDocExpiry(null); setDocExpiryValue(""); }} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setEditingDocExpiry(null); setDocExpiryValue(""); setDocIssuedValue(""); }} />
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
             <div className="bg-gradient-to-r from-yellow-500 to-yellow-400 px-6 py-5">
-              <h3 className="text-lg font-bold text-white">Edit Expiry Date</h3>
+              <h3 className="text-lg font-bold text-white">Edit Document Validity</h3>
               <p className="text-white/70 text-sm mt-0.5">{(() => { const t = driver.documents.find((doc) => doc.id === editingDocExpiry)?.type; return t ? formatDocType(t) : "Document"; })()}</p>
             </div>
             <div className="p-6 space-y-5">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={editDocLifetime} onChange={(e) => { setEditDocLifetime(e.target.checked); if (e.target.checked) setDocExpiryValue(""); }}
+                <input type="checkbox" checked={editDocLifetime} onChange={(e) => { setEditDocLifetime(e.target.checked); if (e.target.checked) { setDocExpiryValue(""); setDocIssuedValue(""); } }}
                   className="w-4 h-4 rounded border-gray-300 text-yellow-500 focus:ring-yellow-400" />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Lifetime validity (no expiry)</span>
               </label>
               {!editDocLifetime && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">New Expiry Date</label>
-                  <DatePicker value={docExpiryValue} onChange={setDocExpiryValue} placeholder="Select expiry date" />
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                      Valid from <span className="text-gray-300 font-normal normal-case">(optional)</span>
+                    </label>
+                    <DatePicker key={`edit-driver-issued-${editingDocExpiry}`} value={docIssuedValue} onChange={setDocIssuedValue} placeholder="Issue date" maxDate={docExpiryValue || undefined} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Valid to</label>
+                    <DatePicker key={`edit-driver-expiry-${editingDocExpiry}`} value={docExpiryValue} onChange={setDocExpiryValue} placeholder="Expiry date" minDate={docIssuedValue || undefined} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                    Past dates are allowed — useful for correcting a backdated or already-expired document.
+                  </p>
                 </div>
               )}
               <div className="flex gap-3">
                 <button onClick={() => handleDocExpiryUpdate(editingDocExpiry)} disabled={savingDocExpiry || (!editDocLifetime && !docExpiryValue)}
                   className="flex-1 h-11 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg shadow-yellow-500/25 transition-all disabled:opacity-50 flex items-center justify-center">
-                  {savingDocExpiry ? "Saving..." : editDocLifetime ? "Set Lifetime" : "Update Expiry"}
+                  {savingDocExpiry ? "Saving..." : editDocLifetime ? "Set Lifetime" : "Update"}
                 </button>
-                <button onClick={() => { setEditingDocExpiry(null); setDocExpiryValue(""); setEditDocLifetime(false); }}
+                <button onClick={() => { setEditingDocExpiry(null); setDocExpiryValue(""); setDocIssuedValue(""); setEditDocLifetime(false); }}
                   className="h-11 px-5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 transition-all">Cancel</button>
               </div>
             </div>

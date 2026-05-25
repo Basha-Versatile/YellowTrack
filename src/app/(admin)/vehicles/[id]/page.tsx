@@ -33,6 +33,7 @@ interface ComplianceDoc {
   id: string;
   type: string;
   status: string;
+  issuedDate: string | null;
   expiryDate: string | null;
   documentUrl: string | null;
   documentUrls?: string[];
@@ -408,6 +409,7 @@ export default function VehicleDetailPage() {
   const [fastagRecharging, setFastagRecharging] = useState(false);
   const [editingExpiry, setEditingExpiry] = useState<string | null>(null);
   const [expiryValue, setExpiryValue] = useState("");
+  const [editIssued, setEditIssued] = useState("");
   const [savingExpiry, setSavingExpiry] = useState(false);
 
   // Challan detail + sync
@@ -450,6 +452,7 @@ export default function VehicleDetailPage() {
   const [addingCompliance, setAddingCompliance] = useState(false);
   const [addType, setAddType] = useState<string>("RC");
   const [addCustomLabel, setAddCustomLabel] = useState("");
+  const [addIssued, setAddIssued] = useState("");
   const [addExpiry, setAddExpiry] = useState("");
   const [addLifetime, setAddLifetime] = useState(false);
   const [addFile, setAddFile] = useState<File | null>(null);
@@ -584,11 +587,24 @@ export default function VehicleDetailPage() {
 
   const handleExpiryUpdate = async (docId: string, docType: string) => {
     if (!editLifetime && !expiryValue) return;
+    if (!editLifetime && editIssued && expiryValue && editIssued > expiryValue) {
+      toast.error("Invalid dates", "Valid-from date must be on or before the expiry date");
+      return;
+    }
     setSavingExpiry(true);
     try {
-      await complianceAPI.updateExpiry(docId, { type: docType, expiryDate: editLifetime ? undefined : expiryValue, lifetime: editLifetime });
+      await complianceAPI.updateExpiry(docId, {
+        type: docType,
+        // null = explicitly clear the issuedDate (when the user empties the
+        // field on a doc that previously had one). undefined keeps the
+        // server-side value untouched.
+        issuedDate: editLifetime ? null : editIssued ? editIssued : null,
+        expiryDate: editLifetime ? undefined : expiryValue,
+        lifetime: editLifetime,
+      });
       setEditingExpiry(null);
       setExpiryValue("");
+      setEditIssued("");
       setEditLifetime(false);
       toast.success("Expiry Updated", editLifetime ? "Document set to lifetime validity" : "Document expiry date has been updated");
       fetchVehicle();
@@ -602,6 +618,7 @@ export default function VehicleDetailPage() {
     const firstAvailable = (Object.keys(DOC_LABELS) as string[]).find((t) => !usedTypes.has(t));
     setAddType(firstAvailable ?? "OTHER");
     setAddCustomLabel("");
+    setAddIssued("");
     setAddExpiry(todayISO());
     setAddLifetime(false);
     setAddFile(null);
@@ -616,11 +633,20 @@ export default function VehicleDetailPage() {
       toast.error("Nothing to save", "Provide at least an expiry date, lifetime flag, or file");
       return;
     }
+    if (!addLifetime && addIssued && addExpiry && addIssued > addExpiry) {
+      toast.error("Invalid dates", "Valid-from date must be on or before the valid-to date");
+      return;
+    }
     setAddingLoading(true);
     try {
       await complianceAPI.createDocument(
         vehicle.id,
-        { type: finalType, expiryDate: addLifetime ? undefined : addExpiry, lifetime: addLifetime },
+        {
+          type: finalType,
+          issuedDate: addLifetime || !addIssued ? undefined : addIssued,
+          expiryDate: addLifetime ? undefined : addExpiry,
+          lifetime: addLifetime,
+        },
         addFile || undefined,
       );
       toast.success("Document Added", `${finalType.replace(/_/g, " ")} added`);
@@ -1307,13 +1333,18 @@ export default function VehicleDetailPage() {
                               ? <>Exp: {new Date(doc.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</>
                               : <span className="text-emerald-600 dark:text-emerald-400 font-medium">Lifetime</span>}
                             <button
-                              onClick={() => { setEditingExpiry(doc.id); setEditLifetime(!doc.expiryDate); setExpiryValue(doc.expiryDate ? new Date(doc.expiryDate).toISOString().split("T")[0] : todayISO()); }}
+                              onClick={() => { setEditingExpiry(doc.id); setEditLifetime(!doc.expiryDate); setExpiryValue(doc.expiryDate ? new Date(doc.expiryDate).toISOString().split("T")[0] : todayISO()); setEditIssued(doc.issuedDate ? new Date(doc.issuedDate).toISOString().split("T")[0] : ""); }}
                               className="text-brand-500 hover:text-brand-600 transition-colors"
                               title="Edit expiry date"
                             >
                               <Pencil className="w-3 h-3" strokeWidth={2} />
                             </button>
                           </p>
+                          {doc.issuedDate && (
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                              From: {new Date(doc.issuedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="text-right">
@@ -2084,12 +2115,26 @@ export default function VehicleDetailPage() {
 
               <div>
                 <label className="flex items-center gap-2 cursor-pointer mb-2">
-                  <input type="checkbox" checked={addLifetime} onChange={(e) => { setAddLifetime(e.target.checked); if (e.target.checked) setAddExpiry(""); }}
+                  <input type="checkbox" checked={addLifetime} onChange={(e) => { setAddLifetime(e.target.checked); if (e.target.checked) { setAddExpiry(""); setAddIssued(""); } }}
                     className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400" />
                   <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Lifetime validity (no expiry)</span>
                 </label>
                 {!addLifetime && (
-                  <DatePicker value={addExpiry} onChange={setAddExpiry} placeholder="Select expiry date" />
+                  <div className="grid grid-cols-1 2xsm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Valid from <span className="text-gray-300 font-normal lowercase">(optional)</span></label>
+                      <DatePicker value={addIssued} onChange={setAddIssued} placeholder="Issue date" maxDate={addExpiry || undefined} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Valid to</label>
+                      <DatePicker value={addExpiry} onChange={setAddExpiry} placeholder="Expiry date" minDate={addIssued || undefined} />
+                    </div>
+                  </div>
+                )}
+                {!addLifetime && (
+                  <p className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+                    Pick any date — past dates are allowed when logging an old or already-expired document.
+                  </p>
                 )}
               </div>
 
@@ -2120,24 +2165,35 @@ export default function VehicleDetailPage() {
       {/* Edit Expiry Modal */}
       {editingExpiry && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setEditingExpiry(null); setExpiryValue(""); }} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setEditingExpiry(null); setExpiryValue(""); setEditIssued(""); }} />
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
             <div className="bg-gradient-to-r from-brand-500 to-brand-400 px-6 py-5">
-              <h3 className="text-lg font-bold text-white">Edit Expiry Date</h3>
+              <h3 className="text-lg font-bold text-white">Edit Document Validity</h3>
               <p className="text-white/70 text-sm mt-0.5">
                 {docTypeLabel(vehicle.complianceDocuments.find((d) => d.id === editingExpiry)?.type || "") || "Document"}
               </p>
             </div>
             <div className="p-6 space-y-5">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={editLifetime} onChange={(e) => { setEditLifetime(e.target.checked); if (e.target.checked) setExpiryValue(""); }}
+                <input type="checkbox" checked={editLifetime} onChange={(e) => { setEditLifetime(e.target.checked); if (e.target.checked) { setExpiryValue(""); setEditIssued(""); } }}
                   className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400" />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Lifetime validity (no expiry)</span>
               </label>
               {!editLifetime && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">New Expiry Date</label>
-                  <DatePicker key={`edit-${editingExpiry}`} value={expiryValue} onChange={setExpiryValue} placeholder="Select expiry date" />
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                      Valid from <span className="text-gray-300 font-normal normal-case">(optional)</span>
+                    </label>
+                    <DatePicker key={`edit-issued-${editingExpiry}`} value={editIssued} onChange={setEditIssued} placeholder="Issue date" maxDate={expiryValue || undefined} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Valid to</label>
+                    <DatePicker key={`edit-expiry-${editingExpiry}`} value={expiryValue} onChange={setExpiryValue} placeholder="Expiry date" minDate={editIssued || undefined} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                    Past dates are allowed — useful for correcting a backdated or already-expired document.
+                  </p>
                 </div>
               )}
               <div className="flex gap-3">
@@ -2145,9 +2201,9 @@ export default function VehicleDetailPage() {
                   onClick={() => { const doc = vehicle.complianceDocuments.find((d) => d.id === editingExpiry); if (doc) handleExpiryUpdate(doc.id, doc.type); }}
                   disabled={savingExpiry || (!editLifetime && !expiryValue)}
                   className="flex-1 h-11 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                  {savingExpiry ? "Saving..." : editLifetime ? "Set Lifetime" : "Update Expiry"}
+                  {savingExpiry ? "Saving..." : editLifetime ? "Set Lifetime" : "Update"}
                 </button>
-                <button onClick={() => { setEditingExpiry(null); setExpiryValue(""); setEditLifetime(false); }}
+                <button onClick={() => { setEditingExpiry(null); setExpiryValue(""); setEditIssued(""); setEditLifetime(false); }}
                   className="h-11 px-5 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 transition-all">Cancel</button>
               </div>
             </div>
