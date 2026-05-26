@@ -255,24 +255,25 @@ const SuperadminSidebar: React.FC = () => {
     >
       {/* Logo */}
       <div
-        className={`px-5 pt-7 pb-4 flex bg-gray-100/70 dark:bg-white/5 ${
-          !expanded ? "justify-center" : "justify-start"
+        className={`px-3 flex items-center justify-center transition-all duration-300 ${
+          expanded ? "pt-2 pb-2" : "pt-4 pb-3"
         }`}
       >
-        <Link href="/superadmin" className="flex items-center gap-2.5">
+        <Link
+          href="/"
+          aria-label="Yellow Track"
+          className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-white transition-all duration-300 ${
+            expanded ? "size-25" : "size-14"
+          }`}
+        >
           <Image
             src="/images/logo/yellow-track-logo4.jpeg"
             alt="Yellow Track"
-            width={40}
-            height={40}
-            className="flex-shrink-0 rounded-xl object-contain"
+            fill
+            sizes="80px"
+            className="object-contain p-1.5"
+            priority
           />
-          {expanded && (
-            <span className="text-lg font-extrabold tracking-tight">
-              <span className="text-yellow-500">Yellow</span>
-              <span className="text-gray-900 dark:text-white"> Track</span>
-            </span>
-          )}
         </Link>
       </div>
 

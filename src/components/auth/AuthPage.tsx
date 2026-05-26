@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { EyeCloseIcon, EyeIcon } from "@/icons";
+import Image from "next/image";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -101,7 +102,7 @@ export default function AuthPage() {
 
   const logo = (
     <div className="mb-2 flex items-center gap-2.5">
-      <img src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" className="w-11 h-11 rounded-xl object-contain" />
+      <Image src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" width={44} height={44} className="w-11 h-11 rounded-xl object-contain" />
       <span className="text-xl font-extrabold tracking-tight">
         <span className="text-yellow-500">Yellow</span>
         <span className="text-gray-900 dark:text-white"> Track</span>
