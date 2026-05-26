@@ -1,8 +1,9 @@
-import { withRoute, parseJson } from "@/lib/api-handler";
+import { withRoute } from "@/lib/api-handler";
 import { success, created } from "@/lib/http";
 import { z } from "zod";
 import { tenantOf } from "@/lib/auth/tenant-context";
 import { requirePermission } from "@/lib/auth/guard";
+import { parseMultipart, firstFile, firstString } from "@/lib/upload";
 import {
   inviteUser,
   listTenantUsers,
@@ -15,6 +16,7 @@ const inviteSchema = z.object({
   name: z.string().min(1).max(80).trim(),
   email: z.string().email(),
   roleId: z.string().nullable().optional(),
+  profileImage: z.string().url().nullable().optional(),
 });
 
 export const GET = withRoute(
@@ -31,7 +33,14 @@ export const POST = withRoute(
   async ({ req, session }) => {
     await requirePermission(session, "settings.users:manage");
     const ctx = tenantOf(session);
-    const input = await parseJson(req, inviteSchema);
+    const { fields, files } = await parseMultipart(req);
+    const profileFile = firstFile(files, "profileImage");
+    const input = inviteSchema.parse({
+      name: firstString(fields, "name"),
+      email: firstString(fields, "email"),
+      roleId: firstString(fields, "roleId") || null,
+      profileImage: profileFile?.url ?? null,
+    });
     const result = await inviteUser(ctx, input);
     const r = result as { user?: { id?: string; name?: string; email?: string } };
     await logFromRequest(req, ctx, session, {

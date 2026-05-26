@@ -24,6 +24,7 @@ import {
   Mail,
   AlertTriangle,
   Crown,
+  Upload,
 } from "lucide-react";
 
 type UserRow = {
@@ -581,6 +582,8 @@ function InviteUserModal({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState<string>("");
+  const [profileFile, setProfileFile] = useState<File | null>(null);
+  const [profilePreview, setProfilePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -588,6 +591,17 @@ function InviteUserModal({
     () => roles.find((r) => String(r._id) === roleId),
     [roles, roleId],
   );
+
+  const onProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    setProfileFile(f);
+    setProfilePreview(f ? URL.createObjectURL(f) : null);
+  };
+
+  const clearProfile = () => {
+    setProfileFile(null);
+    setProfilePreview(null);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -598,6 +612,7 @@ function InviteUserModal({
         name,
         email,
         roleId: roleId || null,
+        profileImage: profileFile,
       });
       onSuccess(res.data.data as {
         user: { name: string; email: string };
@@ -648,6 +663,43 @@ function InviteUserModal({
                 placeholder="alex@example.com"
                 className="input"
               />
+            </Field>
+            <Field
+              label="Profile picture"
+              hint="Optional · shown in their header. PNG or JPG."
+            >
+              <div className="flex items-center gap-4">
+                <div className="relative flex items-center justify-center w-16 h-16 rounded-full overflow-hidden border-2 border-dashed border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
+                  {profilePreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={profilePreview} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-gray-400" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
+                    <Upload className="w-3.5 h-3.5" />
+                    {profilePreview ? "Replace" : "Upload profile picture"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg"
+                      onChange={onProfileChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {profilePreview && (
+                    <button
+                      type="button"
+                      onClick={clearProfile}
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800"
+                    >
+                      <X className="w-3 h-3" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
             </Field>
             <Field
               label="Role"

@@ -16,6 +16,8 @@ import {
   Sparkles,
   AlertCircle,
   Clock,
+  Upload,
+  X,
 } from "lucide-react";
 
 type Plan = {
@@ -54,6 +56,10 @@ export default function NewTenantPage() {
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [billingEmail, setBillingEmail] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [adminProfileFile, setAdminProfileFile] = useState<File | null>(null);
+  const [adminProfilePreview, setAdminProfilePreview] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -89,6 +95,28 @@ export default function NewTenantPage() {
     if (!slugTouched) setSlug(slugify(v));
   };
 
+  const onLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    setLogoFile(f);
+    setLogoPreview(f ? URL.createObjectURL(f) : null);
+  };
+
+  const onAdminProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    setAdminProfileFile(f);
+    setAdminProfilePreview(f ? URL.createObjectURL(f) : null);
+  };
+
+  const clearLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+  };
+
+  const clearAdminProfile = () => {
+    setAdminProfileFile(null);
+    setAdminProfilePreview(null);
+  };
+
   const copyToClipboard = async (text: string, which: "email" | "password") => {
     try {
       await navigator.clipboard.writeText(text);
@@ -109,7 +137,12 @@ export default function NewTenantPage() {
         slug,
         planId: planId || null,
         billingEmail: billingEmail || null,
-        admin: { name: adminName, email: adminEmail },
+        logo: logoFile,
+        admin: {
+          name: adminName,
+          email: adminEmail,
+          profileImage: adminProfileFile,
+        },
       });
       setResult(res.data.data);
     } catch (err) {
@@ -282,6 +315,18 @@ export default function NewTenantPage() {
                 className="input"
               />
             </Field>
+            <Field
+              label="Tenant logo"
+              hint="Optional · shown in the tenant's sidebar. PNG or JPG, square works best."
+            >
+              <ImageUpload
+                preview={logoPreview}
+                onChange={onLogoChange}
+                onClear={clearLogo}
+                placeholderLabel="Upload logo"
+                shape="rounded"
+              />
+            </Field>
           </SectionCard>
 
           {/* First admin user */}
@@ -308,6 +353,18 @@ export default function NewTenantPage() {
                 required
                 placeholder="admin@acme.com"
                 className="input"
+              />
+            </Field>
+            <Field
+              label="Profile picture"
+              hint="Optional · shown in the admin's header. PNG or JPG."
+            >
+              <ImageUpload
+                preview={adminProfilePreview}
+                onChange={onAdminProfileChange}
+                onClear={clearAdminProfile}
+                placeholderLabel="Upload profile picture"
+                shape="circle"
               />
             </Field>
           </SectionCard>
@@ -541,6 +598,58 @@ function Field({
         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">{hint}</p>
       )}
     </label>
+  );
+}
+
+function ImageUpload({
+  preview,
+  onChange,
+  onClear,
+  placeholderLabel,
+  shape,
+}: {
+  preview: string | null;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onClear: () => void;
+  placeholderLabel: string;
+  shape: "circle" | "rounded";
+}) {
+  const shapeClass = shape === "circle" ? "rounded-full" : "rounded-xl";
+  return (
+    <div className="flex items-center gap-4">
+      <div
+        className={`relative flex items-center justify-center w-20 h-20 overflow-hidden border-2 border-dashed border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50 ${shapeClass}`}
+      >
+        {preview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <Upload className="w-5 h-5 text-gray-400" />
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
+          <Upload className="w-3.5 h-3.5" />
+          {preview ? "Replace" : placeholderLabel}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/jpg"
+            onChange={onChange}
+            className="hidden"
+          />
+        </label>
+        {preview && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800"
+          >
+            <X className="w-3 h-3" />
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

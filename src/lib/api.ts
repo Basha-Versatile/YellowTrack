@@ -167,8 +167,21 @@ export const permissionsAPI = {
 
 export const usersAPI = {
   list: () => api.get("/users"),
-  invite: (data: { name: string; email: string; roleId?: string | null }) =>
-    api.post("/users", data),
+  invite: (data: {
+    name: string;
+    email: string;
+    roleId?: string | null;
+    profileImage?: File | null;
+  }) => {
+    const fd = new FormData();
+    fd.append("name", data.name);
+    fd.append("email", data.email);
+    if (data.roleId) fd.append("roleId", data.roleId);
+    if (data.profileImage) fd.append("profileImage", data.profileImage);
+    return api.post("/users", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
   update: (
     id: string,
     data: { name?: string; roleId?: string | null },
@@ -195,8 +208,22 @@ export const superadminAPI = {
     slug: string;
     planId?: string | null;
     billingEmail?: string | null;
-    admin: { name: string; email: string };
-  }) => api.post("/superadmin/tenants", data),
+    logo?: File | null;
+    admin: { name: string; email: string; profileImage?: File | null };
+  }) => {
+    const fd = new FormData();
+    fd.append("name", data.name);
+    fd.append("slug", data.slug);
+    if (data.planId) fd.append("planId", data.planId);
+    if (data.billingEmail) fd.append("billingEmail", data.billingEmail);
+    if (data.logo) fd.append("logo", data.logo);
+    fd.append("adminName", data.admin.name);
+    fd.append("adminEmail", data.admin.email);
+    if (data.admin.profileImage) fd.append("adminProfileImage", data.admin.profileImage);
+    return api.post("/superadmin/tenants", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
   updateTenant: (
     id: string,
     data: { name?: string; billingEmail?: string | null },

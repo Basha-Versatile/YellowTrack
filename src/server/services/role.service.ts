@@ -193,6 +193,7 @@ export async function inviteUser(
     name: string;
     email: string;
     roleId?: string | null;
+    profileImage?: string | null;
   },
 ) {
   const name = input.name.trim();
@@ -227,6 +228,7 @@ export async function inviteUser(
     roleId: assignedRoleId,
     mustResetPassword: true,
     status: "ACTIVE",
+    profileImage: input.profileImage ?? null,
   });
 
   // Best-effort: invite email + look up tenant name + inviter name.

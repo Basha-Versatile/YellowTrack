@@ -11,9 +11,14 @@ export const createTenantSchema = z.object({
   slug: slugRule,
   planId: z.string().nullable().optional(),
   billingEmail: z.string().email().nullable().optional(),
+  // Optional logo URL — set by the route handler after parsing the
+  // multipart file upload via the storage driver.
+  logoUrl: z.string().url().nullable().optional(),
   admin: z.object({
     name: z.string().min(2).max(80).trim(),
     email: z.string().email().toLowerCase(),
+    // Optional profile image URL — same pattern as logoUrl.
+    profileImage: z.string().url().nullable().optional(),
   }),
 });
 

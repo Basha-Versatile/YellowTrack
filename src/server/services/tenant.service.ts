@@ -16,9 +16,11 @@ export type CreateTenantInput = {
   slug: string;
   planId?: string | null;
   billingEmail?: string | null;
+  logoUrl?: string | null;
   admin: {
     name: string;
     email: string;
+    profileImage?: string | null;
   };
 };
 
@@ -100,6 +102,7 @@ export async function provisionTenant(input: CreateTenantInput) {
     slug,
     status: "ACTIVE",
     billingEmail: input.billingEmail ?? adminEmail,
+    logoUrl: input.logoUrl ?? null,
     ...subscription,
   });
 
@@ -112,6 +115,7 @@ export async function provisionTenant(input: CreateTenantInput) {
     role: "ADMIN",
     tenantId: tenant._id,
     mustResetPassword: true,
+    profileImage: input.admin.profileImage ?? null,
   });
 
   // 3. Owner pointer
