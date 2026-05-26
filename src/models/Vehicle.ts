@@ -57,7 +57,17 @@ const vehicleSchema = new Schema(
 );
 
 // Tenant-scoped uniqueness: two tenants may register the same vehicle number.
-vehicleSchema.index({ tenantId: 1, registrationNumber: 1 }, { unique: true });
+//
+// Partial filter so soft-deleted rows don't block re-onboarding under the same
+// reg number. Without this, a vehicle that was onboarded and later soft-deleted
+// would silently block any new onboarding with the same regNo in that tenant —
+// the JS-level duplicate check skips deletedAt:!null rows (via the pre-find
+// middleware below), but a plain unique index does NOT, so insert fails with
+// E11000 and the user sees a confusing "Duplicate entry" with no visible row.
+vehicleSchema.index(
+  { tenantId: 1, registrationNumber: 1 },
+  { unique: true, partialFilterExpression: { deletedAt: null } },
+);
 
 // Soft-delete middleware — runs for every find/count/aggregate unless the
 // caller opts in to see deleted docs.
