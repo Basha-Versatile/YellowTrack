@@ -8,6 +8,7 @@ export type PublicUser = {
   role: string;
   tenantId: string | null;
   mustResetPassword: boolean;
+  profileImage: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 };
@@ -19,6 +20,7 @@ type UserLike = {
   role: string;
   tenantId?: unknown;
   mustResetPassword?: boolean;
+  profileImage?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
   toObject?: () => Record<string, unknown>;
@@ -40,10 +42,21 @@ export function toPublicUser(user: unknown): PublicUser {
     role: (raw.role as string) ?? u.role,
     tenantId,
     mustResetPassword: Boolean(raw.mustResetPassword ?? u.mustResetPassword ?? false),
+    profileImage: (raw.profileImage as string | null | undefined) ?? u.profileImage ?? null,
     createdAt: (raw.createdAt as Date | undefined) ?? u.createdAt,
     updatedAt: (raw.updatedAt as Date | undefined) ?? u.updatedAt,
   };
 }
+
+/** Minimal tenant payload included in auth responses so the sidebar can show
+ *  the workspace identity (logo + name + billing email) without a second fetch. */
+export type PublicTenant = {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  billingEmail: string | null;
+};
 
 export async function findUserByEmail(email: string) {
   return User.findOne({ email: email.toLowerCase() }).select("+password");

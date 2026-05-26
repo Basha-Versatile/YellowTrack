@@ -135,14 +135,9 @@ export async function onboardVehicle(
   // 2. fetch from Surepass
   const surepassData = (await fetchRcDetails(registrationNumber)) as SurepassRc;
 
-  // 4. hard block on inactive/blacklisted
-  const rcStatus = surepassData.rc_status as string | undefined;
-  if (rcStatus && rcStatus.toUpperCase() !== "ACTIVE") {
-    throw new AppError(
-      `Vehicle RC status is ${rcStatus} — onboarding blocked`,
-      403,
-    );
-  }
+  // 4. hard block only on blacklist (stolen / criminal flag).
+  // Non-ACTIVE rc_status values (Fitness Expired, Permit Expired, Tax Due, etc.)
+  // are document-compliance issues — surface as warnings, don't block onboarding.
   const blacklist = surepassData.blacklist_status as string | undefined;
   if (blacklist && String(blacklist).trim() !== "") {
     throw new AppError(
@@ -154,6 +149,11 @@ export async function onboardVehicle(
   // 5. map + create
   const vehicleData = mapSurepassToVehicle(surepassData);
   const warnings: string[] = [];
+
+  const rcStatus = surepassData.rc_status as string | undefined;
+  if (rcStatus && rcStatus.toUpperCase() !== "ACTIVE") {
+    warnings.push(`RC status: ${rcStatus}. Please update affected documents.`);
+  }
 
   const createdDoc = await vehicleRepo.create(ctx, {
     registrationNumber,

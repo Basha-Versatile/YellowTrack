@@ -5,6 +5,7 @@ import {
   getRefreshTokenExpiry,
 } from "@/lib/auth/jwt";
 import { ConflictError, UnauthorizedError } from "@/lib/errors";
+import { Tenant } from "@/models";
 import {
   createUser,
   findUserByEmail,
@@ -15,22 +16,40 @@ import {
   deleteAllUserRefreshTokens,
   toPublicUser,
   type PublicUser,
+  type PublicTenant,
 } from "../repositories/auth.repository";
 import { logActivity } from "./activityLog.service";
 
 export type AuthResult = {
   user: PublicUser;
+  /** Tenant the user belongs to — null for SUPERADMIN. */
+  tenant: PublicTenant | null;
   accessToken: string;
   refreshToken: string;
   refreshTokenExpiresAt: Date;
 };
+
+async function loadPublicTenant(tenantId: string | null): Promise<PublicTenant | null> {
+  if (!tenantId) return null;
+  const t = await Tenant.findById(tenantId)
+    .select("name slug logoUrl billingEmail")
+    .lean();
+  if (!t) return null;
+  return {
+    id: String((t as { _id: unknown })._id),
+    name: (t as { name?: string }).name ?? "",
+    slug: (t as { slug?: string }).slug ?? "",
+    logoUrl: (t as { logoUrl?: string | null }).logoUrl ?? null,
+    billingEmail: (t as { billingEmail?: string | null }).billingEmail ?? null,
+  };
+}
 
 async function createTokenPair(user: {
   id: string;
   email: string;
   role: string;
   tenantId: string | null;
-}): Promise<Omit<AuthResult, "user">> {
+}): Promise<Omit<AuthResult, "user" | "tenant">> {
   const accessToken = signAccessToken({
     id: user.id,
     email: user.email,
@@ -62,7 +81,8 @@ export async function register(input: {
   const publicUser = toPublicUser(doc);
 
   const tokens = await createTokenPair(publicUser);
-  return { user: publicUser, ...tokens };
+  const tenant = await loadPublicTenant(publicUser.tenantId);
+  return { user: publicUser, tenant, ...tokens };
 }
 
 export async function login(input: {
@@ -111,7 +131,8 @@ export async function login(input: {
     );
   }
 
-  return { user: publicUser, ...tokens };
+  const tenant = await loadPublicTenant(publicUser.tenantId);
+  return { user: publicUser, tenant, ...tokens };
 }
 
 export async function refresh(refreshToken: string | undefined): Promise<AuthResult> {
@@ -133,7 +154,8 @@ export async function refresh(refreshToken: string | undefined): Promise<AuthRes
 
   const publicUser = toPublicUser(userDoc);
   const tokens = await createTokenPair(publicUser);
-  return { user: publicUser, ...tokens };
+  const tenant = await loadPublicTenant(publicUser.tenantId);
+  return { user: publicUser, tenant, ...tokens };
 }
 
 export async function logout(refreshToken: string | undefined): Promise<void> {

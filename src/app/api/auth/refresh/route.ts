@@ -17,9 +17,9 @@ export const POST = withRoute(async ({ req }) => {
   const token = req.cookies.get(REFRESH_COOKIE_NAME)?.value;
 
   try {
-    const { user, accessToken, refreshToken, refreshTokenExpiresAt } =
+    const { user, tenant, accessToken, refreshToken, refreshTokenExpiresAt } =
       await refreshTokens(token);
-    const res = success({ user, accessToken }, "Token refreshed");
+    const res = success({ user, tenant, accessToken }, "Token refreshed");
     setAccessCookie(res, accessToken);
     return setRefreshCookie(res, refreshToken, refreshTokenExpiresAt);
   } catch (err) {

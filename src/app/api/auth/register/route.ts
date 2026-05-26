@@ -8,11 +8,11 @@ export const runtime = "nodejs";
 
 export const POST = withRoute(async ({ req }) => {
   const input = await parseJson(req, registerSchema);
-  const { user, accessToken, refreshToken, refreshTokenExpiresAt } =
+  const { user, tenant, accessToken, refreshToken, refreshTokenExpiresAt } =
     await registerUser(input);
 
   const res = created(
-    { user, accessToken },
+    { user, tenant, accessToken },
     "Registration successful",
   );
   return setRefreshCookie(res, refreshToken, refreshTokenExpiresAt);

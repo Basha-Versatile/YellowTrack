@@ -114,7 +114,7 @@ const supportItems: NavItem[] = [];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { user, logout, hasPermission } = useAuth();
+  const { user, tenant, logout, hasPermission } = useAuth();
   const pathname = usePathname();
   const expanded = isExpanded || isHovered || isMobileOpen;
 
@@ -330,14 +330,15 @@ const AppSidebar: React.FC = () => {
     });
   };
 
-  const initials = user?.name
-    ? user.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "U";
+  // Initials for the tenant bottom card (fallback when no logo image is set).
+  // We use the tenant's name first (since the bottom card shows the tenant);
+  // falls back to the user's name only if there is no tenant (superadmin).
+  const tenantInitials = (tenant?.name ?? user?.name ?? "Yellow Track")
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <aside
@@ -426,20 +427,26 @@ const AppSidebar: React.FC = () => {
         </nav>
       </div>
 
-      {/* Bottom user card */}
+      {/* Bottom tenant card — workspace identity (logo + name + billing email).
+          Falls back to the user's name when no tenant is loaded (superadmin). */}
       <div className="mt-auto px-4 pb-5">
         <div className="h-px bg-gradient-to-r from-transparent via-gray-300/60 to-transparent dark:via-gray-700/50 mb-4" />
         {expanded ? (
           <div className="flex items-center gap-3 rounded-xl bg-gray-100/70 dark:bg-white/5 p-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-yellow-500/20 flex-shrink-0">
-              {initials}
+            <div className="relative w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-yellow-500/20 flex-shrink-0">
+              {tenant?.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={tenant.logoUrl} alt={tenant.name} className="w-full h-full object-cover" />
+              ) : (
+                tenantInitials
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900 dark:text-gray-200 truncate">
-                {user?.name || "User"}
+                {tenant?.name ?? user?.name ?? "Workspace"}
               </p>
               <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
-                {user?.role || "Member"}
+                {tenant?.billingEmail ?? user?.email ?? "—"}
               </p>
             </div>
             <button

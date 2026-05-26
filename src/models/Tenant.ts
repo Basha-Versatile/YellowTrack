@@ -48,6 +48,9 @@ const tenantSchema = new Schema(
 
     ownerUserId: { type: Schema.Types.ObjectId, ref: "User" },
     billingEmail: { type: String, lowercase: true, trim: true },
+    // Tenant logo URL — shown in the sidebar bottom card. Collected when the
+    // superadmin creates the tenant. Optional (no logo → fall back to initials).
+    logoUrl: { type: String, default: null },
     // IANA timezone (e.g. "Asia/Kolkata"). Per-tenant cron schedulers use this
     // to compute "today" in tenant-local time for EMI reminders, etc.
     timezone: { type: String, default: "Asia/Kolkata", trim: true },

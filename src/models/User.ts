@@ -34,6 +34,10 @@ const userSchema = new Schema(
     },
     mustResetPassword: { type: Boolean, default: false },
     lastLoginAt: { type: Date },
+    // Profile picture URL — shown in the header. Collected when the user is
+    // created (by superadmin for the tenant admin, by tenant admin for other
+    // users). Optional (no image → fall back to initials).
+    profileImage: { type: String, default: null },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } },
 );

@@ -23,13 +23,33 @@ export default function UserDropdown() {
     <div className="relative">
       <button
         onClick={toggleDropdown}
-        className="flex items-center dropdown-toggle text-gray-700 dark:text-gray-400 dropdown-toggle"
+        className="flex items-center gap-2 dropdown-toggle text-gray-700 dark:text-gray-400"
       >
-        <span className="mr-3 flex items-center justify-center rounded-full h-11 w-11 bg-brand-500/10 text-brand-500 font-semibold text-sm dark:bg-brand-400/10 dark:text-brand-400">
-          {initials}
+        {/* Avatar — uses profileImage if set, otherwise initials */}
+        <span className="relative flex items-center justify-center rounded-full h-10 w-10 overflow-hidden bg-brand-500/10 text-brand-500 font-semibold text-sm dark:bg-brand-400/10 dark:text-brand-400 flex-shrink-0">
+          {user?.profileImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.profileImage}
+              alt={user?.name ?? "User"}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            initials
+          )}
         </span>
 
-        <span className="block mr-1 font-medium text-theme-sm">{user?.name || "User"}</span>
+        {/* Name + role stacked — hidden on phones to save header space */}
+        <span className="hidden sm:flex flex-col items-start leading-tight mr-1">
+          <span className="block font-semibold text-[13px] text-gray-900 dark:text-gray-100 truncate max-w-[140px]">
+            {user?.name || "User"}
+          </span>
+          {user?.role && (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-500 dark:text-brand-400">
+              {user.role}
+            </span>
+          )}
+        </span>
 
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
