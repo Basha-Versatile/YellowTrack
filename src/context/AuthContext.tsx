@@ -40,6 +40,11 @@ interface AuthContextType {
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
   refreshPermissions: () => Promise<void>;
+  updateProfile: (data: {
+    name?: string;
+    profileImage?: File | null;
+    removeProfileImage?: boolean;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -189,6 +194,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     router.push("/auth");
   }, [router]);
 
+  const updateProfile = useCallback(
+    async (data: {
+      name?: string;
+      profileImage?: File | null;
+      removeProfileImage?: boolean;
+    }) => {
+      const res = await authAPI.updateProfile(data);
+      const fresh = (res.data.data as { user: User }).user;
+      setUser(fresh);
+      localStorage.setItem("user", JSON.stringify(fresh));
+    },
+    [],
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -203,6 +222,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         logout,
         logoutAll,
         refreshPermissions: loadPermissions,
+        updateProfile,
       }}
     >
       {children}

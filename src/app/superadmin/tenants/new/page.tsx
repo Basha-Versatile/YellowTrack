@@ -18,6 +18,7 @@ import {
   Clock,
   Upload,
   X,
+  FileBadge,
 } from "lucide-react";
 
 type Plan = {
@@ -60,6 +61,9 @@ export default function NewTenantPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [adminProfileFile, setAdminProfileFile] = useState<File | null>(null);
   const [adminProfilePreview, setAdminProfilePreview] = useState<string | null>(null);
+  const [gstNumber, setGstNumber] = useState("");
+  const [panNumber, setPanNumber] = useState("");
+  const [tanNumber, setTanNumber] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -138,6 +142,9 @@ export default function NewTenantPage() {
         planId: planId || null,
         billingEmail: billingEmail || null,
         logo: logoFile,
+        gstNumber: gstNumber.trim() ? gstNumber.trim().toUpperCase() : null,
+        panNumber: panNumber.trim() ? panNumber.trim().toUpperCase() : null,
+        tanNumber: tanNumber.trim() ? tanNumber.trim().toUpperCase() : null,
         admin: {
           name: adminName,
           email: adminEmail,
@@ -365,6 +372,53 @@ export default function NewTenantPage() {
                 onClear={clearAdminProfile}
                 placeholderLabel="Upload profile picture"
                 shape="circle"
+              />
+            </Field>
+          </SectionCard>
+
+          {/* Tax identifiers */}
+          <SectionCard
+            Icon={FileBadge}
+            title="Tax identifiers"
+            subtitle="Optional · used on invoices and reports"
+          >
+            <Field
+              label="GST Number"
+              hint="15 characters, e.g. 27AAPCS9988A1Z5"
+            >
+              <input
+                type="text"
+                value={gstNumber}
+                onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                placeholder="27AAPCS9988A1Z5"
+                maxLength={15}
+                className="input font-mono uppercase"
+              />
+            </Field>
+            <Field
+              label="PAN Number"
+              hint="10 characters, e.g. AAPCS9988A"
+            >
+              <input
+                type="text"
+                value={panNumber}
+                onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                placeholder="AAPCS9988A"
+                maxLength={10}
+                className="input font-mono uppercase"
+              />
+            </Field>
+            <Field
+              label="TAN Number"
+              hint="10 characters, e.g. BLRA12345C"
+            >
+              <input
+                type="text"
+                value={tanNumber}
+                onChange={(e) => setTanNumber(e.target.value.toUpperCase())}
+                placeholder="BLRA12345C"
+                maxLength={10}
+                className="input font-mono uppercase"
               />
             </Field>
           </SectionCard>

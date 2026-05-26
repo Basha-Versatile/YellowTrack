@@ -146,6 +146,35 @@ export const authAPI = {
   logoutAll: () => api.post("/auth/logout-all"),
   resetPassword: (newPassword: string, confirmPassword: string) =>
     api.post("/auth/reset-password", { newPassword, confirmPassword }),
+  // Update the signed-in user's own profile (name + optional profile picture).
+  updateProfile: (data: {
+    name?: string;
+    profileImage?: File | null;
+    removeProfileImage?: boolean;
+  }) => {
+    const fd = new FormData();
+    if (data.name) fd.append("name", data.name);
+    if (data.profileImage) fd.append("profileImage", data.profileImage);
+    if (data.removeProfileImage) fd.append("removeProfileImage", "true");
+    return api.patch("/auth/me", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  // ── Forgot-password (OTP via email) ─────────────────────
+  forgotPasswordRequest: (email: string) =>
+    api.post("/auth/forgot-password/request", { email }),
+  forgotPasswordVerify: (email: string, otp: string) =>
+    api.post("/auth/forgot-password/verify", { email, otp }),
+  forgotPasswordReset: (
+    verifyToken: string,
+    newPassword: string,
+    confirmPassword: string,
+  ) =>
+    api.post("/auth/forgot-password/reset", {
+      verifyToken,
+      newPassword,
+      confirmPassword,
+    }),
 };
 
 // ── Roles & permissions ────────────────────────────────────
@@ -209,6 +238,9 @@ export const superadminAPI = {
     planId?: string | null;
     billingEmail?: string | null;
     logo?: File | null;
+    gstNumber?: string | null;
+    panNumber?: string | null;
+    tanNumber?: string | null;
     admin: { name: string; email: string; profileImage?: File | null };
   }) => {
     const fd = new FormData();
@@ -217,6 +249,9 @@ export const superadminAPI = {
     if (data.planId) fd.append("planId", data.planId);
     if (data.billingEmail) fd.append("billingEmail", data.billingEmail);
     if (data.logo) fd.append("logo", data.logo);
+    if (data.gstNumber) fd.append("gstNumber", data.gstNumber);
+    if (data.panNumber) fd.append("panNumber", data.panNumber);
+    if (data.tanNumber) fd.append("tanNumber", data.tanNumber);
     fd.append("adminName", data.admin.name);
     fd.append("adminEmail", data.admin.email);
     if (data.admin.profileImage) fd.append("adminProfileImage", data.admin.profileImage);

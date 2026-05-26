@@ -17,6 +17,9 @@ export type CreateTenantInput = {
   planId?: string | null;
   billingEmail?: string | null;
   logoUrl?: string | null;
+  gstNumber?: string | null;
+  panNumber?: string | null;
+  tanNumber?: string | null;
   admin: {
     name: string;
     email: string;
@@ -103,6 +106,9 @@ export async function provisionTenant(input: CreateTenantInput) {
     status: "ACTIVE",
     billingEmail: input.billingEmail ?? adminEmail,
     logoUrl: input.logoUrl ?? null,
+    gstNumber: input.gstNumber ?? null,
+    panNumber: input.panNumber ?? null,
+    tanNumber: input.tanNumber ?? null,
     ...subscription,
   });
 

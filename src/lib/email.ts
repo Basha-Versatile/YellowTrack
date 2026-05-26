@@ -221,6 +221,44 @@ export function passwordResetEmail(input: {
   };
 }
 
+export function passwordResetOtpEmail(input: {
+  userName: string;
+  userEmail: string;
+  otp: string;
+  expiresInMinutes: number;
+}): Email {
+  const { userName, userEmail, otp, expiresInMinutes } = input;
+  const text = [
+    `Hi ${userName},`,
+    "",
+    `Use the verification code below to reset your Yellow Track password:`,
+    "",
+    `  Code: ${otp}`,
+    "",
+    `This code expires in ${expiresInMinutes} minutes. If you didn't request a password reset, you can ignore this email — your password won't change.`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p>Hi <strong>${escapeHtml(userName)}</strong>,</p>
+    <p>Use the verification code below to reset your password.</p>
+    <div style="background:#F9FAFB;border:1px solid ${BORDER};border-radius:12px;padding:18px;margin:16px 0;text-align:center">
+      <div style="font-family:'SFMono-Regular',Menlo,Monaco,Consolas,'Courier New',monospace;font-size:30px;font-weight:800;letter-spacing:10px;color:${BRAND_DARK}">
+        ${escapeHtml(otp)}
+      </div>
+    </div>
+    <p style="color:#6B7280;font-size:12px">
+      This code expires in <strong>${expiresInMinutes} minutes</strong>.
+      If you didn't request a reset, you can ignore this email — your password won't change.
+    </p>`;
+  return {
+    to: userEmail,
+    subject: `Your Yellow Track password reset code: ${otp}`,
+    text,
+    html: html("Password reset code", bodyHtml),
+  };
+}
+
 export function tenantWelcomeEmail(input: {
   tenantName: string;
   adminName: string;

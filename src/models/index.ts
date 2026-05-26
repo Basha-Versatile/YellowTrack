@@ -20,6 +20,10 @@ export {
   type UserRole,
 } from "./User";
 export { RefreshToken, type RefreshTokenAttrs } from "./RefreshToken";
+export {
+  PasswordResetOtp,
+  type PasswordResetOtpAttrs,
+} from "./PasswordResetOtp";
 export { DocumentType, type DocumentTypeAttrs } from "./DocumentType";
 export { VehicleGroup, type VehicleGroupAttrs } from "./VehicleGroup";
 export { Vehicle, type VehicleAttrs } from "./Vehicle";

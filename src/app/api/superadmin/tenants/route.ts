@@ -33,6 +33,9 @@ export const POST = withRoute(
       planId: firstString(fields, "planId") || null,
       billingEmail: firstString(fields, "billingEmail") || null,
       logoUrl: logoFile?.url ?? null,
+      gstNumber: firstString(fields, "gstNumber") || null,
+      panNumber: firstString(fields, "panNumber") || null,
+      tanNumber: firstString(fields, "tanNumber") || null,
       admin: {
         name: firstString(fields, "adminName"),
         email: firstString(fields, "adminEmail"),

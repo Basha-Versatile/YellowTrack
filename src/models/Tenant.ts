@@ -51,6 +51,11 @@ const tenantSchema = new Schema(
     // Tenant logo URL — shown in the sidebar bottom card. Collected when the
     // superadmin creates the tenant. Optional (no logo → fall back to initials).
     logoUrl: { type: String, default: null },
+    // Indian tax identifiers — all uppercase, optional but format-validated when
+    // present. Stored as plain strings; the schema enforces the shape only.
+    gstNumber: { type: String, uppercase: true, trim: true, default: null },
+    panNumber: { type: String, uppercase: true, trim: true, default: null },
+    tanNumber: { type: String, uppercase: true, trim: true, default: null },
     // IANA timezone (e.g. "Asia/Kolkata"). Per-tenant cron schedulers use this
     // to compute "today" in tenant-local time for EMI reminders, etc.
     timezone: { type: String, default: "Asia/Kolkata", trim: true },

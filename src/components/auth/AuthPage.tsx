@@ -195,6 +195,15 @@ export default function AuthPage() {
                     </div>
                   )}
 
+                  <div className="flex justify-end -mt-1">
+                    <a
+                      href="/forgot-password"
+                      className="text-[11px] font-semibold text-yellow-600 hover:text-yellow-700 dark:text-yellow-400 dark:hover:text-yellow-300"
+                    >
+                      Forgot password?
+                    </a>
+                  </div>
+
                   <button
                     type="submit"
                     disabled={loading}
@@ -334,7 +343,7 @@ export default function AuthPage() {
                     isSignUp ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6 pointer-events-none"
                   }`}
                 >
-                  <img src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" className="w-20 h-20 rounded-2xl object-contain mb-6" />
+                  <Image src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" width={80} height={80} className="w-20 h-20 rounded-2xl object-contain mb-6" />
                   <h2 className="text-4xl font-black text-gray-900 dark:text-white mb-3 tracking-tight leading-[1.1]">
                     Welcome<br />Back!
                   </h2>
@@ -355,7 +364,7 @@ export default function AuthPage() {
                     !isSignUp ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6 pointer-events-none"
                   }`}
                 >
-                  <img src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" className="w-20 h-20 rounded-2xl object-contain mb-6" />
+                  <Image src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" width={80} height={80} className="w-20 h-20 rounded-2xl object-contain mb-6" />
                   <h2 className="text-4xl font-black text-gray-900 dark:text-white mb-3 tracking-tight leading-[1.1]">
                     Join<br />Yellow Track
                   </h2>
