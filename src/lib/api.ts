@@ -421,6 +421,8 @@ export const driverAPI = {
   },
   getDocHistory: (driverId: string, type: string) =>
     api.get(`/drivers/${driverId}/documents/history/${type}`),
+  sendVerifyLink: (driverId: string, token: string, email?: string) =>
+    api.post(`/drivers/${driverId}/verify-link`, { token, email }),
   getChangeLog: (driverId: string) => api.get(`/drivers/${driverId}/changes`),
   renewDocument: (driverId: string, docId: string, data: { expiryDate?: string; type: string; lifetime?: boolean }, file?: File) => {
     const formData = new FormData();
@@ -602,6 +604,11 @@ export const notificationAPI = {
   getUnreadCount: () => api.get("/notifications/unread-count"),
   markAsRead: (id: string) => api.put(`/notifications/${id}/read`),
   markAllAsRead: () => api.put("/notifications/read-all"),
+  // Outbound alert delivery (email / WhatsApp)
+  sendTest: (channel: "email" | "whatsapp", to?: string) =>
+    api.post("/notifications/test", { channel, to }),
+  getDeliveryLog: (limit = 50) =>
+    api.get("/notifications/logs", { params: { limit } }),
 };
 
 // ── EMI tracking ────────────────────────────────────────

@@ -106,6 +106,23 @@ export const POST = withRoute<{ id: string }>(
         : `Sold ${regNo} to ${buyerName}`,
       metadata: { buyerName, buyerPhone, soldPrice, saleDate },
     });
+
+    // Fan out sale-invoice email to tenant admins on first create only.
+    if (!existing) {
+      const baseUrl = process.env.FRONTEND_URL ?? "http://localhost:3000";
+      const { dispatchSaleInvoice } = await import("@/server/services/alertDispatcher.service");
+      dispatchSaleInvoice({
+        ctx,
+        buyerName,
+        vehicleRegNo: regNo,
+        saleAmount: soldPrice ?? 0,
+        saleDate: new Date(saleDate),
+        invoiceUrl: `${baseUrl}/vehicles/${params.id}`,
+      }).catch((err) =>
+        console.error("[sale] invoice email dispatch failed:", err instanceof Error ? err.message : err),
+      );
+    }
+
     return existing
       ? success(sale, "Sale updated")
       : created(sale, "Vehicle marked as sold");

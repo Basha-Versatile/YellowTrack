@@ -14,7 +14,7 @@ import {
 } from "../icons/index";
 import { BsFillCarFrontFill } from "react-icons/bs";
 import { MdSpaceDashboard } from "react-icons/md";
-import { Activity, Database, Lightbulb, Shield, UsersRound } from "lucide-react";
+import { Activity, Bell, Database, Lightbulb, Shield, UsersRound } from "lucide-react";
 
 type NavSubItem = {
   name: string;
@@ -89,6 +89,12 @@ const navItems: NavItem[] = [
     name: "Activity Log",
     path: "/activity",
     perm: "activityLog:read",
+  },
+  {
+    icon: <Bell className="h-5 w-5" />,
+    name: "Notifications",
+    path: "/settings/notifications",
+    perm: "settings.users:manage",
   },
   {
     icon: <Lightbulb className="h-5 w-5" />,

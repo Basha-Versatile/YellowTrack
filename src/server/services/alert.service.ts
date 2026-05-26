@@ -1,8 +1,28 @@
 import "server-only";
 import type { ScopedContext } from "@/lib/auth/tenant-context";
 import { create as createNotification } from "./notification.service";
+import {
+  dispatchComplianceExpiry,
+  dispatchDriverDocExpiry,
+} from "./alertDispatcher.service";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import * as driverRepo from "../repositories/driver.repository";
+
+function appBaseUrl(): string {
+  return process.env.FRONTEND_URL ?? "http://localhost:3000";
+}
+
+// Fan-out failures must never break the primary in-app alert flow.
+async function safeDispatch(label: string, fn: () => Promise<unknown>) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(
+      `[alert] ${label} dispatch failed:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
 
 async function dispatchWhatsAppToDriver(
   ctx: ScopedContext,
@@ -63,6 +83,22 @@ export async function triggerVehicleAlert(
     message,
     entityId: vehicleId,
   });
+
+  // Fan out to email (tenant admins). WhatsApp fan-out is handled separately
+  // for urgent / critical doc expiries via the WhatsApp adapter once wired.
+  if (vehicleId && expiryDate) {
+    await safeDispatch("compliance email", () =>
+      dispatchComplianceExpiry({
+        ctx,
+        docType,
+        vehicleRegNo,
+        daysRemaining: days,
+        expiryDate,
+        vehicleId,
+        appBaseUrl: appBaseUrl(),
+      }),
+    );
+  }
 }
 
 export async function triggerDriverAlert(
@@ -107,6 +143,21 @@ export async function triggerDriverAlert(
     message,
     entityId: driverId,
   });
+
+  // Email fan-out to tenant admins
+  if (driverId && expiryDate) {
+    await safeDispatch("license email", () =>
+      dispatchDriverDocExpiry({
+        ctx,
+        docType: "Driving License",
+        driverName,
+        daysRemaining: days,
+        expiryDate,
+        driverId,
+        appBaseUrl: appBaseUrl(),
+      }),
+    );
+  }
 
   // Urgent / critical license expiries also fan out to WhatsApp (stubbed until a provider is set up)
   if (severity !== "WARNING") {
@@ -156,6 +207,21 @@ export async function triggerDriverDocAlert(
     message,
     entityId: driverId,
   });
+
+  // Email fan-out to tenant admins
+  if (driverId && expiryDate) {
+    await safeDispatch("driver doc email", () =>
+      dispatchDriverDocExpiry({
+        ctx,
+        docType,
+        driverName,
+        daysRemaining: days,
+        expiryDate,
+        driverId,
+        appBaseUrl: appBaseUrl(),
+      }),
+    );
+  }
 
   // Urgent / critical doc expiries also fan out to WhatsApp (stubbed until a provider is set up)
   if (severity !== "WARNING") {
