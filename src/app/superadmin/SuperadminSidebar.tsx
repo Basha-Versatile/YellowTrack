@@ -261,7 +261,7 @@ const SuperadminSidebar: React.FC = () => {
       >
         <Link href="/superadmin" className="flex items-center gap-2.5">
           <Image
-            src="/images/logo/yellow-track-logo.png"
+            src="/images/logo/yellow-track-logo4.jpeg"
             alt="Yellow Track"
             width={40}
             height={40}

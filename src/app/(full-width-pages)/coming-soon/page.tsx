@@ -22,18 +22,11 @@ export default function ComingSoon() {
         <div className="mx-auto w-full max-w-[460px] text-center">
           <Link href="/" className="inline-block mb-6">
             <Image
-              className="dark:hidden"
-              src="./images/logo/logo.svg"
-              alt="Logo"
-              width={154}
-              height={32}
-            />
-            <Image
-              className="hidden dark:block"
-              src="./images/logo/logo-dark.svg"
-              alt="Logo"
-              width={154}
-              height={32}
+              src="/images/logo/yellow-track-logo4.jpeg"
+              alt="Yellow Track"
+              width={64}
+              height={64}
+              className="rounded-xl object-contain"
             />
           </Link>
 
