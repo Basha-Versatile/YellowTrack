@@ -1,6 +1,8 @@
 import "server-only";
+import mongoose from "mongoose";
 import { Vehicle, VehicleGroup } from "@/models";
 import {
+  ALL_TENANTS,
   type ScopedContext,
   tenantFilter,
   tenantStamp,
@@ -11,6 +13,21 @@ type GroupEnriched = Record<string, unknown> & {
   _count: { vehicles: number };
 };
 
+/**
+ * Aggregate pipelines skip Mongoose's auto-cast, so a string `tenantId` won't
+ * match an ObjectId-typed field. Build a cast-safe match stage for aggregates.
+ */
+function aggregateTenantMatch(
+  ctx: ScopedContext,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  if (ctx.tenantId === ALL_TENANTS) return extra;
+  return {
+    tenantId: new mongoose.Types.ObjectId(ctx.tenantId),
+    ...extra,
+  };
+}
+
 async function enrichGroups(
   ctx: ScopedContext,
   groups: Array<Record<string, unknown> & { _id: unknown }>,
@@ -19,7 +36,7 @@ async function enrichGroups(
   const ids = groups.map((g) => g._id);
 
   const vehicleCounts = await Vehicle.aggregate([
-    { $match: tenantFilter(ctx, { groupId: { $in: ids } }) },
+    { $match: aggregateTenantMatch(ctx, { groupId: { $in: ids } }) },
     { $group: { _id: "$groupId", count: { $sum: 1 } } },
   ]);
 
@@ -33,10 +50,40 @@ async function enrichGroups(
   }));
 }
 
+/**
+ * Move any vehicle whose `groupId` is null or points to a deleted group into
+ * the "Others" fallback. Keeps per-group counts in sync with the overall
+ * vehicle total, and makes the Others filter chip actually surface orphans.
+ */
+async function reassignOrphans(
+  ctx: ScopedContext,
+  validGroupIds: unknown[],
+): Promise<void> {
+  const others = await findOrCreateOthers(ctx);
+  const validIds = [...validGroupIds];
+  if (!validIds.some((id) => String(id) === String(others._id))) {
+    validIds.push(others._id);
+  }
+  await Vehicle.updateMany(
+    tenantFilter(ctx, { groupId: { $nin: validIds } }),
+    { $set: { groupId: others._id } },
+  );
+}
+
 export async function findAll(ctx: ScopedContext): Promise<GroupEnriched[]> {
-  const groups = await VehicleGroup.find(tenantFilter(ctx))
+  let groups = await VehicleGroup.find(tenantFilter(ctx))
     .sort({ order: 1 })
     .lean();
+  await reassignOrphans(ctx, groups.map((g) => g._id));
+  // findOrCreateOthers may have just created Others; re-fetch if so.
+  const hadOthers = groups.some(
+    (g) => (g as Record<string, unknown>).name === "Others",
+  );
+  if (!hadOthers) {
+    groups = await VehicleGroup.find(tenantFilter(ctx))
+      .sort({ order: 1 })
+      .lean();
+  }
   return enrichGroups(ctx, groups);
 }
 

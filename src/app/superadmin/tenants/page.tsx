@@ -30,9 +30,11 @@ type Tenant = {
   subscriptionEnd?: string | null;
   plan?: {
     name: string;
-    price: number;
     currency: string;
-    durationDays: number;
+    fleetSizeMin: number;
+    fleetSizeMax: number | null;
+    perVehiclePerMonth: number;
+    perVehiclePerYear: number;
   } | null;
   billingEmail?: string | null;
   userCount: number;
@@ -321,11 +323,15 @@ function TenantCard({
             <span className="font-semibold text-gray-700 dark:text-gray-300">
               {t.plan.name}
             </span>{" "}
-            ·{" "}
+            · Fleet{" "}
+            {t.plan.fleetSizeMax === null
+              ? `${t.plan.fleetSizeMin}+`
+              : `${t.plan.fleetSizeMin}–${t.plan.fleetSizeMax}`}
+            {" · "}
             {t.plan.currency === "INR"
-              ? `₹${t.plan.price.toLocaleString("en-IN")}`
-              : `${t.plan.currency} ${t.plan.price}`}{" "}
-            / {t.plan.durationDays}d
+              ? `₹${t.plan.perVehiclePerMonth.toLocaleString("en-IN")}`
+              : `${t.plan.currency} ${t.plan.perVehiclePerMonth}`}
+            /veh/mo
           </p>
         )}
 

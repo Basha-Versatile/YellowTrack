@@ -5,28 +5,38 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "@/lib/errors";
+import { Plan } from "@/models";
 import * as planRepo from "../repositories/plan.repository";
 
 export type PlanInput = {
   name: string;
   description?: string | null;
-  price: number;
   currency?: string;
-  durationDays: number;
   isActive?: boolean;
-  maxVehicles?: number | null;
-  maxDrivers?: number | null;
-  maxUsers?: number | null;
-  maxRoles?: number | null;
+  fleetSizeMin?: number;
+  fleetSizeMax?: number | null;
+  perVehiclePerMonth: number;
+  perVehiclePerYear: number;
+  perDriverPerMonth?: number;
+  gstPercent?: number;
 };
 
-const QUOTA_KEYS = ["maxVehicles", "maxDrivers", "maxUsers", "maxRoles"] as const;
-type QuotaKey = (typeof QUOTA_KEYS)[number];
-
-function normalizeQuota(val: number | null | undefined): number | null {
-  if (val === null || val === undefined) return null;
-  if (!Number.isFinite(val) || val < 0) return null;
-  return Math.floor(val);
+function normalizeBounds(
+  min: number,
+  max: number | null | undefined,
+): { fleetSizeMin: number; fleetSizeMax: number | null } {
+  const safeMin = Number.isFinite(min) && min >= 0 ? Math.floor(min) : 0;
+  if (max === null || max === undefined) {
+    return { fleetSizeMin: safeMin, fleetSizeMax: null };
+  }
+  const safeMax = Number.isFinite(max) && max >= 0 ? Math.floor(max) : null;
+  if (safeMax === null) return { fleetSizeMin: safeMin, fleetSizeMax: null };
+  if (safeMax < safeMin) {
+    throw new BadRequestError(
+      "Fleet-size max must be greater than or equal to min",
+    );
+  }
+  return { fleetSizeMin: safeMin, fleetSizeMax: safeMax };
 }
 
 export async function listPlans(opts: { includeInactive?: boolean } = {}) {
@@ -46,24 +56,23 @@ export async function getPlanById(id: string) {
 export async function createPlan(input: PlanInput) {
   const name = input.name.trim();
   if (!name) throw new BadRequestError("Plan name is required");
-  if (input.price < 0) throw new BadRequestError("Price cannot be negative");
-  if (input.durationDays < 1)
-    throw new BadRequestError("Duration must be at least 1 day");
 
   const dup = await planRepo.findByName(name);
   if (dup) throw new ConflictError("A plan with this name already exists");
 
+  const bounds = normalizeBounds(input.fleetSizeMin ?? 0, input.fleetSizeMax);
+
   return planRepo.create({
     name,
     description: input.description?.trim() ?? null,
-    price: input.price,
     currency: (input.currency ?? "INR").toUpperCase(),
-    durationDays: input.durationDays,
     isActive: input.isActive ?? true,
-    maxVehicles: normalizeQuota(input.maxVehicles),
-    maxDrivers: normalizeQuota(input.maxDrivers),
-    maxUsers: normalizeQuota(input.maxUsers),
-    maxRoles: normalizeQuota(input.maxRoles),
+    fleetSizeMin: bounds.fleetSizeMin,
+    fleetSizeMax: bounds.fleetSizeMax,
+    perVehiclePerMonth: input.perVehiclePerMonth,
+    perVehiclePerYear: input.perVehiclePerYear,
+    perDriverPerMonth: input.perDriverPerMonth ?? 0,
+    gstPercent: input.gstPercent ?? 18,
   });
 }
 
@@ -85,23 +94,47 @@ export async function updatePlan(id: string, input: Partial<PlanInput>) {
   if (input.description !== undefined) {
     patch.description = input.description?.trim() ?? null;
   }
-  if (input.price !== undefined) {
-    if (input.price < 0) throw new BadRequestError("Price cannot be negative");
-    patch.price = input.price;
-  }
   if (input.currency !== undefined) {
     patch.currency = input.currency.toUpperCase();
   }
-  if (input.durationDays !== undefined) {
-    if (input.durationDays < 1)
-      throw new BadRequestError("Duration must be at least 1 day");
-    patch.durationDays = input.durationDays;
-  }
   if (input.isActive !== undefined) patch.isActive = input.isActive;
 
-  for (const key of QUOTA_KEYS) {
-    const val = (input as Record<QuotaKey, number | null | undefined>)[key];
-    if (val !== undefined) patch[key] = normalizeQuota(val);
+  if (input.fleetSizeMin !== undefined || input.fleetSizeMax !== undefined) {
+    const min =
+      input.fleetSizeMin !== undefined
+        ? input.fleetSizeMin
+        : (current as unknown as { fleetSizeMin: number }).fleetSizeMin;
+    const max =
+      input.fleetSizeMax !== undefined
+        ? input.fleetSizeMax
+        : (current as unknown as { fleetSizeMax: number | null }).fleetSizeMax;
+    const bounds = normalizeBounds(min, max);
+    patch.fleetSizeMin = bounds.fleetSizeMin;
+    patch.fleetSizeMax = bounds.fleetSizeMax;
+  }
+  if (input.perVehiclePerMonth !== undefined) {
+    if (input.perVehiclePerMonth < 0) {
+      throw new BadRequestError("Per-vehicle monthly rate cannot be negative");
+    }
+    patch.perVehiclePerMonth = input.perVehiclePerMonth;
+  }
+  if (input.perVehiclePerYear !== undefined) {
+    if (input.perVehiclePerYear < 0) {
+      throw new BadRequestError("Per-vehicle yearly rate cannot be negative");
+    }
+    patch.perVehiclePerYear = input.perVehiclePerYear;
+  }
+  if (input.perDriverPerMonth !== undefined) {
+    if (input.perDriverPerMonth < 0) {
+      throw new BadRequestError("Per-driver monthly rate cannot be negative");
+    }
+    patch.perDriverPerMonth = input.perDriverPerMonth;
+  }
+  if (input.gstPercent !== undefined) {
+    if (input.gstPercent < 0 || input.gstPercent > 100) {
+      throw new BadRequestError("GST percent must be between 0 and 100");
+    }
+    patch.gstPercent = input.gstPercent;
   }
 
   return planRepo.update(id, patch);
@@ -113,8 +146,6 @@ export async function deactivatePlan(id: string) {
   if (!current.isActive) {
     throw new ForbiddenError("Plan is already inactive");
   }
-  // Deactivation is safe even with active tenants — they keep their plan until
-  // it expires; new tenants just can't pick it.
   return planRepo.update(id, { isActive: false });
 }
 
@@ -125,4 +156,32 @@ export async function reactivatePlan(id: string) {
     throw new ForbiddenError("Plan is already active");
   }
   return planRepo.update(id, { isActive: true });
+}
+
+/**
+ * Auto-tier resolver: returns the active plan whose fleet-size band covers
+ * the given vehicle count. If multiple bands match, the one with the smallest
+ * range wins (more specific). Returns null when no active plan covers the
+ * size — typically means the superadmin hasn't created plans yet.
+ */
+export async function resolvePlanForFleetSize(vehicleCount: number) {
+  const count = Math.max(0, Math.floor(vehicleCount));
+  const candidates = await Plan.find({
+    isActive: true,
+    fleetSizeMin: { $lte: count },
+    $or: [
+      { fleetSizeMax: null },
+      { fleetSizeMax: { $gte: count } },
+    ],
+  }).lean();
+  if (candidates.length === 0) return null;
+  // Prefer the tier with the smallest (most specific) max bound.
+  candidates.sort((a, b) => {
+    const aMax =
+      (a as { fleetSizeMax?: number | null }).fleetSizeMax ?? Number.POSITIVE_INFINITY;
+    const bMax =
+      (b as { fleetSizeMax?: number | null }).fleetSizeMax ?? Number.POSITIVE_INFINITY;
+    return aMax - bMax;
+  });
+  return candidates[0];
 }

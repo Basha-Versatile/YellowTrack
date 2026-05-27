@@ -43,6 +43,9 @@ export const PUT = withRoute<{ id: string }>(
         "Valid-from date cannot be after the expiry date",
       );
     }
+    // Capture the doc *before* the mutation so the activity entry can be
+    // reverted later. Only the editable fields are snapshotted.
+    const before = await complianceRepo.findById(ctx, params.id);
     const status = calculateComplianceStatus(finalExpiry);
     const doc = await complianceRepo.updateExpiry(
       ctx,
@@ -52,6 +55,14 @@ export const PUT = withRoute<{ id: string }>(
       finalIssued,
     );
     const d = doc as { type?: string };
+    const b = before as
+      | (Record<string, unknown> & {
+          expiryDate?: Date | null;
+          issuedDate?: Date | null;
+          status?: string;
+          isLifetime?: boolean;
+        })
+      | null;
     await logFromRequest(req, ctx, session, {
       action: "compliance.update",
       entityType: "compliance",
@@ -61,6 +72,15 @@ export const PUT = withRoute<{ id: string }>(
         ? `Set ${d.type ?? "document"} to lifetime validity`
         : `Updated ${d.type ?? "document"} expiry${finalExpiry ? ` to ${finalExpiry.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}`,
       metadata: { lifetime: input.lifetime ?? false, expiryDate: finalExpiry },
+      revertable: Boolean(b),
+      beforeSnapshot: b
+        ? {
+            expiryDate: b.expiryDate ?? null,
+            issuedDate: b.issuedDate ?? null,
+            status: b.status ?? null,
+            isLifetime: b.isLifetime ?? false,
+          }
+        : null,
     });
     return success(doc, "Compliance document updated successfully");
   },

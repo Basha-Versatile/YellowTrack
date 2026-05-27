@@ -1,36 +1,24 @@
 import "server-only";
-import { ForbiddenError } from "@/lib/errors";
-import { Driver, Plan, Role, Tenant, User, Vehicle } from "@/models";
+import { Driver, Role, User, Vehicle } from "@/models";
 
 /**
- * Plan-level quota enforcement.
+ * Quota enforcement is disabled with the new per-vehicle pricing model.
  *
- * Each plan may set optional quotas for vehicles / drivers / users / roles.
- * If a quota field is null/undefined on the plan, that resource is unlimited
- * under this plan. Tenants on TRIAL (no plan attached) are also unlimited —
- * the superadmin assigns a plan to start enforcing limits.
+ * Plans now define fleet-size tiers + per-unit pricing rather than hard caps,
+ * so growing the fleet just moves the tenant up to the next tier — it never
+ * blocks the operation. `assertQuota` is kept as a no-op so existing callers
+ * in vehicle/driver/role services continue to compile and behave identically.
+ *
+ * `getTenantQuotaSummary` still surfaces current usage for the tenant detail
+ * page, but always reports `limit: null` (unlimited).
  */
 
 export type QuotaResource = "vehicle" | "driver" | "user" | "role";
 
-const LABELS: Record<QuotaResource, string> = {
-  vehicle: "vehicles",
-  driver: "drivers",
-  user: "users",
-  role: "roles",
-};
-
-const QUOTA_KEY: Record<QuotaResource, "maxVehicles" | "maxDrivers" | "maxUsers" | "maxRoles"> = {
-  vehicle: "maxVehicles",
-  driver: "maxDrivers",
-  user: "maxUsers",
-  role: "maxRoles",
-};
-
 export type QuotaUsage = {
   resource: QuotaResource;
   used: number;
-  /** `null` means unlimited under this plan (or tenant has no plan). */
+  /** Always `null` under per-vehicle billing — there are no hard caps. */
   limit: number | null;
 };
 
@@ -50,63 +38,22 @@ async function countCurrent(
   }
 }
 
-async function getPlanLimit(
-  tenantId: string,
-  resource: QuotaResource,
-): Promise<number | null> {
-  const tenant = await Tenant.findById(tenantId).select("planId").lean();
-  if (!tenant?.planId) return null;
-  const plan = await Plan.findById(tenant.planId).select(QUOTA_KEY[resource]).lean();
-  if (!plan) return null;
-  const raw = (plan as Record<string, unknown>)[QUOTA_KEY[resource]];
-  if (raw === null || raw === undefined) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? n : null;
-}
-
-/**
- * Throw if creating one more record of this resource would exceed the plan
- * limit. No-op when there is no plan or the plan does not constrain this
- * resource.
- */
 export async function assertQuota(
-  tenantId: string,
-  resource: QuotaResource,
+  _tenantId: string,
+  _resource: QuotaResource,
 ): Promise<void> {
-  const limit = await getPlanLimit(tenantId, resource);
-  if (limit === null) return;
-  const used = await countCurrent(tenantId, resource);
-  if (used >= limit) {
-    throw new ForbiddenError(
-      `Plan limit reached — your current plan allows up to ${limit} ${LABELS[resource]}. Upgrade your plan or contact your administrator.`,
-    );
-  }
+  // No-op — per-vehicle pricing replaces hard quotas.
 }
 
-/** Resolve usage + limit for all four quota resources for a tenant. */
 export async function getTenantQuotaSummary(
   tenantId: string,
 ): Promise<QuotaUsage[]> {
-  const tenant = await Tenant.findById(tenantId).select("planId").lean();
-  const plan = tenant?.planId
-    ? await Plan.findById(tenant.planId)
-        .select("maxVehicles maxDrivers maxUsers maxRoles")
-        .lean()
-    : null;
-
   const resources: QuotaResource[] = ["vehicle", "driver", "user", "role"];
-  const usage = await Promise.all(
-    resources.map(async (resource) => {
-      const used = await countCurrent(tenantId, resource);
-      const raw = plan
-        ? (plan as Record<string, unknown>)[QUOTA_KEY[resource]]
-        : null;
-      const limit =
-        raw === null || raw === undefined || Number.isNaN(Number(raw))
-          ? null
-          : Number(raw);
-      return { resource, used, limit };
-    }),
+  return Promise.all(
+    resources.map(async (resource) => ({
+      resource,
+      used: await countCurrent(tenantId, resource),
+      limit: null,
+    })),
   );
-  return usage;
 }

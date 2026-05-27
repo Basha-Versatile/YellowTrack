@@ -102,11 +102,11 @@ export default function AuthPage() {
 
   const logo = (
     <div className="mb-2 flex items-center gap-2.5">
-      <Image src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" width={44} height={44} className="w-11 h-11 rounded-xl object-contain" />
-      <span className="text-xl font-extrabold tracking-tight">
+      <Image src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" width={60} height={60} className="w-30 h-30 rounded-xl object-contain" />
+      {/* <span className="text-xl font-extrabold tracking-tight">
         <span className="text-yellow-500">Yellow</span>
         <span className="text-gray-900 dark:text-white"> Track</span>
-      </span>
+      </span> */}
     </div>
   );
 
@@ -323,8 +323,8 @@ export default function AuthPage() {
             }`}
           >
             <div className="relative w-full h-full overflow-hidden">
-              {/* Yellow gradient background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-yellow-300 via-yellow-400 to-amber-500" />
+              {/* White background */}
+              <div className="absolute inset-0 bg-white dark:bg-gray-900 border-l border-gray-100 dark:border-gray-800" />
 
               {/* Decorative elements */}
               <div className="absolute top-10 right-10 w-40 h-40 rounded-full border-2 border-gray-900/5 dark:border-white/20" />

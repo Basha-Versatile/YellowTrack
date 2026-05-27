@@ -177,6 +177,56 @@ export const authAPI = {
     }),
 };
 
+// ── Current user's tenant (workspace details) ─────────────
+type TenantUpdatePayload = {
+  name?: string;
+  billingEmail?: string | null;
+  gstNumber?: string | null;
+  panNumber?: string | null;
+  addressLine?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pinCode?: string | null;
+  // Logo handling. Pass a File to upload a new one; set removeLogo=true to clear.
+  logo?: File | null;
+  removeLogo?: boolean;
+};
+
+export const tenantAPI = {
+  getMine: () => api.get("/auth/me/tenant"),
+  updateMine: (data: TenantUpdatePayload) => {
+    const wantsFileUpload =
+      data.logo instanceof File || data.removeLogo === true;
+    if (!wantsFileUpload) {
+      const { logo: _logo, removeLogo: _rm, ...rest } = data;
+      void _logo;
+      void _rm;
+      return api.patch("/auth/me/tenant", rest);
+    }
+    const fd = new FormData();
+    if (data.name !== undefined) fd.append("name", data.name);
+    if (data.billingEmail !== undefined && data.billingEmail !== null)
+      fd.append("billingEmail", data.billingEmail);
+    if (data.gstNumber !== undefined && data.gstNumber !== null)
+      fd.append("gstNumber", data.gstNumber);
+    if (data.panNumber !== undefined && data.panNumber !== null)
+      fd.append("panNumber", data.panNumber);
+    if (data.addressLine !== undefined && data.addressLine !== null)
+      fd.append("addressLine", data.addressLine);
+    if (data.city !== undefined && data.city !== null)
+      fd.append("city", data.city);
+    if (data.state !== undefined && data.state !== null)
+      fd.append("state", data.state);
+    if (data.pinCode !== undefined && data.pinCode !== null)
+      fd.append("pinCode", data.pinCode);
+    if (data.logo instanceof File) fd.append("logo", data.logo);
+    if (data.removeLogo) fd.append("removeLogo", "true");
+    return api.patch("/auth/me/tenant", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+};
+
 // ── Roles & permissions ────────────────────────────────────
 export const rolesAPI = {
   list: () => api.get("/roles"),
@@ -240,7 +290,10 @@ export const superadminAPI = {
     logo?: File | null;
     gstNumber?: string | null;
     panNumber?: string | null;
-    tanNumber?: string | null;
+    addressLine?: string | null;
+    city?: string | null;
+    state?: string | null;
+    pinCode?: string | null;
     admin: { name: string; email: string; profileImage?: File | null };
   }) => {
     const fd = new FormData();
@@ -251,7 +304,10 @@ export const superadminAPI = {
     if (data.logo) fd.append("logo", data.logo);
     if (data.gstNumber) fd.append("gstNumber", data.gstNumber);
     if (data.panNumber) fd.append("panNumber", data.panNumber);
-    if (data.tanNumber) fd.append("tanNumber", data.tanNumber);
+    if (data.addressLine) fd.append("addressLine", data.addressLine);
+    if (data.city) fd.append("city", data.city);
+    if (data.state) fd.append("state", data.state);
+    if (data.pinCode) fd.append("pinCode", data.pinCode);
     fd.append("adminName", data.admin.name);
     fd.append("adminEmail", data.admin.email);
     if (data.admin.profileImage) fd.append("adminProfileImage", data.admin.profileImage);
@@ -285,28 +341,28 @@ export const superadminAPI = {
   createPlan: (data: {
     name: string;
     description?: string | null;
-    price: number;
     currency?: string;
-    durationDays: number;
     isActive?: boolean;
-    maxVehicles?: number | null;
-    maxDrivers?: number | null;
-    maxUsers?: number | null;
-    maxRoles?: number | null;
+    fleetSizeMin: number;
+    fleetSizeMax?: number | null;
+    perVehiclePerMonth: number;
+    perVehiclePerYear: number;
+    perDriverPerMonth?: number;
+    gstPercent?: number;
   }) => api.post("/superadmin/plans", data),
   updatePlan: (
     id: string,
     data: Partial<{
       name: string;
       description: string | null;
-      price: number;
       currency: string;
-      durationDays: number;
       isActive: boolean;
-      maxVehicles: number | null;
-      maxDrivers: number | null;
-      maxUsers: number | null;
-      maxRoles: number | null;
+      fleetSizeMin: number;
+      fleetSizeMax: number | null;
+      perVehiclePerMonth: number;
+      perVehiclePerYear: number;
+      perDriverPerMonth: number;
+      gstPercent: number;
     }>,
   ) => api.patch(`/superadmin/plans/${id}`, data),
   deactivatePlan: (id: string) => api.delete(`/superadmin/plans/${id}`),
@@ -536,6 +592,10 @@ export const activityLogAPI = {
     to?: string;
   } = {}) =>
     api.get("/activity-log", { params }),
+  // Reverse a recorded action. Pass `force: true` to override the conflict
+  // check when the entity has been edited after the log entry.
+  revert: (id: string, opts: { force?: boolean } = {}) =>
+    api.post(`/activity-log/${id}/revert${opts.force ? "?force=1" : ""}`),
 };
 
 // ── Compliance ──────────────────────────────────────────────

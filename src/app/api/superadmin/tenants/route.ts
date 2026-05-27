@@ -35,7 +35,10 @@ export const POST = withRoute(
       logoUrl: logoFile?.url ?? null,
       gstNumber: firstString(fields, "gstNumber") || null,
       panNumber: firstString(fields, "panNumber") || null,
-      tanNumber: firstString(fields, "tanNumber") || null,
+      addressLine: firstString(fields, "addressLine") || null,
+      city: firstString(fields, "city") || null,
+      state: firstString(fields, "state") || null,
+      pinCode: firstString(fields, "pinCode") || null,
       admin: {
         name: firstString(fields, "adminName"),
         email: firstString(fields, "adminEmail"),

@@ -109,7 +109,7 @@ function wrapPlainAsHtml(text: string): string {
 
 function htmlShell(inner: string, ctaUrl?: string, ctaLabel?: string): string {
   const cta = ctaUrl
-    ? `<div style="margin:24px 0">
+    ? `<div style="margin:24px 0;text-align:center">
          <a href="${ctaUrl}" style="display:inline-block;background:${BRAND_YELLOW};color:${BRAND_DARK};font-weight:700;font-size:14px;padding:12px 24px;border-radius:10px;text-decoration:none">
            ${ctaLabel ?? "Open"}
          </a>

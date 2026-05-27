@@ -8,15 +8,20 @@ import {
 } from "mongoose";
 
 /**
- * Superadmin-defined subscription plan. Time-based — a plan grants access for
- * `durationDays` from the start of a tenant's subscription.
+ * Superadmin-defined subscription plan — per-vehicle pricing with fleet-size
+ * tiering (e.g. Silver 0-20, Gold 21-50, Platinum 51-100, Diamond 100+).
  *
- * Optional quotas (maxVehicles, maxDrivers, maxUsers, maxRoles): when a field
- * is null/unset, that resource is unlimited under this plan. When set, the
- * tenant cannot create more than that many of the resource.
+ *  - `fleetSizeMin` / `fleetSizeMax` describe the band this tier covers.
+ *    `fleetSizeMax: null` means the upper bound is unlimited (the "+" tier).
+ *  - `perVehiclePerMonth` / `perVehiclePerYear` are the headline rates billed
+ *    per vehicle. The tenant chooses MONTHLY or YEARLY at the tenant level.
+ *  - `perDriverPerMonth` is the per-driver add-on; defaults to 0 if the plan
+ *    doesn't charge for drivers.
+ *  - `gstPercent` is the tax that's added on top of the subtotal (18 = 18%).
  *
  * Inactive plans (isActive=false) stay in the DB so existing tenants on them
- * keep working, but they don't appear in the picker for new tenants.
+ * keep working, but they don't appear in the auto-tier resolver for new fleet
+ * sizes.
  */
 const planSchema = new Schema(
   {
@@ -28,14 +33,22 @@ const planSchema = new Schema(
       maxlength: 80,
     },
     description: { type: String, trim: true, maxlength: 240 },
-    price: { type: Number, required: true, min: 0 },
     currency: { type: String, default: "INR", maxlength: 3, uppercase: true },
-    durationDays: { type: Number, required: true, min: 1, max: 3650 },
     isActive: { type: Boolean, default: true, index: true },
-    maxVehicles: { type: Number, min: 0, default: null },
-    maxDrivers: { type: Number, min: 0, default: null },
-    maxUsers: { type: Number, min: 0, default: null },
-    maxRoles: { type: Number, min: 0, default: null },
+
+    // Fleet-size band. `fleetSizeMax: null` = unlimited upper bound.
+    fleetSizeMin: { type: Number, required: true, min: 0, default: 0 },
+    fleetSizeMax: { type: Number, min: 1, default: null },
+
+    // Per-vehicle pricing.
+    perVehiclePerMonth: { type: Number, required: true, min: 0, default: 0 },
+    perVehiclePerYear: { type: Number, required: true, min: 0, default: 0 },
+
+    // Driver add-on.
+    perDriverPerMonth: { type: Number, min: 0, default: 0 },
+
+    // GST applied on the subtotal (percentage points, e.g. 18 = 18%).
+    gstPercent: { type: Number, min: 0, max: 100, default: 18 },
   },
   { timestamps: true },
 );

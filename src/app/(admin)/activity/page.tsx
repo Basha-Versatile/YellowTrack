@@ -1,6 +1,8 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { activityLogAPI } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 import { SearchInput } from "@/components/ui/SearchInput";
 import {
   Activity,
@@ -11,6 +13,10 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
+  Undo2,
+  CheckCircle2,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 
 type FieldDiff = { field: string; before: unknown; after: unknown };
@@ -34,6 +40,10 @@ type LogRow = {
   fields: FieldDiff[];
   metadata: Record<string, unknown> | null;
   ipAddress: string | null;
+  revertable?: boolean;
+  beforeSnapshot?: Record<string, unknown> | null;
+  revertedAt?: string | null;
+  revertedByUserId?: string | null;
 };
 
 type Actor = { userId: string; userName: string | null; userEmail: string | null };
@@ -90,6 +100,10 @@ function relativeTime(iso: string): string {
 }
 
 export default function ActivityLogPage() {
+  const { hasPermission } = useAuth();
+  const toast = useToast();
+  const canRevert = hasPermission("activityLog:revert");
+
   const [rows, setRows] = useState<LogRow[]>([]);
   const [actors, setActors] = useState<Actor[]>([]);
   const [total, setTotal] = useState(0);
@@ -104,6 +118,8 @@ export default function ActivityLogPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [revertTarget, setRevertTarget] = useState<LogRow | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,7 +157,7 @@ export default function ActivityLogPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, limit, userId, entityType, search, from, to]);
+  }, [page, limit, userId, entityType, search, from, to, reloadTick]);
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const hasActiveFilter = useMemo(
@@ -260,45 +276,67 @@ export default function ActivityLogPage() {
               const hasDetail = (r.fields?.length ?? 0) > 0 || !!r.metadata;
               const tint = ENTITY_TINT[r.entityType] ?? "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
               return (
-                <li key={rowId} className="px-4 py-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                  <button
-                    type="button"
-                    onClick={() => hasDetail && setExpandedId(isOpen ? null : rowId)}
-                    className="w-full text-left flex items-start gap-3"
-                    disabled={!hasDetail}
-                  >
-                    <span className={`mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0 ${tint}`}>
-                      {hasDetail ? (isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />) : <Clock className="w-3 h-3" />}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
-                        <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${tint}`}>
-                          {r.entityType.replace(/_/g, " ")}
-                        </span>
-                        <span className="text-[10px] font-mono text-gray-400">{r.action}</span>
-                        <span className="text-[10px] text-gray-400" title={formatDateTime(r.createdAt)}>
-                          {relativeTime(r.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">
-                        {r.summary}
-                      </p>
-                      <div className="mt-1 flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400 flex-wrap">
-                        <span className="inline-flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          {r.userName ?? r.userEmail ?? "System"}
-                          {r.userRole && <span className="text-gray-400">· {r.userRole}</span>}
-                        </span>
-                        {r.entityLabel && (
-                          <span className="inline-flex items-center gap-1">
-                            <span className="opacity-50">on</span>
-                            <span className="font-semibold text-gray-700 dark:text-gray-300 truncate max-w-[260px]">{r.entityLabel}</span>
+                <li key={rowId} className={`px-4 py-3 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors ${r.revertedAt ? "opacity-70" : ""}`}>
+                  <div className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => hasDetail && setExpandedId(isOpen ? null : rowId)}
+                      className="flex-1 text-left flex items-start gap-3 min-w-0"
+                      disabled={!hasDetail}
+                    >
+                      <span className={`mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-lg flex-shrink-0 ${tint}`}>
+                        {hasDetail ? (isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />) : <Clock className="w-3 h-3" />}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${tint}`}>
+                            {r.entityType.replace(/_/g, " ")}
                           </span>
-                        )}
-                        <span className="font-mono text-gray-400">{formatDateTime(r.createdAt)}</span>
+                          <span className="text-[10px] font-mono text-gray-400">{r.action}</span>
+                          <span className="text-[10px] text-gray-400" title={formatDateTime(r.createdAt)}>
+                            {relativeTime(r.createdAt)}
+                          </span>
+                          {r.revertedAt && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              Reverted
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-sm font-semibold mt-0.5 ${r.revertedAt ? "text-gray-500 dark:text-gray-400 line-through" : "text-gray-900 dark:text-white"}`}>
+                          {r.summary}
+                        </p>
+                        <div className="mt-1 flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400 flex-wrap">
+                          <span className="inline-flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {r.userName ?? r.userEmail ?? "System"}
+                            {r.userRole && <span className="text-gray-400">· {r.userRole}</span>}
+                          </span>
+                          {r.entityLabel && (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="opacity-50">on</span>
+                              <span className="font-semibold text-gray-700 dark:text-gray-300 truncate max-w-[260px]">{r.entityLabel}</span>
+                            </span>
+                          )}
+                          <span className="font-mono text-gray-400">{formatDateTime(r.createdAt)}</span>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    {canRevert && r.revertable && !r.revertedAt && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRevertTarget(r);
+                        }}
+                        className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-yellow-200 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-400 dark:hover:bg-yellow-500/20 px-2.5 py-1 text-[11px] font-bold transition-colors"
+                        title="Revert this action"
+                      >
+                        <Undo2 className="w-3 h-3" />
+                        Revert
+                      </button>
+                    )}
+                  </div>
 
                   {isOpen && hasDetail && (
                     <div className="mt-3 ml-9 space-y-2">
@@ -369,6 +407,181 @@ export default function ActivityLogPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {revertTarget && (
+        <RevertModal
+          entry={revertTarget}
+          onClose={() => setRevertTarget(null)}
+          onSuccess={(msg) => {
+            setRevertTarget(null);
+            toast.success("Reverted", msg);
+            setReloadTick((t) => t + 1);
+          }}
+          onError={(msg) => toast.error("Revert failed", msg)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Revert confirmation modal ───────────────────────────────────────────────
+function RevertModal({
+  entry,
+  onClose,
+  onSuccess,
+  onError,
+}: {
+  entry: LogRow;
+  onClose: () => void;
+  onSuccess: (msg: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [needsForce, setNeedsForce] = useState(false);
+  const [forceChecked, setForceChecked] = useState(false);
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+
+  const submit = async (force: boolean) => {
+    setSubmitting(true);
+    try {
+      await activityLogAPI.revert(entry.id, { force });
+      onSuccess(`Undid "${entry.summary}"`);
+    } catch (err) {
+      const status = (err as { response?: { status?: number; data?: { message?: string } } })
+        ?.response?.status;
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        "Failed to revert action";
+      if (status === 409 && !force) {
+        // Conflict — entity changed after the log entry. Surface the message
+        // and ask for explicit override.
+        setNeedsForce(true);
+        setConflictMessage(message);
+      } else {
+        onError(message);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Render a compact "before → after" hint pulled from the field diff stored
+  // on the original log entry (if any). Falls back to the raw summary.
+  const preview = entry.fields ?? [];
+
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => !submitting && onClose()}
+      />
+      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+        <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-lg bg-white/25 flex items-center justify-center text-white">
+                <Undo2 className="w-4 h-4" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold text-white">Revert this action?</h2>
+                <p className="text-white/80 text-[11px] mt-0.5 truncate">
+                  {entry.entityLabel ?? entry.entityType}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => !submitting && onClose()}
+              className="text-white/70 hover:text-white"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+              Original action
+            </p>
+            <p className="text-sm text-gray-900 dark:text-white font-semibold">
+              {entry.summary}
+            </p>
+          </div>
+
+          {preview.length > 0 && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                Reverting will restore
+              </p>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden text-[11px]">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-800/50">
+                    <tr>
+                      <th className="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider text-[9px]">Field</th>
+                      <th className="text-left px-3 py-1.5 font-semibold text-gray-500 uppercase tracking-wider text-[9px]">Will become</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {preview.map((f, i) => (
+                      <tr key={i}>
+                        <td className="px-3 py-1.5 font-mono text-gray-700 dark:text-gray-300">{f.field}</td>
+                        <td className="px-3 py-1.5 text-gray-900 dark:text-white break-all">
+                          {JSON.stringify(f.before)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {needsForce && conflictMessage && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-800 dark:text-amber-300">
+                  <p className="font-semibold">{conflictMessage}</p>
+                  <label className="mt-2 flex items-center gap-2 text-amber-900 dark:text-amber-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={forceChecked}
+                      onChange={(e) => setForceChecked(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-amber-300 text-amber-600 focus:ring-amber-400"
+                    />
+                    Yes, override and revert anyway
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2.5 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+          <button
+            type="button"
+            onClick={() => submit(needsForce && forceChecked)}
+            disabled={submitting || (needsForce && !forceChecked)}
+            className="flex-1 h-10 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+          >
+            {submitting && (
+              <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+            )}
+            <Undo2 className="w-3.5 h-3.5" />
+            {needsForce ? "Revert anyway" : "Confirm revert"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -14,6 +14,8 @@ export const SUBSCRIPTION_STATUS = [
   "EXPIRED", // subscription end date passed
   "CANCELLED", // superadmin manually cancelled
 ] as const;
+export const BILLING_CYCLES = ["MONTHLY", "YEARLY"] as const;
+export type BillingCycle = (typeof BILLING_CYCLES)[number];
 
 const tenantSchema = new Schema(
   {
@@ -45,6 +47,14 @@ const tenantSchema = new Schema(
       default: "TRIAL",
       index: true,
     },
+    // Billing cycle the tenant is on. Combined with the resolved plan's
+    // per-vehicle rate (MONTHLY → perVehiclePerMonth, YEARLY → perVehiclePerYear)
+    // to compute invoices. Default MONTHLY.
+    billingCycle: {
+      type: String,
+      enum: BILLING_CYCLES,
+      default: "MONTHLY",
+    },
 
     ownerUserId: { type: Schema.Types.ObjectId, ref: "User" },
     billingEmail: { type: String, lowercase: true, trim: true },
@@ -55,7 +65,11 @@ const tenantSchema = new Schema(
     // present. Stored as plain strings; the schema enforces the shape only.
     gstNumber: { type: String, uppercase: true, trim: true, default: null },
     panNumber: { type: String, uppercase: true, trim: true, default: null },
-    tanNumber: { type: String, uppercase: true, trim: true, default: null },
+    // Registered address — optional, used on invoices and reports.
+    addressLine: { type: String, trim: true, default: null },
+    city: { type: String, trim: true, default: null },
+    state: { type: String, trim: true, default: null },
+    pinCode: { type: String, trim: true, default: null },
     // IANA timezone (e.g. "Asia/Kolkata"). Per-tenant cron schedulers use this
     // to compute "today" in tenant-local time for EMI reminders, etc.
     timezone: { type: String, default: "Asia/Kolkata", trim: true },

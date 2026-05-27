@@ -1,6 +1,6 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { authAPI, permissionsAPI, setAccessToken, clearTokens } from "@/lib/api";
+import { authAPI, permissionsAPI, setAccessToken, clearTokens, tenantAPI } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/context/ToastContext";
 
@@ -25,7 +25,7 @@ interface Tenant {
 function postLoginRoute(user: User): string {
   if (user.mustResetPassword) return "/reset-password";
   if (user.role === "SUPERADMIN") return "/superadmin";
-  return "/";
+  return "/dashboard";
 }
 
 interface AuthContextType {
@@ -45,6 +45,18 @@ interface AuthContextType {
     profileImage?: File | null;
     removeProfileImage?: boolean;
   }) => Promise<void>;
+  updateTenant: (data: {
+    name?: string;
+    billingEmail?: string | null;
+    gstNumber?: string | null;
+    panNumber?: string | null;
+    addressLine?: string | null;
+    city?: string | null;
+    state?: string | null;
+    pinCode?: string | null;
+    logo?: File | null;
+    removeLogo?: boolean;
+  }) => Promise<Tenant>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -208,6 +220,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     [],
   );
 
+  const updateTenant = useCallback(
+    async (data: {
+      name?: string;
+      billingEmail?: string | null;
+      gstNumber?: string | null;
+      panNumber?: string | null;
+      addressLine?: string | null;
+      city?: string | null;
+      state?: string | null;
+      pinCode?: string | null;
+      logo?: File | null;
+      removeLogo?: boolean;
+    }): Promise<Tenant> => {
+      const res = await tenantAPI.updateMine(data);
+      const fresh = res.data.data as {
+        id: string;
+        name: string;
+        slug: string;
+        logoUrl: string | null;
+        billingEmail: string | null;
+      };
+      // Sidebar / header read these four fields from the AuthContext tenant
+      // cache. Keep the cached slim view in sync so logo + name updates show
+      // up instantly without a page reload.
+      const slim: Tenant = {
+        id: fresh.id,
+        name: fresh.name,
+        slug: fresh.slug,
+        logoUrl: fresh.logoUrl ?? null,
+        billingEmail: fresh.billingEmail ?? null,
+      };
+      setTenant(slim);
+      localStorage.setItem("tenant", JSON.stringify(slim));
+      return slim;
+    },
+    [],
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -223,6 +273,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         logoutAll,
         refreshPermissions: loadPermissions,
         updateProfile,
+        updateTenant,
       }}
     >
       {children}

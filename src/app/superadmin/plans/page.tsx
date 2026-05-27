@@ -15,9 +15,7 @@ import {
   X,
   IndianRupee,
   Truck,
-  IdCard,
-  ShieldCheck,
-  Infinity as InfinityIcon,
+  Percent,
 } from "lucide-react";
 
 type Plan = {
@@ -25,16 +23,16 @@ type Plan = {
   _id?: string;
   name: string;
   description?: string | null;
-  price: number;
   currency: string;
-  durationDays: number;
   isActive: boolean;
   tenantCount: number;
   createdAt?: string;
-  maxVehicles?: number | null;
-  maxDrivers?: number | null;
-  maxUsers?: number | null;
-  maxRoles?: number | null;
+  fleetSizeMin: number;
+  fleetSizeMax: number | null;
+  perVehiclePerMonth: number;
+  perVehiclePerYear: number;
+  perDriverPerMonth: number;
+  gstPercent: number;
 };
 
 function formatPrice(amount: number, currency: string): string {
@@ -43,16 +41,9 @@ function formatPrice(amount: number, currency: string): string {
   return `${currency} ${amount.toLocaleString()}`;
 }
 
-function formatDuration(days: number): string {
-  if (days === 30) return "1 month";
-  if (days === 60) return "2 months";
-  if (days === 90) return "3 months";
-  if (days === 180) return "6 months";
-  if (days === 365 || days === 366) return "1 year";
-  if (days < 30) return `${days} days`;
-  if (days % 365 === 0) return `${days / 365} years`;
-  if (days % 30 === 0) return `${days / 30} months`;
-  return `${days} days`;
+function fleetBandLabel(min: number, max: number | null): string {
+  if (max === null) return `${min}+`;
+  return `${min} – ${max}`;
 }
 
 export default function PlansPage() {
@@ -132,7 +123,7 @@ export default function PlansPage() {
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-yellow-700/70 dark:text-yellow-400">
-              Platform · Subscription plans
+              Platform · Subscription tiers
             </span>
             <h1 className="mt-2 text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
               Plans
@@ -151,7 +142,6 @@ export default function PlansPage() {
         </div>
       </div>
 
-      {/* Trial config + toggle */}
       <TrialDaysCard onSaved={(msg) => setToast({ type: "success", message: msg })} />
 
       <div className="flex items-center gap-2">
@@ -166,7 +156,6 @@ export default function PlansPage() {
         </label>
       </div>
 
-      {/* Plans grid */}
       {loading ? (
         <PlansSkeleton />
       ) : plans.length === 0 ? (
@@ -206,7 +195,7 @@ export default function PlansPage() {
   );
 }
 
-// ── Trial-days configuration card ───────────────────────────────────────────
+// ── Trial-days configuration card (unchanged) ─────────────────────────────
 function TrialDaysCard({ onSaved }: { onSaved: (msg: string) => void }) {
   const [trialDays, setTrialDays] = useState<number | "">("");
   const [original, setOriginal] = useState<number | null>(null);
@@ -268,7 +257,6 @@ function TrialDaysCard({ onSaved }: { onSaved: (msg: string) => void }) {
               setTrialDays(e.target.value === "" ? "" : Number(e.target.value))
             }
             className="w-24 h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 focus:border-yellow-400 focus:outline-none focus:ring-3 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-center font-mono"
-            aria-label="Trial days"
           />
           <span className="text-xs text-gray-500 dark:text-gray-400">days</span>
           <button
@@ -285,7 +273,6 @@ function TrialDaysCard({ onSaved }: { onSaved: (msg: string) => void }) {
   );
 }
 
-// ── Plan card ───────────────────────────────────────────────────────────────
 function PlanCard({
   plan: p,
   busy,
@@ -322,45 +309,52 @@ function PlanCard({
             <h3 className="text-base font-bold text-gray-900 dark:text-white">
               {p.name}
             </h3>
-            {!p.isActive && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                Inactive
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Truck className="w-3 h-3 text-gray-400" />
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                Fleet {fleetBandLabel(p.fleetSizeMin, p.fleetSizeMax)}
               </span>
-            )}
+              {!p.isActive && (
+                <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                  Inactive
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex items-baseline gap-1.5 mb-1">
-        <span className="text-3xl font-black text-gray-900 dark:text-white tracking-tight">
-          {formatPrice(p.price, p.currency)}
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <RateTile
+          label="Per vehicle / month"
+          value={formatPrice(p.perVehiclePerMonth, p.currency)}
+        />
+        <RateTile
+          label="Per vehicle / year"
+          value={formatPrice(p.perVehiclePerYear, p.currency)}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400 mb-3">
+        <span className="inline-flex items-center gap-1">
+          <Users className="w-3 h-3" />
+          {formatPrice(p.perDriverPerMonth, p.currency)} / driver / month
         </span>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          / {formatDuration(p.durationDays)}
+        <span className="inline-flex items-center gap-1">
+          <Percent className="w-3 h-3" />
+          {p.gstPercent}% GST
         </span>
       </div>
+
       {p.description && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2 min-h-[2rem]">
+        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2rem] mb-3">
           {p.description}
         </p>
       )}
 
-      <div className="flex items-center gap-4 text-[11px] text-gray-500 dark:text-gray-400 mt-4 mb-3">
-        <span className="flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          {p.durationDays} day{p.durationDays !== 1 ? "s" : ""}
-        </span>
-        <span className="flex items-center gap-1">
-          <Users className="w-3 h-3" />
-          {p.tenantCount} tenant{p.tenantCount !== 1 ? "s" : ""}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-1.5 mb-4 text-[11px]">
-        <QuotaPill icon={<Truck className="w-3 h-3" />} label="Vehicles" value={p.maxVehicles} />
-        <QuotaPill icon={<IdCard className="w-3 h-3" />} label="Drivers" value={p.maxDrivers} />
-        <QuotaPill icon={<Users className="w-3 h-3" />} label="Users" value={p.maxUsers} />
-        <QuotaPill icon={<ShieldCheck className="w-3 h-3" />} label="Roles" value={p.maxRoles} />
+      <div className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 mb-3">
+        <Users className="w-3 h-3" />
+        {p.tenantCount} tenant{p.tenantCount !== 1 ? "s" : ""}
       </div>
 
       <div className="flex gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -397,36 +391,20 @@ function PlanCard({
   );
 }
 
-function QuotaPill({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number | null | undefined;
-}) {
-  const unlimited = value === null || value === undefined;
+function RateTile({ label, value }: { label: string; value: string }) {
   return (
-    <span
-      className={`inline-flex items-center justify-between gap-1.5 rounded-md px-2 py-1 ${
-        unlimited
-          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-          : "bg-gray-100 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300"
-      }`}
-    >
-      <span className="inline-flex items-center gap-1">
-        {icon}
+    <div className="rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/40">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
         {label}
-      </span>
-      <span className="font-bold">
-        {unlimited ? <InfinityIcon className="w-3 h-3" /> : value}
-      </span>
-    </span>
+      </p>
+      <p className="text-lg font-extrabold text-gray-900 dark:text-white tracking-tight mt-0.5">
+        {value}
+      </p>
+    </div>
   );
 }
 
-// ── Plan editor modal ───────────────────────────────────────────────────────
+// ── Plan editor modal ──────────────────────────────────────────────────────
 function PlanEditor({
   plan,
   onClose,
@@ -439,49 +417,42 @@ function PlanEditor({
   const isEditing = Boolean(plan);
   const [name, setName] = useState(plan?.name ?? "");
   const [description, setDescription] = useState(plan?.description ?? "");
-  const [price, setPrice] = useState(String(plan?.price ?? ""));
   const [currency, setCurrency] = useState(plan?.currency ?? "INR");
-  const [durationDays, setDurationDays] = useState(
-    String(plan?.durationDays ?? 30),
+  const [fleetSizeMin, setFleetSizeMin] = useState(String(plan?.fleetSizeMin ?? 0));
+  const [fleetSizeMax, setFleetSizeMax] = useState(
+    plan?.fleetSizeMax === null || plan?.fleetSizeMax === undefined
+      ? ""
+      : String(plan.fleetSizeMax),
   );
-  const toLimitStr = (n: number | null | undefined) =>
-    n === null || n === undefined ? "" : String(n);
-  const [maxVehicles, setMaxVehicles] = useState(toLimitStr(plan?.maxVehicles));
-  const [maxDrivers, setMaxDrivers] = useState(toLimitStr(plan?.maxDrivers));
-  const [maxUsers, setMaxUsers] = useState(toLimitStr(plan?.maxUsers));
-  const [maxRoles, setMaxRoles] = useState(toLimitStr(plan?.maxRoles));
+  const [perVehiclePerMonth, setPerVehiclePerMonth] = useState(
+    String(plan?.perVehiclePerMonth ?? ""),
+  );
+  const [perVehiclePerYear, setPerVehiclePerYear] = useState(
+    String(plan?.perVehiclePerYear ?? ""),
+  );
+  const [perDriverPerMonth, setPerDriverPerMonth] = useState(
+    String(plan?.perDriverPerMonth ?? "0"),
+  );
+  const [gstPercent, setGstPercent] = useState(String(plan?.gstPercent ?? 18));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-
-  const parseLimit = (s: string): number | null => {
-    const t = s.trim();
-    if (!t) return null;
-    const n = Number(t);
-    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
-  };
-
-  const PRESETS = [
-    { label: "30 days", value: 30 },
-    { label: "90 days", value: 90 },
-    { label: "180 days", value: 180 },
-    { label: "1 year", value: 365 },
-  ];
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSubmitting(true);
     try {
+      const trimmedMax = fleetSizeMax.trim();
       const payload = {
         name,
-        description: description.trim() || null,
-        price: Number(price),
+        description: description?.trim() || null,
         currency,
-        durationDays: Number(durationDays),
-        maxVehicles: parseLimit(maxVehicles),
-        maxDrivers: parseLimit(maxDrivers),
-        maxUsers: parseLimit(maxUsers),
-        maxRoles: parseLimit(maxRoles),
+        fleetSizeMin: Number(fleetSizeMin) || 0,
+        fleetSizeMax: trimmedMax === "" ? null : Number(trimmedMax),
+        perVehiclePerMonth: Number(perVehiclePerMonth) || 0,
+        perVehiclePerYear: Number(perVehiclePerYear) || 0,
+        perDriverPerMonth: Number(perDriverPerMonth) || 0,
+        gstPercent: Number(gstPercent) || 0,
       };
       if (isEditing && plan) {
         await superadminAPI.updatePlan(plan.id, payload);
@@ -512,52 +483,23 @@ function PlanEditor({
             {isEditing ? "Edit plan" : "New plan"}
           </h2>
           <p className="text-white/80 text-[11px] mt-0.5">
-            Time-based plan. Leave a quota blank to keep that resource unlimited.
+            Per-vehicle pricing tiered by fleet size. Leave the max blank for an unlimited upper bound.
           </p>
         </div>
         <form onSubmit={submit} className="flex flex-col flex-1 min-h-0">
           <div className="p-5 space-y-3.5 overflow-y-auto flex-1">
-            <Field label="Plan name" required>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                placeholder="e.g. Monthly Pro"
-                className="input"
-                maxLength={80}
-              />
-            </Field>
-            <Field
-              label="Description"
-              hint="Optional — helps you remember what this plan is for."
-            >
-              <input
-                type="text"
-                value={description ?? ""}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. Best for small-medium fleets"
-                className="input"
-                maxLength={240}
-              />
-            </Field>
-
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <Field label="Price" required>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none z-10" />
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={price}
-                      onChange={(e) => setPrice(e.target.value)}
-                      required
-                      placeholder="999"
-                      className="input !pl-10"
-                    />
-                  </div>
+                <Field label="Plan name" required>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    placeholder="Silver / Gold / Platinum / Diamond"
+                    className="input"
+                    maxLength={80}
+                  />
                 </Field>
               </div>
               <Field label="Currency">
@@ -574,50 +516,98 @@ function PlanEditor({
               </Field>
             </div>
 
-            <Field label="Validity (days)" required>
-              <div className="flex gap-2 items-center">
-                <input
-                  type="number"
-                  min="1"
-                  max="3650"
-                  value={durationDays}
-                  onChange={(e) => setDurationDays(e.target.value)}
-                  required
-                  className="input flex-1"
-                />
-                <div className="flex gap-1">
-                  {PRESETS.map((p) => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setDurationDays(String(p.value))}
-                      className={`text-[11px] font-semibold rounded-md px-2 h-8 transition-colors ${
-                        Number(durationDays) === p.value
-                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <Field
+              label="Description"
+              hint="Optional — helps you remember what this tier is for."
+            >
+              <input
+                type="text"
+                value={description ?? ""}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. Best for medium fleets"
+                className="input"
+                maxLength={240}
+              />
             </Field>
 
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
-              <div className="flex items-baseline justify-between mb-2">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Resource limits
-                </p>
-                <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                  Blank = unlimited
-                </p>
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                Fleet-size band
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Min" required hint="Smallest fleet that qualifies">
+                  <input
+                    type="number"
+                    min="0"
+                    value={fleetSizeMin}
+                    onChange={(e) => setFleetSizeMin(e.target.value)}
+                    required
+                    placeholder="0"
+                    className="input font-mono"
+                  />
+                </Field>
+                <Field label="Max" hint="Blank = unlimited (+ tier)">
+                  <input
+                    type="number"
+                    min="0"
+                    value={fleetSizeMax}
+                    onChange={(e) => setFleetSizeMax(e.target.value)}
+                    placeholder="∞"
+                    className="input font-mono"
+                  />
+                </Field>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <CompactLimit label="Vehicles" icon={<Truck className="w-3.5 h-3.5" />} value={maxVehicles} onChange={setMaxVehicles} />
-                <CompactLimit label="Drivers" icon={<IdCard className="w-3.5 h-3.5" />} value={maxDrivers} onChange={setMaxDrivers} />
-                <CompactLimit label="Users" icon={<Users className="w-3.5 h-3.5" />} value={maxUsers} onChange={setMaxUsers} />
-                <CompactLimit label="Roles" icon={<ShieldCheck className="w-3.5 h-3.5" />} value={maxRoles} onChange={setMaxRoles} />
+            </div>
+
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                Per-vehicle pricing
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Per month" required>
+                  <PriceInput
+                    value={perVehiclePerMonth}
+                    onChange={setPerVehiclePerMonth}
+                    placeholder="100"
+                  />
+                </Field>
+                <Field label="Per year" required>
+                  <PriceInput
+                    value={perVehiclePerYear}
+                    onChange={setPerVehiclePerYear}
+                    placeholder="1000"
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                Driver add-on & tax
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Per driver / month">
+                  <PriceInput
+                    value={perDriverPerMonth}
+                    onChange={setPerDriverPerMonth}
+                    placeholder="30"
+                  />
+                </Field>
+                <Field label="GST %" hint="Added on top of subtotal">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={gstPercent}
+                      onChange={(e) => setGstPercent(e.target.value)}
+                      placeholder="18"
+                      className="input !pr-10 font-mono"
+                    />
+                    <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  </div>
+                </Field>
               </div>
             </div>
 
@@ -677,40 +667,28 @@ function PlanEditor({
   );
 }
 
-function CompactLimit({
-  label,
-  icon,
+function PriceInput({
   value,
   onChange,
+  placeholder,
 }: {
-  label: string;
-  icon: React.ReactNode;
   value: string;
   onChange: (v: string) => void;
+  placeholder?: string;
 }) {
-  const unlimited = value.trim() === "";
   return (
-    <label className="block rounded-lg border border-gray-200 bg-gray-50/60 px-2.5 py-2 focus-within:border-yellow-400 focus-within:ring-2 focus-within:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800/40">
-      <span className="flex items-center justify-between gap-2 text-[11px] font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
-        <span className="inline-flex items-center gap-1.5">
-          {icon}
-          {label}
-        </span>
-        {unlimited && (
-          <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-            Unlimited
-          </span>
-        )}
-      </span>
+    <div className="relative">
+      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none z-10" />
       <input
         type="number"
+        step="0.01"
         min="0"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="∞"
-        className="w-full h-8 rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-800 dark:text-white text-center font-mono focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/15 dark:border-gray-700 dark:bg-gray-900 placeholder:text-gray-400"
+        placeholder={placeholder}
+        className="input !pl-10 font-mono"
       />
-    </label>
+    </div>
   );
 }
 
@@ -783,7 +761,7 @@ function EmptyPlans({ onCreate }: { onCreate: () => void }) {
         No plans yet
       </h3>
       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-6">
-        Create your first plan so you can assign it when provisioning tenants.
+        Create plans tiered by fleet size so tenants can be billed per vehicle.
       </p>
       <button
         onClick={onCreate}
@@ -810,8 +788,10 @@ function PlansSkeleton() {
               <div className="h-4 w-24 rounded bg-gray-200/70 dark:bg-gray-700/40 animate-pulse" />
             </div>
           </div>
-          <div className="h-9 w-32 rounded bg-gray-200/70 dark:bg-gray-700/40 animate-pulse mb-2" />
-          <div className="h-3 w-full rounded bg-gray-200/70 dark:bg-gray-700/40 animate-pulse mb-4" />
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="h-16 rounded-lg bg-gray-200/70 dark:bg-gray-700/40 animate-pulse" />
+            <div className="h-16 rounded-lg bg-gray-200/70 dark:bg-gray-700/40 animate-pulse" />
+          </div>
           <div className="flex gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
             <div className="flex-1 h-8 rounded-lg bg-gray-200/70 dark:bg-gray-700/40 animate-pulse" />
             <div className="w-24 h-8 rounded-lg bg-gray-200/70 dark:bg-gray-700/40 animate-pulse" />
@@ -821,3 +801,4 @@ function PlansSkeleton() {
     </div>
   );
 }
+

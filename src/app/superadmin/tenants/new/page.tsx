@@ -19,6 +19,7 @@ import {
   Upload,
   X,
   FileBadge,
+  MapPin,
 } from "lucide-react";
 
 type Plan = {
@@ -26,16 +27,25 @@ type Plan = {
   _id?: string;
   name: string;
   description?: string | null;
-  price: number;
   currency: string;
-  durationDays: number;
   isActive: boolean;
+  fleetSizeMin: number;
+  fleetSizeMax: number | null;
+  perVehiclePerMonth: number;
+  perVehiclePerYear: number;
+  perDriverPerMonth: number;
+  gstPercent: number;
 };
 
 function formatPrice(amount: number, currency: string): string {
   if (currency === "INR") return `₹${amount.toLocaleString("en-IN")}`;
   if (currency === "USD") return `$${amount.toLocaleString("en-US")}`;
   return `${currency} ${amount.toLocaleString()}`;
+}
+
+function fleetBandLabel(min: number, max: number | null): string {
+  if (max === null) return `${min}+`;
+  return `${min}–${max}`;
 }
 
 function slugify(s: string): string {
@@ -63,7 +73,10 @@ export default function NewTenantPage() {
   const [adminProfilePreview, setAdminProfilePreview] = useState<string | null>(null);
   const [gstNumber, setGstNumber] = useState("");
   const [panNumber, setPanNumber] = useState("");
-  const [tanNumber, setTanNumber] = useState("");
+  const [addressLine, setAddressLine] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [pinCode, setPinCode] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -144,7 +157,10 @@ export default function NewTenantPage() {
         logo: logoFile,
         gstNumber: gstNumber.trim() ? gstNumber.trim().toUpperCase() : null,
         panNumber: panNumber.trim() ? panNumber.trim().toUpperCase() : null,
-        tanNumber: tanNumber.trim() ? tanNumber.trim().toUpperCase() : null,
+        addressLine: addressLine.trim() || null,
+        city: city.trim() || null,
+        state: state.trim() || null,
+        pinCode: pinCode.trim() || null,
         admin: {
           name: adminName,
           email: adminEmail,
@@ -281,147 +297,179 @@ export default function NewTenantPage() {
       </div>
 
       <form onSubmit={submit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main panel */}
+        {/* Main panel — single card, 3-col grid */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Organization */}
-          <SectionCard Icon={Building2} title="Organization" subtitle="Public details and identifier">
-            <Field label="Tenant name" required>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                required
-                placeholder="Acme Logistics"
-                className="input"
-              />
-            </Field>
-            <Field
-              label="Slug"
-              required
-              hint={`Used internally and in API paths · /${slug || "your-slug"}`}
-            >
-              <input
-                type="text"
-                value={slug}
-                onChange={(e) => {
-                  setSlugTouched(true);
-                  setSlug(slugify(e.target.value));
-                }}
-                required
-                placeholder="acme-logistics"
-                pattern="^[a-z0-9-]+$"
-                className="input font-mono"
-              />
-            </Field>
-            <Field label="Billing email" hint="Optional · defaults to the admin email">
-              <input
-                type="email"
-                value={billingEmail}
-                onChange={(e) => setBillingEmail(e.target.value)}
-                placeholder="billing@acme.com"
-                className="input"
-              />
-            </Field>
-            <Field
-              label="Tenant logo"
-              hint="Optional · shown in the tenant's sidebar. PNG or JPG, square works best."
-            >
-              <ImageUpload
-                preview={logoPreview}
-                onChange={onLogoChange}
-                onClear={clearLogo}
-                placeholderLabel="Upload logo"
-                shape="rounded"
-              />
-            </Field>
-          </SectionCard>
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02] space-y-8">
+            {/* Organization */}
+            <section>
+              <SectionHeading Icon={Building2} title="Organization" subtitle="Public details and identifier" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                <Field label="Tenant name" required>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    required
+                    placeholder="Acme Logistics"
+                    className="input"
+                  />
+                </Field>
+                <Field
+                  label="Slug"
+                  required
+                  hint={`/${slug || "your-slug"}`}
+                >
+                  <input
+                    type="text"
+                    value={slug}
+                    onChange={(e) => {
+                      setSlugTouched(true);
+                      setSlug(slugify(e.target.value));
+                    }}
+                    required
+                    placeholder="acme-logistics"
+                    pattern="^[a-z0-9-]+$"
+                    className="input font-mono"
+                  />
+                </Field>
+                <Field label="Billing email" hint="Defaults to admin email">
+                  <input
+                    type="email"
+                    value={billingEmail}
+                    onChange={(e) => setBillingEmail(e.target.value)}
+                    placeholder="billing@acme.com"
+                    className="input"
+                  />
+                </Field>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <Field
+                    label="Tenant logo"
+                    hint="Optional · shown in the tenant's sidebar. PNG or JPG."
+                  >
+                    <ImageUpload
+                      preview={logoPreview}
+                      onChange={onLogoChange}
+                      onClear={clearLogo}
+                      placeholderLabel="Upload logo"
+                      shape="rounded"
+                    />
+                  </Field>
+                </div>
+              </div>
+            </section>
 
-          {/* First admin user */}
-          <SectionCard Icon={UserPlus} title="First admin user" subtitle="The tenant owner who'll receive the welcome email">
-            <Field label="Full name" required>
-              <input
-                type="text"
-                value={adminName}
-                onChange={(e) => setAdminName(e.target.value)}
-                required
-                placeholder="Alex Patel"
-                className="input"
-              />
-            </Field>
-            <Field
-              label="Email"
-              required
-              hint="A temporary password will be generated and emailed here"
-            >
-              <input
-                type="email"
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                required
-                placeholder="admin@acme.com"
-                className="input"
-              />
-            </Field>
-            <Field
-              label="Profile picture"
-              hint="Optional · shown in the admin's header. PNG or JPG."
-            >
-              <ImageUpload
-                preview={adminProfilePreview}
-                onChange={onAdminProfileChange}
-                onClear={clearAdminProfile}
-                placeholderLabel="Upload profile picture"
-                shape="circle"
-              />
-            </Field>
-          </SectionCard>
+            {/* Address */}
+            <section>
+              <SectionHeading Icon={MapPin} title="Registered address" subtitle="Optional · used on invoices" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <Field label="Address line">
+                    <input
+                      type="text"
+                      value={addressLine}
+                      onChange={(e) => setAddressLine(e.target.value)}
+                      placeholder="123 MG Road, Indiranagar"
+                      className="input"
+                    />
+                  </Field>
+                </div>
+                <Field label="City">
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="Bengaluru"
+                    className="input"
+                  />
+                </Field>
+                <Field label="State">
+                  <input
+                    type="text"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    placeholder="Karnataka"
+                    className="input"
+                  />
+                </Field>
+                <Field label="PIN code" hint="6 digits">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={pinCode}
+                    onChange={(e) => setPinCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="560038"
+                    maxLength={6}
+                    className="input font-mono"
+                  />
+                </Field>
+              </div>
+            </section>
 
-          {/* Tax identifiers */}
-          <SectionCard
-            Icon={FileBadge}
-            title="Tax identifiers"
-            subtitle="Optional · used on invoices and reports"
-          >
-            <Field
-              label="GST Number"
-              hint="15 characters, e.g. 27AAPCS9988A1Z5"
-            >
-              <input
-                type="text"
-                value={gstNumber}
-                onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
-                placeholder="27AAPCS9988A1Z5"
-                maxLength={15}
-                className="input font-mono uppercase"
-              />
-            </Field>
-            <Field
-              label="PAN Number"
-              hint="10 characters, e.g. AAPCS9988A"
-            >
-              <input
-                type="text"
-                value={panNumber}
-                onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
-                placeholder="AAPCS9988A"
-                maxLength={10}
-                className="input font-mono uppercase"
-              />
-            </Field>
-            <Field
-              label="TAN Number"
-              hint="10 characters, e.g. BLRA12345C"
-            >
-              <input
-                type="text"
-                value={tanNumber}
-                onChange={(e) => setTanNumber(e.target.value.toUpperCase())}
-                placeholder="BLRA12345C"
-                maxLength={10}
-                className="input font-mono uppercase"
-              />
-            </Field>
-          </SectionCard>
+            {/* Tax identifiers */}
+            <section>
+              <SectionHeading Icon={FileBadge} title="Tax identifiers" subtitle="Optional · used on invoices and reports" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                <Field label="GST Number" hint="15 chars, e.g. 27AAPCS9988A1Z5">
+                  <input
+                    type="text"
+                    value={gstNumber}
+                    onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                    placeholder="27AAPCS9988A1Z5"
+                    maxLength={15}
+                    className="input font-mono uppercase"
+                  />
+                </Field>
+                <Field label="PAN Number" hint="10 chars, e.g. AAPCS9988A">
+                  <input
+                    type="text"
+                    value={panNumber}
+                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                    placeholder="AAPCS9988A"
+                    maxLength={10}
+                    className="input font-mono uppercase"
+                  />
+                </Field>
+              </div>
+            </section>
+
+            {/* First admin user */}
+            <section>
+              <SectionHeading Icon={UserPlus} title="First admin user" subtitle="Receives the welcome email" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                <Field label="Full name" required>
+                  <input
+                    type="text"
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    required
+                    placeholder="Alex Patel"
+                    className="input"
+                  />
+                </Field>
+                <Field label="Email" required hint="Temp password sent here">
+                  <input
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    required
+                    placeholder="admin@acme.com"
+                    className="input"
+                  />
+                </Field>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <Field label="Profile picture" hint="Optional · PNG or JPG">
+                    <ImageUpload
+                      preview={adminProfilePreview}
+                      onChange={onAdminProfileChange}
+                      onClear={clearAdminProfile}
+                      placeholderLabel="Upload profile picture"
+                      shape="circle"
+                    />
+                  </Field>
+                </div>
+              </div>
+            </section>
+          </div>
 
           {error && (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 flex items-start gap-3 dark:border-red-500/30 dark:bg-red-500/10">
@@ -515,7 +563,7 @@ export default function NewTenantPage() {
                     <option value="">— {trialDays}-day free trial —</option>
                     {plans.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} · {formatPrice(p.price, p.currency)} / {p.durationDays}d
+                        {p.name} · Fleet {fleetBandLabel(p.fleetSizeMin, p.fleetSizeMax)} · {formatPrice(p.perVehiclePerMonth, p.currency)}/veh/mo
                       </option>
                     ))}
                   </select>
@@ -523,8 +571,8 @@ export default function NewTenantPage() {
 
                 {selectedPlan ? (
                   <PlanSummary
-                    text={`${formatPrice(selectedPlan.price, selectedPlan.currency)} / ${selectedPlan.durationDays} days`}
-                    subText={selectedPlan.description || selectedPlan.name}
+                    text={`${formatPrice(selectedPlan.perVehiclePerMonth, selectedPlan.currency)} / vehicle / month`}
+                    subText={`Fleet ${fleetBandLabel(selectedPlan.fleetSizeMin, selectedPlan.fleetSizeMax)} · ${formatPrice(selectedPlan.perVehiclePerYear, selectedPlan.currency)}/year · ${formatPrice(selectedPlan.perDriverPerMonth, selectedPlan.currency)}/driver/mo · ${selectedPlan.gstPercent}% GST`}
                   />
                 ) : (
                   <PlanSummary
@@ -604,27 +652,24 @@ function PlanSummary({
   );
 }
 
-function SectionCard({
+function SectionHeading({
   Icon,
   title,
   subtitle,
-  children,
 }: {
   Icon: React.ComponentType<{ className?: string }>;
   title: string;
   subtitle: string;
-  children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
-      <div className="flex items-center gap-2 mb-1">
+    <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
+      <div className="flex items-center gap-2 mb-0.5">
         <Icon className="w-4 h-4 text-yellow-500" />
         <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
           {title}
         </h2>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">{subtitle}</p>
-      <div className="space-y-4">{children}</div>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
     </div>
   );
 }

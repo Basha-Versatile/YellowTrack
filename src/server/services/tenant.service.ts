@@ -15,11 +15,15 @@ export type CreateTenantInput = {
   name: string;
   slug: string;
   planId?: string | null;
+  billingCycle?: "MONTHLY" | "YEARLY";
   billingEmail?: string | null;
   logoUrl?: string | null;
   gstNumber?: string | null;
   panNumber?: string | null;
-  tanNumber?: string | null;
+  addressLine?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pinCode?: string | null;
   admin: {
     name: string;
     email: string;
@@ -31,6 +35,15 @@ function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
   return d;
+}
+
+/**
+ * Days a billing period covers. With per-vehicle pricing there are exactly
+ * two cycles — monthly (30 days) and yearly (365 days). Replaces the old
+ * `plan.durationDays` flat field.
+ */
+function cycleDays(cycle: "MONTHLY" | "YEARLY"): number {
+  return cycle === "YEARLY" ? 365 : 30;
 }
 
 function generateTempPassword(): string {
@@ -69,9 +82,10 @@ export async function provisionTenant(input: CreateTenantInput) {
   if (existingSlug) throw new ConflictError("Tenant slug already taken");
   if (existingEmail) throw new ConflictError("A user with this email already exists");
 
-  // 1. Resolve subscription: explicit plan → ACTIVE for plan.durationDays;
-  //    no plan → 15-day TRIAL.
+  // 1. Resolve subscription: explicit plan → ACTIVE for one billing cycle;
+  //    no plan → free TRIAL (duration from platform settings).
   const now = new Date();
+  const billingCycle: "MONTHLY" | "YEARLY" = input.billingCycle ?? "MONTHLY";
   let subscription: {
     planId: unknown;
     subscriptionStart: Date;
@@ -86,7 +100,7 @@ export async function provisionTenant(input: CreateTenantInput) {
     subscription = {
       planId: plan._id,
       subscriptionStart: now,
-      subscriptionEnd: addDays(now, plan.durationDays),
+      subscriptionEnd: addDays(now, cycleDays(billingCycle)),
       subscriptionStatus: "ACTIVE",
     };
   } else {
@@ -108,7 +122,11 @@ export async function provisionTenant(input: CreateTenantInput) {
     logoUrl: input.logoUrl ?? null,
     gstNumber: input.gstNumber ?? null,
     panNumber: input.panNumber ?? null,
-    tanNumber: input.tanNumber ?? null,
+    addressLine: input.addressLine ?? null,
+    city: input.city ?? null,
+    state: input.state ?? null,
+    pinCode: input.pinCode ?? null,
+    billingCycle,
     ...subscription,
   });
 
@@ -224,6 +242,13 @@ export async function updateTenant(
   data: {
     name?: string;
     billingEmail?: string | null;
+    logoUrl?: string | null;
+    gstNumber?: string | null;
+    panNumber?: string | null;
+    addressLine?: string | null;
+    city?: string | null;
+    state?: string | null;
+    pinCode?: string | null;
   },
 ) {
   const t = await tenantRepo.update(id, data as Record<string, unknown>);
@@ -267,9 +292,10 @@ export async function changeTenantPlan(tenantId: string, planId: string) {
     // Keep subscriptionStart / subscriptionEnd / subscriptionStatus untouched.
   } else {
     // Activate immediately.
+    const cycle = (t.billingCycle as "MONTHLY" | "YEARLY" | undefined) ?? "MONTHLY";
     t.planId = plan._id;
     t.subscriptionStart = now;
-    t.subscriptionEnd = addDays(now, plan.durationDays);
+    t.subscriptionEnd = addDays(now, cycleDays(cycle));
     t.subscriptionStatus = "ACTIVE";
   }
   await tenant.save();
@@ -301,8 +327,9 @@ export async function renewTenantSubscription(tenantId: string) {
       ? new Date(currentEnd)
       : now;
 
+  const cycle = (t.billingCycle as "MONTHLY" | "YEARLY" | undefined) ?? "MONTHLY";
   t.subscriptionStart = t.subscriptionStart ?? now;
-  t.subscriptionEnd = addDays(base, plan.durationDays);
+  t.subscriptionEnd = addDays(base, cycleDays(cycle));
   t.subscriptionStatus = "ACTIVE";
   await tenant.save();
   return tenant.toObject();
@@ -350,8 +377,9 @@ export async function reconcileTenantSubscription(tenantId: string) {
     // Auto-activate the queued plan.
     const plan = await Plan.findById(t.planId as string).lean();
     if (plan && plan.isActive) {
+      const cycle = (t.billingCycle as "MONTHLY" | "YEARLY" | undefined) ?? "MONTHLY";
       t.subscriptionStart = now;
-      t.subscriptionEnd = addDays(now, plan.durationDays);
+      t.subscriptionEnd = addDays(now, cycleDays(cycle));
       t.subscriptionStatus = "ACTIVE";
       await tenant.save();
       return tenant.toObject();

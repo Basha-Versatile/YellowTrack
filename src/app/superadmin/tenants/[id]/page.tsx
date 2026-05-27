@@ -54,15 +54,20 @@ type Plan = {
   _id?: string;
   name: string;
   description?: string | null;
-  price: number;
   currency: string;
-  durationDays: number;
   isActive: boolean;
-  maxVehicles?: number | null;
-  maxDrivers?: number | null;
-  maxUsers?: number | null;
-  maxRoles?: number | null;
+  fleetSizeMin: number;
+  fleetSizeMax: number | null;
+  perVehiclePerMonth: number;
+  perVehiclePerYear: number;
+  perDriverPerMonth: number;
+  gstPercent: number;
 };
+
+function fleetBandLabel(min: number, max: number | null): string {
+  if (max === null) return `${min}+`;
+  return `${min}–${max}`;
+}
 
 type QuotaResource = "vehicle" | "driver" | "user" | "role";
 type QuotaUsage = {
@@ -380,7 +385,7 @@ export default function TenantDetailPage() {
             icon={<Sparkles className="w-5 h-5" />}
             tone="amber"
             title={`${currentPlan.name} is queued for this tenant`}
-            body={`Trial runs until ${subEnd ? new Date(subEnd).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""}. On that day the plan auto-activates for ${currentPlan.durationDays} days (${formatPrice(currentPlan.price, currentPlan.currency)}).`}
+            body={`Trial runs until ${subEnd ? new Date(subEnd).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : ""}. On that day the plan auto-activates at ${formatPrice(currentPlan.perVehiclePerMonth, currentPlan.currency)} per vehicle / month (Fleet ${fleetBandLabel(currentPlan.fleetSizeMin, currentPlan.fleetSizeMax)}).`}
           />
         )}
 
@@ -435,10 +440,10 @@ export default function TenantDetailPage() {
               label="Current plan"
               valueNode={
                 currentPlan ? (
-                  <span className="text-sm font-bold text-gray-900 dark:text-white inline-flex items-center gap-2">
-                    {currentPlan.name}{" "}
+                  <span className="text-sm font-bold text-gray-900 dark:text-white inline-flex items-center gap-2 flex-wrap">
+                    {currentPlan.name}
                     <span className="text-gray-500 font-normal">
-                      · {formatPrice(currentPlan.price, currentPlan.currency)} / {currentPlan.durationDays}d
+                      · Fleet {fleetBandLabel(currentPlan.fleetSizeMin, currentPlan.fleetSizeMax)} · {formatPrice(currentPlan.perVehiclePerMonth, currentPlan.currency)}/veh/mo
                     </span>
                     {tenant.subscriptionStatus === "TRIAL" && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
@@ -721,11 +726,14 @@ function ChangePlanModal({
                       {p.name}
                     </span>
                     <span className="text-sm font-bold text-yellow-700 dark:text-yellow-400">
-                      {formatPrice(p.price, p.currency)} / {p.durationDays}d
+                      {formatPrice(p.perVehiclePerMonth, p.currency)}/veh/mo
                     </span>
                   </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Fleet {fleetBandLabel(p.fleetSizeMin, p.fleetSizeMax)} · {formatPrice(p.perVehiclePerYear, p.currency)}/year · {p.gstPercent}% GST
+                  </p>
                   {p.description && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {p.description}
                     </p>
                   )}

@@ -28,7 +28,7 @@ export default function ResetPasswordPage() {
     setSubmitting(true);
     try {
       await authAPI.resetPassword(newPassword, confirmPassword);
-      router.replace("/");
+      router.replace("/dashboard");
       router.refresh();
     } catch (err) {
       const msg =

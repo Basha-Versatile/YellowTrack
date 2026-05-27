@@ -59,6 +59,9 @@ export default function VehiclesPage() {
   const brandFilter = searchParams.get("brand") ?? "";
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  // Whole-fleet snapshot (no filters) — drives the Total/Compliant/etc. cards
+  // and the "X vehicles in your fleet" header. Refreshed on lifecycle change.
+  const [fleetVehicles, setFleetVehicles] = useState<Vehicle[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -103,10 +106,31 @@ export default function VehiclesPage() {
     finally { setLoading(false); setFetching(false); }
   };
 
+  // Fleet-wide snapshot for the stat cards. Refetches when the lifecycle tab
+  // changes (Active ↔ Sold) but stays stable across group/usage/status filters.
+  const fetchFleetSnapshot = async (lifecycle: "ALL" | "SOLD") => {
+    try {
+      const res = await vehicleAPI.getAll({
+        page: 1,
+        limit: 10000,
+        lifecycle: lifecycle === "SOLD" ? "SOLD" : undefined,
+      });
+      setFleetVehicles(res.data.data.vehicles);
+    } catch {
+      setFleetVehicles([]);
+    }
+  };
+
   useEffect(() => {
     fetchVehicles(1, { initial: true });
+    fetchFleetSnapshot(lifecycleRef.current);
     vehicleGroupAPI.getAll().then((res) => setGroups(res.data.data)).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchFleetSnapshot(lifecycleTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lifecycleTab]);
 
   // Re-fetch whenever the URL `?brand=X` param changes (e.g. user clicks a
   // brand tile on the dashboard, or clears the chip below).
@@ -131,11 +155,13 @@ export default function VehiclesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // Stats
-  const greenCount = vehicles.filter((v) => v.overallStatus === "GREEN").length;
-  const yellowCount = vehicles.filter((v) => v.overallStatus === "YELLOW").length;
-  const redCount = vehicles.filter((v) => v.overallStatus === "RED").length;
-  const totalPending = vehicles.reduce((s, v) => s + (v.pendingChallanAmount || 0), 0);
+  // Stats — sourced from the whole-fleet snapshot so they don't shrink when
+  // the user filters by group/usage/status/brand.
+  const fleetTotal = fleetVehicles.length;
+  const greenCount = fleetVehicles.filter((v) => v.overallStatus === "GREEN").length;
+  const yellowCount = fleetVehicles.filter((v) => v.overallStatus === "YELLOW").length;
+  const redCount = fleetVehicles.filter((v) => v.overallStatus === "RED").length;
+  const totalPending = fleetVehicles.reduce((s, v) => s + (v.pendingChallanAmount || 0), 0);
 
   if (loading) return <VehiclesListSkeleton view={view} />;
 
@@ -146,7 +172,7 @@ export default function VehiclesPage() {
         <div>
           <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Vehicles</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            {pagination.total} vehicle{pagination.total !== 1 ? "s" : ""} in your fleet
+            {fleetTotal} vehicle{fleetTotal !== 1 ? "s" : ""} in your fleet
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -176,7 +202,7 @@ export default function VehiclesPage() {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         <div className="rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02]">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total</p>
-          <p className="text-lg font-black text-gray-900 dark:text-white leading-none mt-1">{pagination.total}</p>
+          <p className="text-lg font-black text-gray-900 dark:text-white leading-none mt-1">{fleetTotal}</p>
         </div>
         <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-3 py-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
           <p className="text-[10px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-wider">Compliant</p>
@@ -215,7 +241,7 @@ export default function VehiclesPage() {
           <button onClick={() => { setGroupFilter("ALL"); fetchVehicles(1, { overrideGroup: "ALL" }); }}
             className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border-2 transition-all flex-shrink-0 ${groupFilter === "ALL" ? "border-brand-400 bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:border-brand-500 dark:text-brand-400" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400"}`}>
             <LayoutGrid className="w-5 h-5" />
-            All <span className="text-xs text-gray-400">{pagination.total}</span>
+            All <span className="text-xs text-gray-400">{groups.reduce((sum, g) => sum + g._count.vehicles, 0)}</span>
           </button>
           {groups.map((g) => { const Icon = getVehicleTypeIcon(g.icon); return (
             <button key={g.id} onClick={() => { setGroupFilter(g.id); fetchVehicles(1, { overrideGroup: g.id }); }}

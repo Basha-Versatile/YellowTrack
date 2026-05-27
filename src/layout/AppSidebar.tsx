@@ -14,7 +14,10 @@ import {
 } from "../icons/index";
 import { BsFillCarFrontFill } from "react-icons/bs";
 import { MdSpaceDashboard } from "react-icons/md";
-import { Activity, Bell, Database, Lightbulb, Shield, UsersRound } from "lucide-react";
+import { Activity, Database, Lightbulb, Shield, UsersRound, 
+  // Bell
+
+} from "lucide-react";
 
 type NavSubItem = {
   name: string;
@@ -37,8 +40,8 @@ const navItems: NavItem[] = [
   {
     icon: <MdSpaceDashboard className="h-5 w-5" />,
     name: "Dashboard",
-    path: "/",
-    // Dashboard is the home page — visible to anyone in the tenant.
+    path: "/dashboard",
+    // Dashboard is the workspace home — visible to anyone in the tenant.
   },
   {
     icon: <BsFillCarFrontFill className="h-5 w-5" />,
@@ -90,12 +93,12 @@ const navItems: NavItem[] = [
     path: "/activity",
     perm: "activityLog:read",
   },
-  {
-    icon: <Bell className="h-5 w-5" />,
-    name: "Notifications",
-    path: "/settings/notifications",
-    perm: "settings.users:manage",
-  },
+  // {
+  //   icon: <Bell className="h-5 w-5" />,
+  //   name: "Notifications",
+  //   path: "/settings/notifications",
+  //   perm: "settings.users:manage",
+  // },
   {
     icon: <Lightbulb className="h-5 w-5" />,
     name: "Feedback",
@@ -361,7 +364,7 @@ const AppSidebar: React.FC = () => {
         }`}
       >
         <Link
-          href="/"
+          href="/dashboard"
           aria-label="Yellow Track"
           className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-white transition-all duration-300 ${
             expanded ? "size-25" : "size-14"
@@ -433,22 +436,28 @@ const AppSidebar: React.FC = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-gray-300/60 to-transparent dark:via-gray-700/50 mb-4" />
         {expanded ? (
           <div className="flex items-center gap-3 rounded-xl bg-gray-100/70 dark:bg-white/5 p-3">
-            <div className="relative w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-yellow-500/20 flex-shrink-0">
-              {tenant?.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={tenant.logoUrl} alt={tenant.name} className="w-full h-full object-cover" />
-              ) : (
-                tenantInitials
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-200 truncate">
-                {tenant?.name ?? user?.name ?? "Workspace"}
-              </p>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
-                {tenant?.billingEmail ?? user?.email ?? "—"}
-              </p>
-            </div>
+            <Link
+              href="/profile"
+              className="flex items-center gap-3 flex-1 min-w-0 rounded-lg -m-1 p-1 hover:bg-gray-200/50 dark:hover:bg-white/5 transition-colors"
+              title="View profile"
+            >
+              <div className="relative w-9 h-9 rounded-full overflow-hidden bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-yellow-500/20 flex-shrink-0">
+                {tenant?.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={tenant.logoUrl} alt={tenant.name} className="w-full h-full object-cover" />
+                ) : (
+                  tenantInitials
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-200 truncate">
+                  {tenant?.name ?? user?.name ?? "Workspace"}
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
+                  {tenant?.billingEmail ?? user?.email ?? "—"}
+                </p>
+              </div>
+            </Link>
             <button
               onClick={() => logout()}
               className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-100/50 dark:hover:bg-red-500/10 transition-colors"

@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 const bodySchema = z.object({
   name: z.string().min(2).max(80).trim().optional(),
   // If null/empty string is sent for profileImage we treat it as "clear".
-  profileImageUrl: z.string().url().nullable().optional(),
+  profileImageUrl: z.string().min(1).nullable().optional(),
 });
 
 export const GET = withRoute(

@@ -7,7 +7,7 @@ const useGoBack = () => {
     if (window.history.length > 1) {
       router.back(); // Navigate to the previous route
     } else {
-      router.push("/"); // Redirect to home if no history exists
+      router.push("/dashboard"); // Fall back to the workspace home when no history
     }
   };
 

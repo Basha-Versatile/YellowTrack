@@ -82,6 +82,7 @@ export const PERMISSIONS = [
 
   // Activity log (tenant-admin audit trail)
   "activityLog:read",
+  "activityLog:revert",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -218,6 +219,7 @@ export const PERMISSION_GROUPS: Array<{
     description: "Audit trail of every action by users in this workspace.",
     items: [
       { key: "activityLog:read", label: "View activity log", description: "See who did what and when across the workspace." },
+      { key: "activityLog:revert", label: "Revert actions", description: "Undo a recorded action — restore prior state. Use with care." },
     ],
   },
 ];

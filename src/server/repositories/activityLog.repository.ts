@@ -20,13 +20,20 @@ export type ActivityLogInsert = {
   metadata?: Record<string, unknown> | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+  // ── Revert support ────────────────────────────────────────────────────
+  revertable?: boolean;
+  beforeSnapshot?: Record<string, unknown> | null;
+  createdSnapshot?: Record<string, unknown> | null;
+  childSnapshots?: Record<string, unknown[]> | null;
+  revertedFromActivityId?: string | null;
 };
 
 export async function insertLog(
   ctx: ScopedContext,
   data: ActivityLogInsert,
-): Promise<void> {
-  await ActivityLog.create({ ...data, ...tenantStamp(ctx) });
+): Promise<{ id: string }> {
+  const doc = await ActivityLog.create({ ...data, ...tenantStamp(ctx) });
+  return { id: String((doc as { _id: unknown })._id) };
 }
 
 export type ActivityLogQuery = {

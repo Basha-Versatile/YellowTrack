@@ -15,6 +15,13 @@ export type LogActivityInput = {
   metadata?: Record<string, unknown> | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+  // Revert support — set when the caller has captured enough state to undo
+  // this action. `revertable` is the gate the UI honors.
+  revertable?: boolean;
+  beforeSnapshot?: Record<string, unknown> | null;
+  createdSnapshot?: Record<string, unknown> | null;
+  childSnapshots?: Record<string, unknown[]> | null;
+  revertedFromActivityId?: string | null;
 };
 
 /**
@@ -27,14 +34,14 @@ export async function logActivity(
   ctx: ScopedContext,
   session: Session | null | undefined,
   input: LogActivityInput,
-): Promise<void> {
+): Promise<{ id: string } | null> {
   try {
     let userName: string | null = null;
     if (session?.id) {
       const u = await User.findById(session.id).select("name").lean();
       userName = (u?.name as string | undefined) ?? null;
     }
-    await repo.insertLog(ctx, {
+    return await repo.insertLog(ctx, {
       userId: session?.id ?? null,
       userName,
       userEmail: session?.email ?? null,
@@ -48,9 +55,15 @@ export async function logActivity(
       metadata: input.metadata ?? null,
       ipAddress: input.ipAddress ?? null,
       userAgent: input.userAgent ?? null,
+      revertable: input.revertable ?? false,
+      beforeSnapshot: input.beforeSnapshot ?? null,
+      createdSnapshot: input.createdSnapshot ?? null,
+      childSnapshots: input.childSnapshots ?? null,
+      revertedFromActivityId: input.revertedFromActivityId ?? null,
     });
   } catch (err) {
     console.warn("[activityLog] failed to record:", err instanceof Error ? err.message : err);
+    return null;
   }
 }
 
@@ -94,7 +107,7 @@ export async function logFromRequest(
   ctx: ScopedContext,
   session: Session | null | undefined,
   input: LogActivityInput,
-): Promise<void> {
+): Promise<{ id: string } | null> {
   const headers = req.headers;
   const ip =
     headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||

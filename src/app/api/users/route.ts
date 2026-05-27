@@ -16,7 +16,7 @@ const inviteSchema = z.object({
   name: z.string().min(1).max(80).trim(),
   email: z.string().email(),
   roleId: z.string().nullable().optional(),
-  profileImage: z.string().url().nullable().optional(),
+  profileImage: z.string().min(1).nullable().optional(),
 });
 
 export const GET = withRoute(

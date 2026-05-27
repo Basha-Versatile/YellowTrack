@@ -27,7 +27,10 @@ export async function findAll(opts: { includeInactive?: boolean } = {}) {
 }
 
 export async function findActive() {
-  return Plan.find({ isActive: true }).sort({ price: 1 }).lean();
+  // Sort by fleet-size band so the cheapest entry tier shows first.
+  return Plan.find({ isActive: true })
+    .sort({ fleetSizeMin: 1, perVehiclePerMonth: -1 })
+    .lean();
 }
 
 export async function findById(id: string) {
