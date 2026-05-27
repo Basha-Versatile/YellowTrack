@@ -41,6 +41,7 @@ export const POST = withRoute(
       entityLabel: r.name ?? input.name,
       summary: `Created role "${input.name}"`,
       metadata: { permissionCount: (input.permissions ?? []).length },
+      revertable: true,
     });
     return created(role, "Role created");
   },

@@ -1,6 +1,6 @@
 import { withRoute, parseJson } from "@/lib/api-handler";
 import { success } from "@/lib/http";
-import { tenantOf } from "@/lib/auth/tenant-context";
+import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
 import { requirePermission } from "@/lib/auth/guard";
 import { z } from "zod";
 import {
@@ -9,6 +9,7 @@ import {
   markPaymentUnpaid,
 } from "@/server/services/emi.service";
 import { logFromRequest } from "@/server/services/activityLog.service";
+import { EMIPayment } from "@/models";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,9 @@ export const POST = withRoute<{ planId: string; paymentId: string }>(
 
     if (body.action === "mark-paid") {
       await requirePermission(session, "emi:update");
+      const before = await EMIPayment.findOne(
+        tenantFilter(ctx, { _id: params.paymentId }),
+      ).lean();
       const updated = await markPaymentPaid(
         ctx,
         params.paymentId,
@@ -59,12 +63,19 @@ export const POST = withRoute<{ planId: string; paymentId: string }>(
         entityLabel: `EMI #${p.installmentNumber ?? params.paymentId}`,
         summary: `Marked installment #${p.installmentNumber ?? "?"} as paid${p.paidAmount ? ` (₹${p.paidAmount.toLocaleString("en-IN")})` : ""}`,
         metadata: { planId: params.planId, paidAmount: p.paidAmount },
+        revertable: Boolean(before),
+        beforeSnapshot: before
+          ? { status: (before as { status?: string }).status ?? "SCHEDULED" }
+          : null,
       });
       return success(updated, "Installment marked paid");
     }
 
     if (body.action === "mark-unpaid") {
       await requirePermission(session, "emi:update");
+      const before = await EMIPayment.findOne(
+        tenantFilter(ctx, { _id: params.paymentId }),
+      ).lean();
       const updated = await markPaymentUnpaid(ctx, params.paymentId);
       const p = updated as { installmentNumber?: number };
       await logFromRequest(req, ctx, session, {
@@ -74,6 +85,10 @@ export const POST = withRoute<{ planId: string; paymentId: string }>(
         entityLabel: `EMI #${p.installmentNumber ?? params.paymentId}`,
         summary: `Reverted installment #${p.installmentNumber ?? "?"} to unpaid`,
         metadata: { planId: params.planId },
+        revertable: Boolean(before),
+        beforeSnapshot: before
+          ? { status: (before as { status?: string }).status ?? "PAID" }
+          : null,
       });
       return success(updated, "Installment reverted to scheduled");
     }

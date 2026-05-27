@@ -90,6 +90,8 @@ export const PUT = withRoute<{ id: string }>(
 export const DELETE = withRoute<{ id: string }>(
   async ({ req, params, session }) => {
     const ctx = tenantOf(session);
+    // Snapshot the doc BEFORE deletion so revert can rebuild it.
+    const before = await complianceRepo.findById(ctx, params.id);
     const removed = await complianceRepo.removeById(ctx, params.id);
     const d = removed as { type?: string } | null;
     await logFromRequest(req, ctx, session, {
@@ -98,6 +100,8 @@ export const DELETE = withRoute<{ id: string }>(
       entityId: params.id,
       entityLabel: d?.type ?? "Compliance document",
       summary: `Deleted ${d?.type ?? "compliance document"}`,
+      revertable: Boolean(before),
+      beforeSnapshot: before as Record<string, unknown> | null,
     });
     return success(removed, "Compliance document removed");
   },

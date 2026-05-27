@@ -65,6 +65,7 @@ export const POST = withRoute<{ id: string }>(
         totalInstallments: input.totalInstallments,
         startDate: input.startDate,
       },
+      revertable: true,
     });
     return created(plan, "EMI plan created");
   },

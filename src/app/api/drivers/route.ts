@@ -31,6 +31,7 @@ export const POST = withRoute(
       entityId: String(d.id ?? d._id ?? ""),
       entityLabel: d.name ?? input.name,
       summary: `Created driver ${d.name ?? input.name}`,
+      revertable: true,
     });
     return created(driver, "Driver created successfully");
   },

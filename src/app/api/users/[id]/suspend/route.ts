@@ -19,6 +19,9 @@ export const POST = withRoute<{ id: string }>(
       entityId: params.id,
       entityLabel: u.name ?? u.email ?? params.id,
       summary: `Suspended ${u.name ?? u.email ?? "user"}`,
+      // Flag-shape revert: prior status is whatever it was before SUSPENDED.
+      revertable: true,
+      beforeSnapshot: { status: "ACTIVE" },
     });
     return success(user, "User suspended");
   },
@@ -37,6 +40,8 @@ export const DELETE = withRoute<{ id: string }>(
       entityId: params.id,
       entityLabel: u.name ?? u.email ?? params.id,
       summary: `Resumed ${u.name ?? u.email ?? "user"}`,
+      revertable: true,
+      beforeSnapshot: { status: "SUSPENDED" },
     });
     return success(user, "User resumed");
   },

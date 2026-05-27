@@ -27,23 +27,38 @@ type Plan = {
   isActive: boolean;
   tenantCount: number;
   createdAt?: string;
-  fleetSizeMin: number;
-  fleetSizeMax: number | null;
-  perVehiclePerMonth: number;
-  perVehiclePerYear: number;
-  perDriverPerMonth: number;
-  gstPercent: number;
+  // Optional on the type because legacy rows (saved before the per-vehicle
+  // pricing rewrite) lack these — the UI must handle undefined gracefully.
+  fleetSizeMin?: number;
+  fleetSizeMax?: number | null;
+  perVehiclePerMonth?: number;
+  perVehiclePerYear?: number;
+  perDriverPerMonth?: number;
+  gstPercent?: number;
 };
 
-function formatPrice(amount: number, currency: string): string {
-  if (currency === "INR") return `₹${amount.toLocaleString("en-IN")}`;
-  if (currency === "USD") return `$${amount.toLocaleString("en-US")}`;
-  return `${currency} ${amount.toLocaleString()}`;
+function formatPrice(amount: number | null | undefined, currency: string): string {
+  const n = typeof amount === "number" && Number.isFinite(amount) ? amount : 0;
+  if (currency === "INR") return `₹${n.toLocaleString("en-IN")}`;
+  if (currency === "USD") return `$${n.toLocaleString("en-US")}`;
+  return `${currency} ${n.toLocaleString()}`;
 }
 
-function fleetBandLabel(min: number, max: number | null): string {
-  if (max === null) return `${min}+`;
-  return `${min} – ${max}`;
+function fleetBandLabel(min: number | null | undefined, max: number | null | undefined): string {
+  const lo = typeof min === "number" ? min : 0;
+  if (max === null || max === undefined) return `${lo}+`;
+  return `${lo} – ${max}`;
+}
+
+/** A plan row is "legacy" if it was saved before the per-vehicle pricing
+ * rewrite — Mongoose strips the new fields on save when the schema cache
+ * is stale, leaving the row with the old `price`/`durationDays` shape. */
+function isLegacyPlan(p: Plan): boolean {
+  return (
+    typeof p.perVehiclePerMonth !== "number" ||
+    typeof p.perVehiclePerYear !== "number" ||
+    typeof p.fleetSizeMin !== "number"
+  );
 }
 
 export default function PlansPage() {
@@ -309,7 +324,7 @@ function PlanCard({
             <h3 className="text-base font-bold text-gray-900 dark:text-white">
               {p.name}
             </h3>
-            <div className="flex items-center gap-1.5 mt-0.5">
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               <Truck className="w-3 h-3 text-gray-400" />
               <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
                 Fleet {fleetBandLabel(p.fleetSizeMin, p.fleetSizeMax)}
@@ -319,10 +334,23 @@ function PlanCard({
                   Inactive
                 </span>
               )}
+              {isLegacyPlan(p) && (
+                <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                  Needs setup
+                </span>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {isLegacyPlan(p) && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 px-3 py-2 mb-3 text-[11px] text-amber-800 dark:text-amber-300">
+          This plan was saved before the per-vehicle pricing model. Click{" "}
+          <span className="font-bold">Edit</span> and save to migrate it to the
+          new shape.
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2 mb-3">
         <RateTile
@@ -342,7 +370,7 @@ function PlanCard({
         </span>
         <span className="inline-flex items-center gap-1">
           <Percent className="w-3 h-3" />
-          {p.gstPercent}% GST
+          {p.gstPercent ?? 0}% GST
         </span>
       </div>
 

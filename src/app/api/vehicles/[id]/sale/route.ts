@@ -134,9 +134,11 @@ export const DELETE = withRoute<{ id: string }>(
   async ({ req, params, session }) => {
     const ctx = tenantOf(session);
     let label = params.id;
+    let priorStatus: string | null = null;
     try {
       const v = await vehicleRepo.findById(ctx, params.id);
       label = (v as { registrationNumber?: string } | null)?.registrationNumber ?? params.id;
+      priorStatus = (v as { status?: string } | null)?.status ?? null;
     } catch { /* ignore */ }
     await VehicleSale.deleteOne(tenantFilter(ctx, { vehicleId: params.id }));
     await vehicleRepo.update(ctx, params.id, { status: "ACTIVE" });
@@ -146,6 +148,10 @@ export const DELETE = withRoute<{ id: string }>(
       entityId: params.id,
       entityLabel: label,
       summary: `Cancelled sale of ${label}`,
+      // Revert support — restoring the vehicle's prior SOLD status. The
+      // deleted VehicleSale row isn't rebuilt; user re-records the sale.
+      revertable: priorStatus === "SOLD",
+      beforeSnapshot: priorStatus ? { status: priorStatus } : null,
     });
     return success(null, "Sale cancelled — vehicle is active again");
   },

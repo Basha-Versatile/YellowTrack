@@ -87,6 +87,7 @@ export const POST = withRoute<{ id: string }>(
         ? `Added ${input.type} (lifetime validity)`
         : `Added ${input.type}${finalExpiry ? ` expiring ${finalExpiry.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}`,
       metadata: { vehicleId: params.id, lifetime: input.lifetime ?? false, expiryDate: finalExpiry },
+      revertable: true,
     });
     return created(doc, "Compliance document added");
   },

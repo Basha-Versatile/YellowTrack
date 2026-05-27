@@ -35,6 +35,8 @@ export const POST = withRoute(
       entityLabel: input.registrationNumber,
       summary: `Onboarded vehicle ${input.registrationNumber}`,
       metadata: { groupId: input.groupId ?? null, vehicleUsage: input.vehicleUsage ?? null },
+      // Revert support — undoing vehicle.create soft-deletes the vehicle.
+      revertable: true,
     });
     return created(vehicle, "Vehicle onboarded successfully");
   },

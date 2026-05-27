@@ -1,6 +1,6 @@
 import { withRoute, parseJson } from "@/lib/api-handler";
 import { success } from "@/lib/http";
-import { tenantOf } from "@/lib/auth/tenant-context";
+import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
 import { requirePermission } from "@/lib/auth/guard";
 import { z } from "zod";
 import {
@@ -10,6 +10,7 @@ import {
   updateEmiPlan,
 } from "@/server/services/emi.service";
 import { logFromRequest } from "@/server/services/activityLog.service";
+import { EMIPlan } from "@/models";
 
 export const runtime = "nodejs";
 
@@ -77,6 +78,9 @@ export const PATCH = withRoute<{ planId: string }>(
     const { status, ...patch } = input;
     if (status) {
       await requirePermission(session, "emi:close");
+      const before = await EMIPlan.findOne(
+        tenantFilter(ctx, { _id: params.planId }),
+      ).lean();
       await setPlanStatus(ctx, params.planId, status);
       await logFromRequest(req, ctx, session, {
         action: "emi.status",
@@ -85,11 +89,26 @@ export const PATCH = withRoute<{ planId: string }>(
         entityLabel: `EMI plan ${params.planId}`,
         summary: `Changed EMI plan status to ${status}`,
         metadata: { status },
+        revertable: Boolean(before),
+        beforeSnapshot: before
+          ? { status: (before as { status?: string }).status ?? null }
+          : null,
       });
     }
     if (Object.keys(patch).length > 0) {
       await requirePermission(session, "emi:update");
+      const before = await EMIPlan.findOne(
+        tenantFilter(ctx, { _id: params.planId }),
+      ).lean();
       await updateEmiPlan(ctx, params.planId, patch);
+      const beforeSnapshot = before
+        ? Object.fromEntries(
+            Object.keys(patch as Record<string, unknown>).map((k) => [
+              k,
+              (before as unknown as Record<string, unknown>)[k] ?? null,
+            ]),
+          )
+        : null;
       await logFromRequest(req, ctx, session, {
         action: "emi.update",
         entityType: "emi",
@@ -97,6 +116,8 @@ export const PATCH = withRoute<{ planId: string }>(
         entityLabel: `EMI plan ${params.planId}`,
         summary: `Updated EMI plan details`,
         metadata: patch as Record<string, unknown>,
+        revertable: Boolean(beforeSnapshot),
+        beforeSnapshot,
       });
     }
     const data = await getEmiSchedule(ctx, params.planId);

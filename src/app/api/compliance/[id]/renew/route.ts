@@ -52,7 +52,8 @@ export const POST = withRoute<{ id: string }>(
       summary: isLifetime
         ? `Renewed ${oldDoc.type} to lifetime validity`
         : `Renewed ${oldDoc.type}${finalExpiry ? ` to ${finalExpiry.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}`,
-      metadata: { lifetime: isLifetime, expiryDate: finalExpiry, filesCount: urls.length },
+      metadata: { lifetime: isLifetime, expiryDate: finalExpiry, filesCount: urls.length, oldDocId: String(params.id) },
+      revertable: true,
     });
     return created(newDoc, "Document renewed successfully");
   },

@@ -50,6 +50,7 @@ export const POST = withRoute(
       entityLabel: r.user?.name ?? input.name,
       summary: `Invited ${input.name} (${input.email})`,
       metadata: { email: input.email, roleId: input.roleId ?? null },
+      revertable: true,
     });
     return created(result, "User invited");
   },

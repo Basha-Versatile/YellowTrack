@@ -1,8 +1,20 @@
 import "server-only";
-import { ActivityLog, ComplianceDocument } from "@/models";
+import { Types } from "mongoose";
+import {
+  ActivityLog,
+  ComplianceDocument,
+  Driver,
+  EMIPayment,
+  EMIPlan,
+  Role,
+  User,
+  Vehicle,
+  VehicleSale,
+} from "@/models";
 import {
   type ScopedContext,
   tenantFilter,
+  tenantStamp,
 } from "@/lib/auth/tenant-context";
 import {
   BadRequestError,
@@ -12,21 +24,131 @@ import {
 } from "@/lib/errors";
 import { logActivity } from "./activityLog.service";
 import type { Session } from "@/lib/auth/session";
-import { calculateComplianceStatus } from "./compliance.service";
 
 /**
- * Action revert orchestrator.
+ * Activity revert orchestrator.
  *
- * Each `action` key (e.g. "compliance.update") maps to a handler that knows
- * how to reverse it using the snapshot captured at write time. New actions
- * become revertable by:
- *   1. Capturing a snapshot at the write site (set `revertable: true` on the
- *      activity entry).
- *   2. Adding a handler entry to `REVERT_HANDLERS` here.
+ * Every action key that's reversible has an entry in REVERT_REGISTRY below.
+ * Each entry picks a *shape* (update / create / delete / flag) and the engine
+ * supplies the generic reversal logic — no per-action handler code needed
+ * unless the action does something exotic.
+ *
+ * Adding revert coverage for a new action is two steps:
+ *   1. At the write site, capture the right snapshot
+ *      (`beforeSnapshot` for update/delete/flag, nothing for create)
+ *      and set `revertable: true` on the logActivity call.
+ *   2. Add a registry entry below pointing to the right shape + Mongoose model.
+ *
+ * Auth actions are intentionally NOT in the registry — login/logout have
+ * nothing to undo.
  */
 
 const CONFLICT_SKEW_MS = 5_000;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Model registry — each shape needs to know which collection to write to.
+// ─────────────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyModel = any;
+const MODELS: Record<string, AnyModel> = {
+  Vehicle,
+  Driver,
+  ComplianceDocument,
+  User,
+  Role,
+  EMIPlan,
+  EMIPayment,
+  VehicleSale,
+};
+
+type RevertShape =
+  | {
+      // Restore the fields listed in beforeSnapshot back onto the entity.
+      kind: "update";
+      modelName: keyof typeof MODELS;
+    }
+  | {
+      // Delete the entity that was created. Works for both soft and hard
+      // delete since we call deleteOne — soft-deleting models will mark
+      // their `deletedAt` via their own middleware if configured, otherwise
+      // hard delete is fine for a freshly-created row.
+      kind: "create";
+      modelName: keyof typeof MODELS;
+    }
+  | {
+      // Restore a deleted entity by re-inserting from beforeSnapshot. Works
+      // for both hard-deleted entities (full snapshot) and soft-deleted ones
+      // (we strip deletedAt). Optionally restores cascaded children.
+      kind: "delete";
+      modelName: keyof typeof MODELS;
+      cascadeChildren?: Array<keyof typeof MODELS>;
+    }
+  | {
+      // Single-flag toggle (suspend/resume, paid/unpaid). The beforeSnapshot
+      // carries the prior value of the named field.
+      kind: "flag";
+      modelName: keyof typeof MODELS;
+      field: string;
+    };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Action → revert shape registry. Every NON-auth action that the codebase
+// logs should be listed here.
+// ─────────────────────────────────────────────────────────────────────────
+const REVERT_REGISTRY: Record<string, RevertShape> = {
+  // Vehicle
+  "vehicle.create": { kind: "create", modelName: "Vehicle" },
+  "vehicle.update": { kind: "update", modelName: "Vehicle" },
+  "vehicle.delete": {
+    kind: "delete",
+    modelName: "Vehicle",
+    cascadeChildren: ["ComplianceDocument"],
+  },
+  "vehicle.sale.cancel": { kind: "update", modelName: "Vehicle" },
+
+  // Driver
+  "driver.create": { kind: "create", modelName: "Driver" },
+  "driver.update": { kind: "update", modelName: "Driver" },
+
+  // Compliance
+  "compliance.create": { kind: "create", modelName: "ComplianceDocument" },
+  "compliance.update": { kind: "update", modelName: "ComplianceDocument" },
+  "compliance.delete": { kind: "delete", modelName: "ComplianceDocument" },
+  // Renew creates a fresh doc and deactivates the old one. Reverting deletes
+  // the new doc — restoring the old doc's `isActive: true` is a separate
+  // recovery the user can do manually, captured here as a partial revert.
+  "compliance.renew": { kind: "create", modelName: "ComplianceDocument" },
+
+  // User
+  "user.invite": { kind: "create", modelName: "User" },
+  "user.update": { kind: "update", modelName: "User" },
+  "user.delete": { kind: "delete", modelName: "User" },
+  "user.suspend": { kind: "flag", modelName: "User", field: "status" },
+  "user.resume": { kind: "flag", modelName: "User", field: "status" },
+
+  // Role
+  "role.create": { kind: "create", modelName: "Role" },
+  "role.update": { kind: "update", modelName: "Role" },
+  "role.delete": { kind: "delete", modelName: "Role" },
+
+  // EMI
+  "emi.plan.create": { kind: "create", modelName: "EMIPlan" },
+  "emi.update": { kind: "update", modelName: "EMIPlan" },
+  "emi.status": { kind: "flag", modelName: "EMIPlan", field: "status" },
+  "emi.payment.paid": { kind: "flag", modelName: "EMIPayment", field: "status" },
+  "emi.payment.unpaid": { kind: "flag", modelName: "EMIPayment", field: "status" },
+  // Bulk-paid touches many EMIPayments at once and there's no clean way to
+  // revert each without a richer snapshot. Left out of the registry; the UI
+  // will show "not revertable".
+};
+
+export function isActionRevertable(action: string): boolean {
+  return Object.prototype.hasOwnProperty.call(REVERT_REGISTRY, action);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Shape handlers
+// ─────────────────────────────────────────────────────────────────────────
 type ActivityDoc = {
   _id: unknown;
   tenantId: unknown;
@@ -35,7 +157,6 @@ type ActivityDoc = {
   entityId: string | null;
   entityLabel: string | null;
   summary: string;
-  metadata: Record<string, unknown> | null;
   revertable: boolean;
   beforeSnapshot: Record<string, unknown> | null;
   createdSnapshot: Record<string, unknown> | null;
@@ -44,44 +165,32 @@ type ActivityDoc = {
   createdAt: Date;
 };
 
-type RevertHandlerResult = {
-  /** Short human summary used on the new revert log entry. */
+type ShapeResult = {
   summary: string;
-  /** Optional fields diff (before/after) for the revert audit. */
-  fields?: Array<{ field: string; before: unknown; after: unknown }>;
+  fields: Array<{ field: string; before: unknown; after: unknown }>;
 };
 
-type RevertHandler = (
+async function runUpdateShape(
   ctx: ScopedContext,
   entry: ActivityDoc,
+  shape: Extract<RevertShape, { kind: "update" }>,
   opts: { force: boolean },
-) => Promise<RevertHandlerResult>;
-
-// ─────────────────────────────────────────────────────────────────────────
-// Handler: compliance.update
-// ─────────────────────────────────────────────────────────────────────────
-const revertComplianceUpdate: RevertHandler = async (ctx, entry, opts) => {
+): Promise<ShapeResult> {
   if (!entry.entityId) throw new BadRequestError("Missing entity reference");
-  const snap = entry.beforeSnapshot as {
-    expiryDate?: Date | string | null;
-    issuedDate?: Date | string | null;
-    status?: string | null;
-    isLifetime?: boolean;
-  } | null;
-  if (!snap) {
+  const snap = entry.beforeSnapshot;
+  if (!snap || Object.keys(snap).length === 0) {
     throw new BadRequestError("No snapshot available to revert");
   }
-
-  const current = await ComplianceDocument.findOne(
+  const M = MODELS[shape.modelName];
+  const current = await M.findOne(
     tenantFilter(ctx, { _id: entry.entityId }),
   ).lean();
   if (!current) {
     throw new NotFoundError(
-      "The compliance document no longer exists. Nothing to revert.",
+      `${shape.modelName} no longer exists. Nothing to revert.`,
     );
   }
 
-  // Conflict check — was the entity touched after the log entry?
   const currentUpdated = (current as { updatedAt?: Date }).updatedAt;
   if (
     !opts.force &&
@@ -90,77 +199,190 @@ const revertComplianceUpdate: RevertHandler = async (ctx, entry, opts) => {
       entry.createdAt.getTime() + CONFLICT_SKEW_MS
   ) {
     throw new ConflictError(
-      "This document has been edited since the log entry. Revert will discard those changes — confirm to proceed.",
+      "This record has been edited since the log entry. Revert will discard those changes — confirm to proceed.",
     );
   }
 
-  const before = current as {
-    expiryDate?: Date | null;
-    issuedDate?: Date | null;
-    status?: string | null;
-    isLifetime?: boolean;
-  };
-
-  const restoredExpiry = snap.expiryDate ? new Date(snap.expiryDate) : null;
-  const restoredIssued = snap.issuedDate ? new Date(snap.issuedDate) : null;
-  const restoredStatus = snap.status ?? calculateComplianceStatus(restoredExpiry);
-  const restoredLifetime = Boolean(snap.isLifetime);
-
-  await ComplianceDocument.findOneAndUpdate(
+  await M.findOneAndUpdate(
     tenantFilter(ctx, { _id: entry.entityId }),
-    {
-      $set: {
-        expiryDate: restoredExpiry,
-        issuedDate: restoredIssued,
-        status: restoredStatus,
-        isLifetime: restoredLifetime,
-      },
-    },
+    { $set: snap },
+  );
+
+  // Build a fields[] preview for the new revert audit row.
+  const before = current as Record<string, unknown>;
+  const fields: ShapeResult["fields"] = [];
+  for (const [k, v] of Object.entries(snap)) {
+    const prev = before[k] ?? null;
+    if (JSON.stringify(prev) !== JSON.stringify(v ?? null)) {
+      fields.push({ field: k, before: prev, after: v ?? null });
+    }
+  }
+  return {
+    summary: `Reverted ${entry.entityLabel ?? shape.modelName.toLowerCase()}`,
+    fields,
+  };
+}
+
+async function runCreateShape(
+  ctx: ScopedContext,
+  entry: ActivityDoc,
+  shape: Extract<RevertShape, { kind: "create" }>,
+  opts: { force: boolean },
+): Promise<ShapeResult> {
+  if (!entry.entityId) throw new BadRequestError("Missing entity reference");
+  const M = MODELS[shape.modelName];
+  const current = await M.findOne(
+    tenantFilter(ctx, { _id: entry.entityId }),
+  ).lean();
+  if (!current) {
+    throw new NotFoundError(
+      `${shape.modelName} no longer exists. Nothing to revert.`,
+    );
+  }
+
+  // Conflict check — if the entity has been modified since creation, warn.
+  const currentUpdated = (current as { updatedAt?: Date }).updatedAt;
+  if (
+    !opts.force &&
+    currentUpdated &&
+    new Date(currentUpdated).getTime() >
+      entry.createdAt.getTime() + CONFLICT_SKEW_MS
+  ) {
+    throw new ConflictError(
+      "This record has been edited since it was created. Revert will discard those changes — confirm to proceed.",
+    );
+  }
+
+  // For models with soft-delete support (Vehicle), set deletedAt; for others
+  // hard delete. Either way, the entity stops being visible.
+  if (shape.modelName === "Vehicle") {
+    await M.findOneAndUpdate(
+      tenantFilter(ctx, { _id: entry.entityId }),
+      { $set: { deletedAt: new Date() } },
+    );
+  } else {
+    await M.deleteOne(tenantFilter(ctx, { _id: entry.entityId }));
+  }
+
+  return {
+    summary: `Undid creation of ${entry.entityLabel ?? shape.modelName.toLowerCase()}`,
+    fields: [],
+  };
+}
+
+async function runDeleteShape(
+  ctx: ScopedContext,
+  entry: ActivityDoc,
+  shape: Extract<RevertShape, { kind: "delete" }>,
+  _opts: { force: boolean },
+): Promise<ShapeResult> {
+  if (!entry.entityId) throw new BadRequestError("Missing entity reference");
+  const snap = entry.beforeSnapshot;
+  if (!snap) {
+    throw new BadRequestError(
+      "No snapshot was captured for this delete — cannot restore.",
+    );
+  }
+  const M = MODELS[shape.modelName];
+
+  // Make sure the entity isn't already restored (avoid duplicate-key errors).
+  const existing = await M.findOne(
+    tenantFilter(ctx, { _id: entry.entityId }),
+  ).lean();
+  if (existing) {
+    throw new ConflictError(
+      `${shape.modelName} already exists. Maybe it was restored already?`,
+    );
+  }
+
+  // Re-insert from snapshot. Strip soft-delete markers so the row reappears.
+  const restored = { ...snap };
+  delete (restored as Record<string, unknown>).deletedAt;
+  // Preserve original _id so cross-references stay valid.
+  if (entry.entityId) {
+    (restored as Record<string, unknown>)._id = new Types.ObjectId(
+      entry.entityId,
+    );
+  }
+  await M.create({ ...restored, ...tenantStamp(ctx) });
+
+  // Cascade children, if any.
+  if (shape.cascadeChildren && entry.childSnapshots) {
+    for (const childName of shape.cascadeChildren) {
+      const rows = entry.childSnapshots[childName] ?? [];
+      if (rows.length === 0) continue;
+      const CM = MODELS[childName];
+      for (const row of rows) {
+        try {
+          const r = { ...(row as Record<string, unknown>) };
+          delete r.deletedAt;
+          await CM.create({ ...r, ...tenantStamp(ctx) });
+        } catch (err) {
+          console.warn(
+            `[activityRevert] cascade restore ${childName} failed:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+    }
+  }
+
+  return {
+    summary: `Restored ${entry.entityLabel ?? shape.modelName.toLowerCase()}`,
+    fields: [],
+  };
+}
+
+async function runFlagShape(
+  ctx: ScopedContext,
+  entry: ActivityDoc,
+  shape: Extract<RevertShape, { kind: "flag" }>,
+  opts: { force: boolean },
+): Promise<ShapeResult> {
+  if (!entry.entityId) throw new BadRequestError("Missing entity reference");
+  const snap = entry.beforeSnapshot;
+  if (!snap || !(shape.field in snap)) {
+    throw new BadRequestError(
+      `No prior value for "${shape.field}" was captured.`,
+    );
+  }
+  const M = MODELS[shape.modelName];
+  const current = await M.findOne(
+    tenantFilter(ctx, { _id: entry.entityId }),
+  ).lean();
+  if (!current) {
+    throw new NotFoundError(
+      `${shape.modelName} no longer exists. Nothing to revert.`,
+    );
+  }
+  const currentUpdated = (current as { updatedAt?: Date }).updatedAt;
+  if (
+    !opts.force &&
+    currentUpdated &&
+    new Date(currentUpdated).getTime() >
+      entry.createdAt.getTime() + CONFLICT_SKEW_MS
+  ) {
+    throw new ConflictError(
+      "This record has been edited since the log entry. Revert will discard those changes — confirm to proceed.",
+    );
+  }
+
+  const before = (current as Record<string, unknown>)[shape.field] ?? null;
+  const after = snap[shape.field] ?? null;
+  await M.findOneAndUpdate(
+    tenantFilter(ctx, { _id: entry.entityId }),
+    { $set: { [shape.field]: after } },
   );
 
   return {
-    summary: `Reverted ${entry.entityLabel ?? "compliance document"}${
-      restoredExpiry
-        ? ` to expiry ${restoredExpiry.toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}`
-        : restoredLifetime
-          ? " to lifetime validity"
-          : ""
-    }`,
-    fields: [
-      {
-        field: "expiryDate",
-        before: before.expiryDate ?? null,
-        after: restoredExpiry,
-      },
-      {
-        field: "issuedDate",
-        before: before.issuedDate ?? null,
-        after: restoredIssued,
-      },
-    ].filter(
-      (d) => JSON.stringify(d.before) !== JSON.stringify(d.after),
-    ),
+    summary: `Reverted ${entry.entityLabel ?? shape.modelName.toLowerCase()} ${shape.field}`,
+    fields: [{ field: shape.field, before, after }],
   };
-};
-
-// Registry of supported action → handler. Extending this is how we onboard
-// more revert coverage; the API + UI need no further changes.
-const REVERT_HANDLERS: Record<string, RevertHandler> = {
-  "compliance.update": revertComplianceUpdate,
-};
-
-export function isActionRevertable(action: string): boolean {
-  return Object.prototype.hasOwnProperty.call(REVERT_HANDLERS, action);
 }
 
-/**
- * Reverse the action recorded by `activityId`. Caller must have permission
- * `activityLog:revert`; this service does NOT recheck — gate at the route.
- */
+// ─────────────────────────────────────────────────────────────────────────
+// Public entry point
+// ─────────────────────────────────────────────────────────────────────────
 export async function revertActivity(
   ctx: ScopedContext,
   session: Session,
@@ -179,16 +401,25 @@ export async function revertActivity(
     throw new ForbiddenError("This action cannot be reverted");
   }
 
-  const handler = REVERT_HANDLERS[entry.action];
-  if (!handler) {
+  const shape = REVERT_REGISTRY[entry.action];
+  if (!shape) {
     throw new ForbiddenError(
       `Revert is not yet supported for action "${entry.action}"`,
     );
   }
 
-  const result = await handler(ctx, entry, { force: Boolean(opts.force) });
+  const force = Boolean(opts.force);
+  let result: ShapeResult;
+  if (shape.kind === "update") {
+    result = await runUpdateShape(ctx, entry, shape, { force });
+  } else if (shape.kind === "create") {
+    result = await runCreateShape(ctx, entry, shape, { force });
+  } else if (shape.kind === "delete") {
+    result = await runDeleteShape(ctx, entry, shape, { force });
+  } else {
+    result = await runFlagShape(ctx, entry, shape, { force });
+  }
 
-  // Mark the original entry as reverted.
   await ActivityLog.findOneAndUpdate(
     tenantFilter(ctx, { _id: activityId }),
     {
@@ -199,14 +430,13 @@ export async function revertActivity(
     },
   );
 
-  // Insert a new "*.revert" audit row pointing back at the original.
   const revertEntry = await logActivity(ctx, session, {
     action: `${entry.action.split(".")[0]}.revert`,
     entityType: entry.entityType as Parameters<typeof logActivity>[2]["entityType"],
     entityId: entry.entityId ?? null,
     entityLabel: entry.entityLabel ?? null,
     summary: result.summary,
-    fields: result.fields ?? [],
+    fields: result.fields,
     metadata: { originalAction: entry.action },
     revertable: false,
     revertedFromActivityId: String(entry._id),
