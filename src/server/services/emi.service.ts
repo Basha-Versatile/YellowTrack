@@ -99,6 +99,11 @@ export type CreateEmiPlanInput = {
   reminderChannels?: Array<"EMAIL" | "WHATSAPP" | "IN_APP">;
   reminderLeadDays?: number[];
   notes?: string | null;
+  // Uploaded EMI schedule (PDF / image) URLs — set by the route handler
+  // after the multipart files are persisted via the storage driver. The
+  // singular field is kept as a fallback pointer to the first file.
+  scheduleDocumentUrl?: string | null;
+  scheduleDocumentUrls?: string[] | null;
 };
 
 function validateCreateInput(input: CreateEmiPlanInput) {
@@ -175,8 +180,31 @@ export async function createEmiPlan(
     reminderChannels: input.reminderChannels ?? ["EMAIL", "IN_APP"],
     reminderLeadDays: input.reminderLeadDays ?? [7, 3, 1],
     notes: input.notes ?? null,
+    scheduleDocumentUrl:
+      input.scheduleDocumentUrl ??
+      (input.scheduleDocumentUrls && input.scheduleDocumentUrls[0]) ??
+      null,
+    scheduleDocumentUrls: input.scheduleDocumentUrls ?? [],
     createdBy,
   });
+
+  // Catalog the debit account so the next "New EMI plan" form can offer it
+  // as a saved choice. Idempotent on (tenantId, bankName, accountMasked).
+  if (input.debitBankName && input.debitAccountMasked) {
+    try {
+      const { upsertDebitAccount } = await import("./debitAccount.service");
+      await upsertDebitAccount(ctx, {
+        bankName: input.debitBankName,
+        accountMasked: input.debitAccountMasked,
+        accountHolder: input.debitAccountHolder ?? null,
+      });
+    } catch (err) {
+      console.warn(
+        "[emi] debit-account catalog upsert failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
   // Generate the full installment schedule up-front. Lets the cron + UI
   // operate on concrete rows without recomputing.
@@ -301,7 +329,12 @@ export async function markPaymentPaid(
   const plan = await emiRepo.findPlanById(ctx, String(payment.emiPlanId));
   if (!plan) throw new NotFoundError("Parent EMI plan not found");
 
-  const paidDate = input.paidDate ? new Date(input.paidDate) : new Date();
+  // Default to the installment's own scheduled date when the caller doesn't
+  // specify, so the auto-created Expense lands in the month it actually
+  // belonged to — both for single Mark Paid clicks and the bulk sweep.
+  const paidDate = input.paidDate
+    ? new Date(input.paidDate)
+    : new Date(payment.scheduledDate as unknown as string | Date);
   const paidAmount = input.paidAmount ?? payment.amount;
   if (paidAmount < 0) throw new BadRequestError("paidAmount cannot be negative");
   const lateFee = input.lateFee ?? 0;
@@ -406,7 +439,17 @@ export async function markPaymentsPaidUntil(
   let updated = 0;
   for (const p of due) {
     try {
-      await markPaymentPaid(ctx, String(p._id), {}, markedBy);
+      // Use the installment's own scheduledDate as the paid date so the
+      // auto-created Expense lands in the month it actually belonged to.
+      // Without this, every historic installment in a bulk-paid sweep would
+      // stack on TODAY, distorting the monthly trend chart.
+      const scheduled = new Date(p.scheduledDate as unknown as string | Date);
+      await markPaymentPaid(
+        ctx,
+        String(p._id),
+        { paidDate: scheduled },
+        markedBy,
+      );
       updated += 1;
     } catch {
       // Skip rows that fail (eg. race conditions) — keep going so one bad

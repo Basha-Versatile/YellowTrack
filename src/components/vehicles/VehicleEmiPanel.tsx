@@ -111,6 +111,16 @@ export default function VehicleEmiPanel({
   const [unpaidLoading, setUnpaidLoading] = useState(false);
   const [pendingBulkPaid, setPendingBulkPaid] = useState(false);
   const [bulkPaidLoading, setBulkPaidLoading] = useState(false);
+  // Close-plan typed confirmation — guards against accidental clicks on the
+  // close button by requiring the literal word "CLOSE" to be typed.
+  const [closePromptOpen, setClosePromptOpen] = useState(false);
+  const [closeConfirmInput, setCloseConfirmInput] = useState("");
+  const [closing, setClosing] = useState(false);
+  // Installments table renders every row inside a scroll container so it
+  // doesn't dominate the page on long plans. The row in the same month/year
+  // as today gets highlighted and scrolled into view on mount.
+  const installmentsScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const currentRowRef = React.useRef<HTMLTableRowElement | null>(null);
 
   // Note: `toast` is intentionally NOT a dep. useToast() returns a new ref on
   // every render — including it would re-fire the effect → re-render → loop.
@@ -185,9 +195,29 @@ export default function VehicleEmiPanel({
     };
   }, [activePlan, payments]);
 
-  const upcomingPayments = useMemo(() => {
-    return payments.slice(0, 12);
+  // Render every installment — no slicing — inside a scroll container so the
+  // current-month row can be highlighted and scrolled into view.
+  const upcomingPayments = payments;
+
+  // Index of the row whose scheduledDate falls inside the current calendar
+  // month. -1 if none (the plan's already finished or started in the future).
+  const currentMonthIndex = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    return payments.findIndex((p) => {
+      const d = new Date(p.scheduledDate as unknown as string | Date);
+      return d.getFullYear() === y && d.getMonth() === m;
+    });
   }, [payments]);
+
+  // Auto-scroll the current row into view once the table mounts / data loads.
+  useEffect(() => {
+    if (currentMonthIndex < 0) return;
+    const row = currentRowRef.current;
+    if (!row) return;
+    row.scrollIntoView({ block: "center", behavior: "auto" });
+  }, [currentMonthIndex, payments.length]);
 
   const handleMarkPaid = async (payment: EmiPayment) => {
     if (!activePlan) return;
@@ -315,10 +345,14 @@ export default function VehicleEmiPanel({
         {activePlan && activePlan.status === "ACTIVE" && (
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => handleStatusChange("CLOSED")}
+              onClick={() => {
+                setCloseConfirmInput("");
+                setClosePromptOpen(true);
+              }}
               className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              title="Close this EMI plan"
             >
-              Close
+              Close plan
             </button>
           </div>
         )}
@@ -504,9 +538,12 @@ export default function VehicleEmiPanel({
                 </Link>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div
+              ref={installmentsScrollRef}
+              className="overflow-y-auto max-h-[28rem] overflow-x-auto"
+            >
               <table className="w-full text-[11px]">
-                <thead className="bg-gray-50/40 dark:bg-gray-800/20">
+                <thead className="bg-gray-50/40 dark:bg-gray-800/20 sticky top-0 z-10 backdrop-blur">
                   <tr>
                     <th className="text-left px-4 py-2 font-bold text-gray-500 uppercase tracking-wider text-[9px]">
                       #
@@ -529,13 +566,30 @@ export default function VehicleEmiPanel({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100/50 dark:divide-gray-800/50">
-                  {upcomingPayments.map((p) => (
-                    <tr key={p.id}>
+                  {upcomingPayments.map((p, idx) => {
+                    const isCurrentMonth = idx === currentMonthIndex;
+                    return (
+                    <tr
+                      key={p.id}
+                      ref={isCurrentMonth ? currentRowRef : undefined}
+                      className={
+                        isCurrentMonth
+                          ? "bg-yellow-50/80 dark:bg-yellow-500/[0.08] outline outline-1 outline-yellow-300/70 dark:outline-yellow-500/30"
+                          : undefined
+                      }
+                    >
                       <td className="px-4 py-2 font-mono font-semibold text-gray-700 dark:text-gray-300">
                         {p.installmentNumber}
                       </td>
                       <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
-                        {formatDate(p.scheduledDate)}
+                        <span className="inline-flex items-center gap-1.5">
+                          {formatDate(p.scheduledDate)}
+                          {isCurrentMonth && (
+                            <span className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-yellow-400 text-gray-900">
+                              This month
+                            </span>
+                          )}
+                        </span>
                       </td>
                       <td className="px-4 py-2 text-right font-black text-gray-900 dark:text-white">
                         {formatINR(p.amount)}
@@ -580,15 +634,31 @@ export default function VehicleEmiPanel({
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-            {payments.length > upcomingPayments.length && (
-              <div className="bg-gray-50/40 dark:bg-gray-800/20 px-4 py-2 text-center">
-                <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                  Showing first {upcomingPayments.length} of {payments.length} installments
-                </span>
+            {payments.length > 0 && (
+              <div className="bg-gray-50/40 dark:bg-gray-800/20 px-4 py-2 text-center text-[10px] text-gray-500 dark:text-gray-400">
+                Showing all {payments.length} installments
+                {currentMonthIndex >= 0 && (
+                  <>
+                    {" · "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        currentRowRef.current?.scrollIntoView({
+                          block: "center",
+                          behavior: "smooth",
+                        })
+                      }
+                      className="font-semibold text-yellow-700 dark:text-yellow-400 hover:underline"
+                    >
+                      Jump to current month
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -641,6 +711,83 @@ export default function VehicleEmiPanel({
         onConfirm={runMarkAllPaidTillToday}
         onCancel={() => setPendingBulkPaid(false)}
       />
+
+      {closePromptOpen && activePlan && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => !closing && setClosePromptOpen(false)}
+          />
+          <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 mb-4 mx-auto">
+                <Ban className="w-5 h-5" />
+              </div>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white text-center">
+                Close this EMI plan?
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                Closing the plan with{" "}
+                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                  {activePlan.lenderName}
+                </span>{" "}
+                will stop new reminders and mark it CLOSED. Existing
+                installments stay on file. This action is reversible from the
+                activity log.
+              </p>
+              <div className="mt-5">
+                <label className="block">
+                  <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                    Type <span className="font-mono text-red-600 dark:text-red-400">CLOSE</span> to confirm
+                  </span>
+                  <input
+                    autoFocus
+                    type="text"
+                    value={closeConfirmInput}
+                    onChange={(e) => setCloseConfirmInput(e.target.value)}
+                    placeholder="CLOSE"
+                    className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-sm font-mono uppercase tracking-wider text-gray-800 dark:text-gray-200 focus:border-red-400 focus:outline-none focus:ring-3 focus:ring-red-400/10"
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2.5 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (closeConfirmInput.trim().toUpperCase() !== "CLOSE") return;
+                  setClosing(true);
+                  try {
+                    await handleStatusChange("CLOSED");
+                    setClosePromptOpen(false);
+                    setCloseConfirmInput("");
+                  } finally {
+                    setClosing(false);
+                  }
+                }}
+                disabled={
+                  closing ||
+                  closeConfirmInput.trim().toUpperCase() !== "CLOSE"
+                }
+                className="flex-1 h-10 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+              >
+                {closing && (
+                  <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                )}
+                Close plan
+              </button>
+              <button
+                type="button"
+                onClick={() => !closing && setClosePromptOpen(false)}
+                disabled={closing}
+                className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

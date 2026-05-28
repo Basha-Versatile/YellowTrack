@@ -20,7 +20,7 @@ interface ServiceRecord {
 }
 interface Vehicle {
   id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; profileImage: string | null;
-  group?: { name: string; icon: string; color?: string } | null;
+  groups?: Array<{ name: string; icon: string; color?: string }>;
 }
 
 export default function VehicleServiceDetailPage() {
@@ -77,7 +77,8 @@ export default function VehicleServiceDetailPage() {
   if (loading) return <ServiceDetailSkeleton />;
   if (!vehicle) return <div className="text-center py-20"><p className="text-gray-500">Vehicle not found</p></div>;
 
-  const GroupIcon = vehicle.group?.icon ? getVehicleTypeIcon(vehicle.group.icon) : Car;
+  const primaryGroup = vehicle.groups?.[0];
+  const GroupIcon = primaryGroup?.icon ? getVehicleTypeIcon(primaryGroup.icon) : Car;
 
   return (
     <div className="space-y-6">
@@ -96,7 +97,7 @@ export default function VehicleServiceDetailPage() {
               </Link>
               <div
                 className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden border-2 border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-white/5 ${vehicle.profileImage ? "cursor-pointer" : ""}`}
-                style={!vehicle.profileImage && vehicle.group?.color ? { backgroundColor: `${vehicle.group.color}20` } : undefined}
+                style={!vehicle.profileImage && primaryGroup?.color ? { backgroundColor: `${primaryGroup.color}20` } : undefined}
                 onMouseEnter={(e) => { if (vehicle.profileImage) { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(vehicle.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); } }}
                 onMouseLeave={() => setHoverPhoto(null)}
               >
@@ -105,7 +106,7 @@ export default function VehicleServiceDetailPage() {
                 ) : (
                   <GroupIcon
                     className="w-6 h-6"
-                    style={vehicle.group?.color ? { color: vehicle.group.color } : undefined}
+                    style={primaryGroup?.color ? { color: primaryGroup.color } : undefined}
                   />
                 )}
               </div>

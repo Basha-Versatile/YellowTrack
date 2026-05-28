@@ -101,7 +101,7 @@ export async function onboardVehicle(
   ctx: ScopedContext,
   registrationNumber: string,
   images: string[] = [],
-  groupId: string | null,
+  groupIds: string[] | null | undefined,
   origin?: string,
   vehicleUsage?: "PRIVATE" | "COMMERCIAL" | null,
 ) {
@@ -111,9 +111,10 @@ export async function onboardVehicle(
   await assertQuota(stamp.tenantId, "vehicle");
 
   // No group selected during onboarding → assign to the default "Others" group
-  if (!groupId) {
+  let resolvedGroupIds = Array.isArray(groupIds) ? groupIds.filter(Boolean) : [];
+  if (resolvedGroupIds.length === 0) {
     const others = await vehicleGroupRepo.findOrCreateOthers(ctx);
-    groupId = String(others._id);
+    resolvedGroupIds = [String(others._id)];
   }
 
   // 1. duplicate check first — avoids burning a Surepass credit
@@ -160,7 +161,7 @@ export async function onboardVehicle(
     ...vehicleData,
     images,
     profileImage: images[0] ?? null,
-    groupId,
+    groupIds: resolvedGroupIds,
     vehicleUsage: vehicleUsage ?? null,
   });
   const vehicleId = String(createdDoc._id);
@@ -274,14 +275,16 @@ export async function manualOnboard(
     seatingCapacity,
     permitType,
     vehicleUsage,
-    groupId: rawGroupId,
-  } = data as Record<string, string | number | undefined>;
+    groupIds: rawGroupIds,
+  } = data as Record<string, string | number | string[] | undefined>;
 
   // No group selected during onboarding → assign to the default "Others" group
-  let groupId = rawGroupId;
-  if (!groupId) {
+  let groupIds: string[] = Array.isArray(rawGroupIds)
+    ? (rawGroupIds as string[]).filter(Boolean)
+    : [];
+  if (groupIds.length === 0) {
     const others = await vehicleGroupRepo.findOrCreateOthers(ctx);
-    groupId = String(others._id);
+    groupIds = [String(others._id)];
   }
 
   const existing = await vehicleRepo.findByRegistrationNumber(
@@ -311,7 +314,7 @@ export async function manualOnboard(
         : null,
     images,
     profileImage: images[0] ?? null,
-    groupId,
+    groupIds,
   });
   const vehicleId = String(createdDoc._id);
 

@@ -12,6 +12,15 @@ export const createDocTypeSchema = z.object({
 });
 
 export const updateDocTypeSchema = z.object({
+  // Custom (non-system) types support code renames now. Same normalization as
+  // create — uppercased, spaces → underscores. System types reject this in
+  // the service layer.
+  code: z
+    .string()
+    .min(1)
+    .max(30)
+    .transform((v) => v.toUpperCase().replace(/\s+/g, "_"))
+    .optional(),
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   hasExpiry: z.boolean().optional(),

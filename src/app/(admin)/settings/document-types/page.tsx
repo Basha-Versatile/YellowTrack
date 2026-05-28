@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { documentTypeAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { Modal } from "@/components/ui/modal";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Plus,
   Pencil,
@@ -42,6 +41,11 @@ export default function DocumentTypesMastersPage() {
 
   const [pendingDelete, setPendingDelete] = useState<DocumentType | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // OTP-gated delete state.
+  const [otpRequested, setOtpRequested] = useState(false);
+  const [otpRequesting, setOtpRequesting] = useState(false);
+  const [otpInput, setOtpInput] = useState("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState<Date | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -87,12 +91,23 @@ export default function DocumentTypesMastersPage() {
     setSaving(true);
     try {
       if (editing) {
-        // Only name/description/hasExpiry editable — code is immutable.
-        await documentTypeAPI.update(editing.id ?? editing._id, {
+        // Custom (non-system) types support code renames. The server migrates
+        // every ComplianceDocument that references the old code so existing
+        // rows stay valid. System types reject any code change.
+        const payload: {
+          code?: string;
+          name: string;
+          description?: string;
+          hasExpiry: boolean;
+        } = {
           name: formName.trim(),
           description: formDescription.trim() || undefined,
           hasExpiry: formHasExpiry,
-        });
+        };
+        if (!editing.isSystem && formCode.trim() && formCode.trim() !== editing.code) {
+          payload.code = formCode.trim();
+        }
+        await documentTypeAPI.update(editing.id ?? editing._id, payload);
         toast.success("Updated", `${formName} updated`);
       } else {
         await documentTypeAPI.create({
@@ -114,13 +129,53 @@ export default function DocumentTypesMastersPage() {
     }
   };
 
+  // OTP-gated delete — request emails a code, confirm validates + deletes.
+  const openDelete = (dt: DocumentType) => {
+    setPendingDelete(dt);
+    setOtpRequested(false);
+    setOtpInput("");
+    setOtpExpiresAt(null);
+  };
+  const closeDelete = () => {
+    if (deleting || otpRequesting) return;
+    setPendingDelete(null);
+    setOtpRequested(false);
+    setOtpInput("");
+    setOtpExpiresAt(null);
+  };
+  const requestOtp = async () => {
+    if (!pendingDelete) return;
+    setOtpRequesting(true);
+    try {
+      const res = await documentTypeAPI.requestDeletion(
+        pendingDelete.id ?? pendingDelete._id,
+      );
+      const expires = (res.data?.data as { expiresAt?: string })?.expiresAt;
+      setOtpExpiresAt(expires ? new Date(expires) : null);
+      setOtpRequested(true);
+      toast.success("Code sent", "Check your email for the 6-digit OTP");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response
+        ?.data?.message;
+      toast.error("Could not send code", msg ?? "Try again in a moment");
+    } finally {
+      setOtpRequesting(false);
+    }
+  };
   const handleDelete = async () => {
     if (!pendingDelete) return;
+    if (!/^\d{6}$/.test(otpInput.trim())) {
+      toast.error("Invalid code", "Enter the 6-digit code from the email");
+      return;
+    }
     setDeleting(true);
     try {
-      await documentTypeAPI.remove(pendingDelete.id ?? pendingDelete._id);
+      await documentTypeAPI.confirmDeletion(
+        pendingDelete.id ?? pendingDelete._id,
+        otpInput.trim(),
+      );
       toast.success("Deleted", `${pendingDelete.name} removed`);
-      setPendingDelete(null);
+      closeDelete();
       await load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response
@@ -195,7 +250,7 @@ export default function DocumentTypesMastersPage() {
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {customTypes.map((dt) => (
-                  <DocTypeRow key={dt.id ?? dt._id} dt={dt} onEdit={openEdit} onDelete={(v) => setPendingDelete(v)} />
+                  <DocTypeRow key={dt.id ?? dt._id} dt={dt} onEdit={openEdit} onDelete={openDelete} />
                 ))}
               </div>
             )}
@@ -234,12 +289,17 @@ export default function DocumentTypesMastersPage() {
                 type="text"
                 value={formCode}
                 onChange={(e) => setFormCode(e.target.value)}
-                disabled={!!editing}
+                disabled={!!editing && !!editing.isSystem}
                 placeholder="e.g. ALL_INDIA_PERMIT"
                 className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-mono uppercase text-gray-900 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:bg-gray-50 dark:disabled:bg-gray-800/40 disabled:text-gray-400"
               />
               <p className="text-[10px] text-gray-400 mt-1">
-                Unique identifier. Uppercase, no spaces. {editing && "Cannot be changed after creation."}
+                Unique identifier. Uppercase, no spaces.{" "}
+                {editing && editing.isSystem
+                  ? "System type — code is locked."
+                  : editing
+                    ? "Renaming will update every vehicle document that references this code."
+                    : ""}
               </p>
             </div>
             <div>
@@ -303,17 +363,119 @@ export default function DocumentTypesMastersPage() {
         </div>
       </Modal>
 
-      <ConfirmDialog
+      {/* OTP-gated delete modal. Two steps: request → enter code → confirm. */}
+      <Modal
         isOpen={pendingDelete !== null}
-        title={`Delete "${pendingDelete?.name ?? ""}"?`}
-        message="Removes this tracker from your tenant. If any vehicle still has a document of this type, the delete will be blocked — re-label or remove those documents first."
-        confirmLabel="Delete"
-        cancelLabel="Keep"
-        variant="danger"
-        loading={deleting}
-        onConfirm={handleDelete}
-        onCancel={() => (deleting ? undefined : setPendingDelete(null))}
-      />
+        onClose={closeDelete}
+        showCloseButton={!deleting && !otpRequesting}
+        className="w-[92%] max-w-[440px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col">
+          <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 mb-3 mx-auto">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white text-center">
+              Delete &ldquo;{pendingDelete?.name ?? ""}&rdquo;?
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+              {!otpRequested ? (
+                <>
+                  Removes this tracker from your tenant. To confirm, we&apos;ll email
+                  a 6-digit code to your account.
+                </>
+              ) : (
+                <>
+                  We&apos;ve emailed a 6-digit code to your account. Enter it
+                  below to finish deleting. Code expires in ~10 minutes.
+                </>
+              )}
+            </p>
+          </div>
+
+          {otpRequested && (
+            <div className="px-6 py-4">
+              <label className="block">
+                <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                  Confirmation code
+                </span>
+                <input
+                  autoFocus
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))}
+                  placeholder="6-digit code"
+                  className="w-full h-11 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-lg font-mono tracking-[0.4em] text-center text-gray-900 dark:text-white focus:border-red-400 focus:outline-none focus:ring-3 focus:ring-red-400/10"
+                />
+              </label>
+              {otpExpiresAt && (
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 text-center">
+                  Code valid until {otpExpiresAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-2.5 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+            {otpRequested ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting || otpInput.length < 6}
+                  className="flex-1 h-10 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                >
+                  {deleting && (
+                    <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  )}
+                  Confirm delete
+                </button>
+                <button
+                  type="button"
+                  onClick={requestOtp}
+                  disabled={deleting || otpRequesting}
+                  className="h-10 px-3 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                  title="Send a fresh code"
+                >
+                  Resend
+                </button>
+                <button
+                  type="button"
+                  onClick={closeDelete}
+                  disabled={deleting}
+                  className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={requestOtp}
+                  disabled={otpRequesting}
+                  className="flex-1 h-10 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                >
+                  {otpRequesting && (
+                    <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  )}
+                  Email me a code
+                </button>
+                <button
+                  type="button"
+                  onClick={closeDelete}
+                  disabled={otpRequesting}
+                  className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

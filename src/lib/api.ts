@@ -410,19 +410,25 @@ export const vehicleAPI = {
   confirmDeletion: (vehicleId: string, otp: string) =>
     api.post(`/vehicles/${vehicleId}/deletion/confirm`, { otp }),
   getById: (id: string) => api.get(`/vehicles/${id}`),
-  updateGroup: (vehicleId: string, groupId: string | null) =>
-    api.patch(`/vehicles/${vehicleId}/group`, { groupId }),
+  updateGroups: (vehicleId: string, groupIds: string[]) =>
+    api.patch(`/vehicles/${vehicleId}/group`, { groupIds }),
   updateBrand: (vehicleId: string, brand: string | null) =>
     api.patch(`/vehicles/${vehicleId}/brand`, { brand }),
+  updateUsage: (
+    vehicleId: string,
+    vehicleUsage: "PRIVATE" | "COMMERCIAL" | null,
+  ) => api.patch(`/vehicles/${vehicleId}/usage`, { vehicleUsage }),
   onboard: (
     registrationNumber: string,
     images?: File[],
-    groupId?: string,
+    groupIds?: string[],
     vehicleUsage?: "PRIVATE" | "COMMERCIAL",
   ) => {
     const formData = new FormData();
     formData.append("registrationNumber", registrationNumber);
-    if (groupId) formData.append("groupId", groupId);
+    if (groupIds && groupIds.length > 0) {
+      formData.append("groupIds", JSON.stringify(groupIds));
+    }
     if (vehicleUsage) formData.append("vehicleUsage", vehicleUsage);
     if (images) images.forEach((f) => formData.append("vehicleImages", f));
     return api.post("/vehicles/onboard", formData, {
@@ -509,9 +515,14 @@ export const documentTypeAPI = {
   getById: (id: string) => api.get(`/document-types/${id}`),
   create: (data: { code: string; name: string; description?: string; hasExpiry?: boolean }) =>
     api.post("/document-types", data),
-  update: (id: string, data: { name?: string; description?: string; hasExpiry?: boolean }) =>
+  update: (id: string, data: { code?: string; name?: string; description?: string; hasExpiry?: boolean }) =>
     api.put(`/document-types/${id}`, data),
   remove: (id: string) => api.delete(`/document-types/${id}`),
+  // OTP-gated delete: requestDeletion emails the user an OTP, confirmDeletion
+  // hands the OTP back to actually remove the row.
+  requestDeletion: (id: string) => api.post(`/document-types/${id}/deletion`),
+  confirmDeletion: (id: string, otp: string) =>
+    api.post(`/document-types/${id}/deletion/confirm`, { otp }),
 };
 
 // ── Drivers ─────────────────────────────────────────────────
@@ -579,6 +590,57 @@ export const driverAPI = {
 };
 
 // ── Activity log ────────────────────────────────────────────
+// ── Vehicle brands (tenant-scoped + superadmin masters) ─────
+export const vehicleBrandAPI = {
+  // Tenant: list APPROVED brands + own PENDING ones.
+  list: () => api.get("/vehicle-brands"),
+  // Tenant: request a new brand (creates PENDING + emails superadmin).
+  request: (data: { name: string; iconKey?: string | null; description?: string | null }) =>
+    api.post("/vehicle-brands", data),
+};
+
+export const superadminVehicleBrandAPI = {
+  list: (params?: { status?: "APPROVED" | "PENDING" | "REJECTED"; search?: string }) =>
+    api.get("/superadmin/vehicle-brands", { params }),
+  create: (data: {
+    name: string;
+    logo?: File | null;
+    iconKey?: string | null;
+    description?: string | null;
+  }) => {
+    const fd = new FormData();
+    fd.append("name", data.name);
+    if (data.logo) fd.append("logo", data.logo);
+    if (data.iconKey) fd.append("iconKey", data.iconKey);
+    if (data.description) fd.append("description", data.description);
+    return api.post("/superadmin/vehicle-brands", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  update: (
+    id: string,
+    data: {
+      name?: string;
+      logo?: File | null;
+      iconKey?: string | null;
+      description?: string | null;
+    },
+  ) => {
+    const fd = new FormData();
+    if (data.name !== undefined) fd.append("name", data.name);
+    if (data.logo) fd.append("logo", data.logo);
+    if (data.iconKey !== undefined) fd.append("iconKey", data.iconKey ?? "");
+    if (data.description !== undefined) fd.append("description", data.description ?? "");
+    return api.patch(`/superadmin/vehicle-brands/${id}`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  remove: (id: string) => api.delete(`/superadmin/vehicle-brands/${id}`),
+  approve: (id: string) => api.post(`/superadmin/vehicle-brands/${id}/approve`),
+  reject: (id: string, reason?: string) =>
+    api.post(`/superadmin/vehicle-brands/${id}/reject`, { reason: reason ?? "" }),
+};
+
 export const activityLogAPI = {
   list: (params: {
     page?: number;
@@ -627,6 +689,21 @@ export const complianceAPI = {
   },
   getHistory: (vehicleId: string, type: string) =>
     api.get(`/compliance/history/${vehicleId}/${type}`),
+  // Attach a past-version document (own issued + expiry dates) to the same
+  // vehicle + type. Created as isActive=false so the active doc still drives
+  // the compliance status; the past version surfaces only in History.
+  addHistoricVersion: (
+    docId: string,
+    data: { file: File; issuedDate?: string; expiryDate?: string },
+  ) => {
+    const fd = new FormData();
+    fd.append("document", data.file);
+    if (data.issuedDate) fd.append("issuedDate", data.issuedDate);
+    if (data.expiryDate) fd.append("expiryDate", data.expiryDate);
+    return api.post(`/compliance/${docId}/historic`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
   createDocument: (vehicleId: string, data: { type: string; issuedDate?: string; expiryDate?: string; lifetime?: boolean }, file?: File) => {
     const formData = new FormData();
     formData.append("type", data.type);
@@ -734,6 +811,11 @@ export const notificationAPI = {
 };
 
 // ── EMI tracking ────────────────────────────────────────
+// ── Debit accounts (saved EMI autopay sources) ─────────────
+export const debitAccountAPI = {
+  list: () => api.get("/debit-accounts"),
+};
+
 export const emiAPI = {
   // Cross-vehicle hub for /vehicles/emi
   getHub: (params?: { status?: string; dueWithin?: number }) =>
@@ -759,8 +841,42 @@ export const emiAPI = {
       reminderChannels?: Array<"EMAIL" | "WHATSAPP" | "IN_APP">;
       reminderLeadDays?: number[];
       notes?: string | null;
+      // Multi-file schedule upload. `scheduleDocuments` is the preferred
+      // input; `scheduleDocument` (singular) is kept for callers that still
+      // pass one file.
+      scheduleDocument?: File | null;
+      scheduleDocuments?: File[] | null;
     },
-  ) => api.post(`/vehicles/${vehicleId}/emi`, data),
+  ) => {
+    // Always multipart so the optional schedule file flows through alongside
+    // the JSON-ish form fields.
+    const fd = new FormData();
+    fd.append("lenderName", data.lenderName);
+    if (data.lenderType) fd.append("lenderType", data.lenderType);
+    if (data.lenderContactPhone) fd.append("lenderContactPhone", data.lenderContactPhone);
+    if (data.lenderBranch) fd.append("lenderBranch", data.lenderBranch);
+    if (data.debitBankName) fd.append("debitBankName", data.debitBankName);
+    if (data.debitAccountMasked) fd.append("debitAccountMasked", data.debitAccountMasked);
+    if (data.debitAccountHolder) fd.append("debitAccountHolder", data.debitAccountHolder);
+    if (data.principalAmount != null) fd.append("principalAmount", String(data.principalAmount));
+    fd.append("emiAmount", String(data.emiAmount));
+    fd.append("totalInstallments", String(data.totalInstallments));
+    fd.append("startDate", data.startDate);
+    fd.append("dueDayOfMonth", String(data.dueDayOfMonth));
+    if (data.reminderChannels) fd.append("reminderChannels", JSON.stringify(data.reminderChannels));
+    if (data.reminderLeadDays) fd.append("reminderLeadDays", JSON.stringify(data.reminderLeadDays));
+    if (data.notes) fd.append("notes", data.notes);
+    // Append every schedule file under the same field name — the server uses
+    // manyFiles() to collect them as an array. Singular `scheduleDocument`
+    // stays supported for old callers.
+    if (data.scheduleDocuments) {
+      for (const f of data.scheduleDocuments) fd.append("scheduleDocument", f);
+    }
+    if (data.scheduleDocument) fd.append("scheduleDocument", data.scheduleDocument);
+    return api.post(`/vehicles/${vehicleId}/emi`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 
   // Per-plan
   getPlan: (planId: string) => api.get(`/emi/${planId}`),

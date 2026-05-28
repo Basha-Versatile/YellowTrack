@@ -34,7 +34,7 @@ interface SoldVehicle {
   fuelType: string;
   profileImage: string | null;
   vehicleUsage: "PRIVATE" | "COMMERCIAL" | null;
-  group?: { id: string; name: string; icon: string; color?: string } | null;
+  groups?: Array<{ id: string; name: string; icon: string; color?: string }>;
   sale: {
     buyerName: string;
     buyerPhone: string;
@@ -141,7 +141,8 @@ export default function SoldVehiclesPage() {
                 {/* Header row */}
                 <div className="flex items-center gap-4 p-4 border-b border-gray-100 dark:border-gray-800">
                   {(() => {
-                    const GroupIcon = v.group?.icon ? getVehicleTypeIcon(v.group.icon) : Truck;
+                    const primary = v.groups?.[0];
+                    const GroupIcon = primary?.icon ? getVehicleTypeIcon(primary.icon) : Truck;
                     return v.profileImage ? (
                       <img
                         src={`${resolveImageUrl(v.profileImage) ?? ""}`}
@@ -152,9 +153,9 @@ export default function SoldVehiclesPage() {
                     ) : (
                       <div
                         className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0 bg-gray-100 dark:bg-gray-800"
-                        style={v.group?.color ? { backgroundColor: v.group.color + "12" } : undefined}
+                        style={primary?.color ? { backgroundColor: primary.color + "12" } : undefined}
                       >
-                        <GroupIcon className="w-5 h-5" style={v.group?.color ? { color: v.group.color } : { color: "#9ca3af" }} />
+                        <GroupIcon className="w-5 h-5" style={primary?.color ? { color: primary.color } : { color: "#9ca3af" }} />
                       </div>
                     );
                   })()}
@@ -180,18 +181,18 @@ export default function SoldVehiclesPage() {
                       <span className="font-semibold text-gray-700 dark:text-gray-300">{titleCase(v.model)}</span>
                       <span className="text-gray-300 dark:text-gray-600">&bull;</span>
                       <span>{titleCase(v.fuelType)}</span>
-                      {v.group && (() => {
-                        const GIcon = getVehicleTypeIcon(v.group.icon);
+                      {(v.groups ?? []).map((g) => {
+                        const GIcon = getVehicleTypeIcon(g.icon);
                         return (
-                          <>
+                          <React.Fragment key={g.id}>
                             <span className="text-gray-300 dark:text-gray-600">&bull;</span>
                             <span className="text-brand-500 dark:text-brand-400 font-medium inline-flex items-center gap-0.5">
                               <GIcon className="w-3 h-3" />
-                              {v.group.name}
+                              {g.name}
                             </span>
-                          </>
+                          </React.Fragment>
                         );
-                      })()}
+                      })}
                     </p>
                   </div>
                   <Link

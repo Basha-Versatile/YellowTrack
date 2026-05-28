@@ -53,7 +53,7 @@ function TopNav() {
     <nav className="sticky top-0 z-50 backdrop-blur-md bg-white/80 dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 group">
-          <span className="relative w-20 h-20 rounded-xl overflow-hidden p-1">
+          <span className="relative w-20 h-20 rounded-xl overflow-hidden p-1 mix-blend-multiply dark:mix-blend-normal">
             <Image
               src="/images/logo/yellow-track-logo4.jpeg"
               alt="Yellow Track"
@@ -242,7 +242,7 @@ function HeroMockup() {
           {/* Compliance row */}
           <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-3">
             <div className="flex items-center justify-between text-[11px] font-bold mb-2">
-              <span className="text-gray-700 dark:text-gray-300">TS09GB3454 · Hilux</span>
+              <span className="text-gray-700 dark:text-gray-300">TG09AB9999 · Hilux</span>
               <span className="text-emerald-600 dark:text-emerald-400">OK</span>
             </div>
             <div className="flex gap-1.5">
@@ -285,7 +285,7 @@ function HeroMockup() {
         </span>
         <div className="min-w-0">
           <p className="text-[11px] font-bold text-gray-900 dark:text-white truncate">Insurance expiring</p>
-          <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">KA01AB1234 · 7 days left</p>
+          <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">TG09AB9999 · 7 days left</p>
         </div>
       </div>
 
@@ -1030,14 +1030,23 @@ function Footer() {
         { label: "Support", href: "mailto:hello@theyellowtrack.com" },
       ],
     },
+    {
+      title: "Legal",
+      links: [
+        { label: "Terms & Conditions", href: "/legal/terms" },
+        { label: "Privacy Policy", href: "/legal/privacy" },
+        { label: "Refund Policy", href: "/legal/refund" },
+        { label: "Cancellation & Returns", href: "/legal/cancellation" },
+      ],
+    },
   ];
   return (
     <footer className="border-t border-gray-100 dark:border-gray-900 bg-gray-50/50 dark:bg-gray-950">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-8">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 gap-8">
           <div className="col-span-2">
             <Link href="/" className="inline-flex items-center gap-2.5">
-              <span className="relative w-20 h-20 rounded-xl overflow-hidden">
+              <span className="relative w-20 h-20 rounded-xl overflow-hidden mix-blend-multiply dark:mix-blend-normal">
                 <Image
                   src="/images/logo/yellow-track-logo4.jpeg"
                   alt="Yellow Track"
@@ -1061,7 +1070,7 @@ function Footer() {
               </p>
               <p className="flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" />
-                Bengaluru, India
+                Hyderabad, India
               </p>
             </div>
           </div>

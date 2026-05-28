@@ -8,7 +8,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import { ChevronDownIcon, HorizontaLDots, UserCircleIcon } from "@/icons/index";
 import { MdSpaceDashboard } from "react-icons/md";
-import { Building2, Sparkles } from "lucide-react";
+import { Building2, Sparkles, Database } from "lucide-react";
 import { BsFillCarFrontFill } from "react-icons/bs";
 
 type NavItem = {
@@ -47,6 +47,13 @@ const navItems: NavItem[] = [
     icon: <UserCircleIcon />,
     name: "All Drivers",
     path: "/superadmin/drivers",
+  },
+  {
+    icon: <Database className="h-5 w-5" />,
+    name: "Masters",
+    subItems: [
+      { name: "Vehicle Brands", path: "/superadmin/masters/vehicle-brands" },
+    ],
   },
 ];
 

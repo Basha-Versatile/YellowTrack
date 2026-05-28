@@ -1,12 +1,20 @@
 import "server-only";
+import crypto from "crypto";
 import {
   BadRequestError,
   ConflictError,
   NotFoundError,
+  UnauthorizedError,
 } from "@/lib/errors";
 import type { ScopedContext } from "@/lib/auth/tenant-context";
-import { ComplianceDocument, DocumentType } from "@/models";
-import { tenantFilter } from "@/lib/auth/tenant-context";
+import {
+  ComplianceDocument,
+  DocumentType,
+  DocTypeDeletionOtp,
+  User,
+} from "@/models";
+import { tenantFilter, tenantStamp } from "@/lib/auth/tenant-context";
+import { sendEmail, docTypeDeletionOtpEmail } from "@/lib/email";
 import * as repo from "../repositories/documentType.repository";
 
 // Built-in compliance trackers shipped on first run. tenantId=null marks them
@@ -97,11 +105,140 @@ export async function update(
     hasExpiry: boolean;
   }>,
 ) {
-  const dt = await getById(ctx, id);
-  if ((dt as unknown as { isSystem: boolean }).isSystem && "code" in data) {
+  const dt = await getById(ctx, id) as unknown as {
+    isSystem: boolean;
+    code: string;
+  };
+  if (dt.isSystem && data.code !== undefined && data.code !== dt.code) {
     throw new BadRequestError("Cannot change the code of a system document type");
   }
+  // Code rename — ensure uniqueness and migrate every ComplianceDocument that
+  // references the old code so existing rows don't become orphaned references.
+  if (data.code !== undefined && data.code !== dt.code) {
+    const dup = await repo.findByCode(ctx, data.code);
+    if (dup) {
+      throw new ConflictError(
+        `Document type with code "${data.code}" already exists`,
+      );
+    }
+    await ComplianceDocument.updateMany(
+      tenantFilter(ctx, { type: dt.code }),
+      { $set: { type: data.code } },
+    );
+  }
   return repo.update(ctx, id, data);
+}
+
+const DELETION_OTP_TTL_MIN = 10;
+
+/**
+ * Generate and email a 6-digit OTP that gates the actual delete. Idempotent —
+ * a fresh request invalidates any previous OTP for the same (user, docType).
+ */
+export async function requestDeletion(
+  ctx: ScopedContext,
+  docTypeId: string,
+  userId: string,
+): Promise<{ expiresAt: Date }> {
+  const dt = (await getById(ctx, docTypeId)) as unknown as {
+    isSystem: boolean;
+    code: string;
+    name: string;
+  };
+  if (dt.isSystem) {
+    throw new BadRequestError("Cannot delete a system document type");
+  }
+  // Pre-flight: block here too so the user doesn't burn an OTP for a delete
+  // that will fail at confirm-time anyway.
+  const activeCount = await ComplianceDocument.countDocuments(
+    tenantFilter(ctx, { type: dt.code, isActive: true }),
+  );
+  const totalCount =
+    activeCount > 0
+      ? activeCount
+      : await ComplianceDocument.countDocuments(
+          tenantFilter(ctx, { type: dt.code }),
+        );
+  if (totalCount > 0) {
+    throw new ConflictError(
+      `Cannot delete "${dt.name}" — ${totalCount} ${totalCount === 1 ? "document is" : "documents are"} still using this type. Remove or re-label them first.`,
+    );
+  }
+
+  await DocTypeDeletionOtp.deleteMany(
+    tenantFilter(ctx, { documentTypeId: docTypeId, userId }),
+  );
+
+  const otp = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+  const expiresAt = new Date(Date.now() + DELETION_OTP_TTL_MIN * 60 * 1000);
+  await DocTypeDeletionOtp.create({
+    ...tenantStamp(ctx),
+    documentTypeId: docTypeId,
+    userId,
+    otp,
+    expiresAt,
+  });
+
+  // Fire-and-forget — failures here surface in logs, not back to the caller.
+  try {
+    const user = await User.findById(userId).select("email name").lean();
+    const email = (user as { email?: string } | null)?.email;
+    if (email) {
+      await sendEmail(
+        docTypeDeletionOtpEmail({
+          to: email,
+          recipientName: (user as { name?: string } | null)?.name ?? "there",
+          docTypeName: dt.name,
+          docTypeCode: dt.code,
+          otp,
+          expiresInMinutes: DELETION_OTP_TTL_MIN,
+        }),
+      );
+    }
+  } catch (err) {
+    console.error(
+      "[documentType.requestDeletion] email failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  return { expiresAt };
+}
+
+/**
+ * Step 2: verify the OTP and run the delete. The same blocking check from
+ * `remove()` re-runs here in case a compliance doc was attached between the
+ * request and confirm.
+ */
+export async function confirmDeletion(
+  ctx: ScopedContext,
+  docTypeId: string,
+  userId: string,
+  otp: string,
+) {
+  const cleanOtp = otp.trim();
+  if (!/^\d{6}$/.test(cleanOtp)) {
+    throw new BadRequestError("Enter the 6-digit code from the email");
+  }
+  const row = await DocTypeDeletionOtp.findOne(
+    tenantFilter(ctx, { documentTypeId: docTypeId, userId }),
+  ).sort({ createdAt: -1 });
+  if (!row) {
+    throw new UnauthorizedError(
+      "Code expired or not found. Request a new one.",
+    );
+  }
+  const r = row as unknown as { otp: string; expiresAt: Date };
+  if (r.expiresAt.getTime() < Date.now()) {
+    await DocTypeDeletionOtp.deleteOne({ _id: (row as { _id: unknown })._id });
+    throw new UnauthorizedError("Code expired. Request a new one.");
+  }
+  if (r.otp !== cleanOtp) {
+    throw new UnauthorizedError("Incorrect code");
+  }
+  // Burn the OTP first so a second click can't replay it.
+  await DocTypeDeletionOtp.deleteOne({ _id: (row as { _id: unknown })._id });
+  return remove(ctx, docTypeId);
 }
 
 export async function remove(ctx: ScopedContext, id: string) {

@@ -23,38 +23,41 @@ export const GET = withRoute(
     const vehicleIds = [...new Set(services.map((s) => String(s.vehicleId)))];
     const vehicles = vehicleIds.length
       ? await Vehicle.find(tenantFilter(ctx, { _id: { $in: vehicleIds } }))
-          .select("_id registrationNumber ownerName make model profileImage groupId")
+          .select("_id registrationNumber ownerName make model profileImage groupIds")
           .lean()
       : [];
-    const groupIds = vehicles
-      .map((v) => v.groupId)
-      .filter((id): id is NonNullable<typeof id> => Boolean(id));
-    const groups = groupIds.length
-      ? await VehicleGroup.find(tenantFilter(ctx, { _id: { $in: groupIds } }))
+    const allGroupIds = vehicles.flatMap((v) =>
+      Array.isArray(v.groupIds) ? v.groupIds : [],
+    );
+    const uniqueGroupIds = Array.from(new Set(allGroupIds.map((g) => String(g))));
+    const groups = uniqueGroupIds.length
+      ? await VehicleGroup.find(
+          tenantFilter(ctx, { _id: { $in: uniqueGroupIds } }),
+        )
           .select("_id name icon color")
           .lean()
       : [];
 
     const gById = new Map(groups.map((g) => [String(g._id), g]));
     const vById = new Map(
-      vehicles.map((v) => [
-        String(v._id),
-        {
-          id: String(v._id),
-          registrationNumber: v.registrationNumber,
-          make: v.make,
-          model: v.model,
-          profileImage: v.profileImage,
-          group: v.groupId
-            ? (() => {
-                const g = gById.get(String(v.groupId));
-                return g
-                  ? { name: g.name, icon: g.icon, color: g.color }
-                  : null;
-              })()
-            : null,
-        },
-      ]),
+      vehicles.map((v) => {
+        const vGroupIds: unknown[] = Array.isArray(v.groupIds) ? v.groupIds : [];
+        const vGroups = vGroupIds
+          .map((gid) => gById.get(String(gid)))
+          .filter((g): g is NonNullable<typeof g> => Boolean(g))
+          .map((g) => ({ name: g.name, icon: g.icon, color: g.color }));
+        return [
+          String(v._id),
+          {
+            id: String(v._id),
+            registrationNumber: v.registrationNumber,
+            make: v.make,
+            model: v.model,
+            profileImage: v.profileImage,
+            groups: vGroups,
+          },
+        ];
+      }),
     );
 
     const enriched = services.map((s) => ({

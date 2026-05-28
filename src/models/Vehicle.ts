@@ -23,7 +23,16 @@ const vehicleSchema = new Schema(
     invoiceUrl: { type: String },
     images: { type: [String], default: [] },
     profileImage: { type: String },
-    groupId: { type: Schema.Types.ObjectId, ref: "VehicleGroup", index: true },
+    // A vehicle can belong to multiple groups (e.g. "Anudeep Personal" + "Innova
+    // Crysta"). The array is indexed for $in / membership queries. Empty means
+    // ungrouped — the service layer ensures at least the "Others" master group
+    // is assigned during onboarding.
+    groupIds: {
+      type: [Schema.Types.ObjectId],
+      ref: "VehicleGroup",
+      default: [],
+      index: true,
+    },
 
     // Surepass enrichment
     rcStatus: { type: String },
@@ -94,6 +103,10 @@ vehicleSchema.pre("aggregate", function (next) {
 });
 
 export type VehicleAttrs = InferSchemaType<typeof vehicleSchema>;
+
+if (process.env.NODE_ENV !== "production" && models.Vehicle) {
+  delete models.Vehicle;
+}
 
 export const Vehicle: Model<VehicleAttrs> =
   (models.Vehicle as Model<VehicleAttrs>) ??

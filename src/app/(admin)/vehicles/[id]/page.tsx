@@ -25,6 +25,7 @@ import { AlertTriangle, Calendar, Car, Check, CheckCircle2, ChevronLeft, Chevron
 import { GiCarWheel } from "react-icons/gi";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { BrandPicker } from "@/components/vehicles/BrandPicker";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/modal";
 import { pickValidatedFile, pickValidatedFiles } from "@/lib/file-validation";
@@ -100,7 +101,7 @@ interface Vehicle {
   overallStatus: string;
   pendingChallanAmount: number;
   tyreCount?: number | null;
-  group?: { id: string; name: string; icon: string; color?: string } | null;
+  groups?: Array<{ id: string; name: string; icon: string; color?: string }>;
   complianceDocuments: ComplianceDoc[];
   challans: Challan[];
   tyres: Array<{
@@ -212,6 +213,9 @@ export default function VehicleDetailPage() {
   const [editingBrand, setEditingBrand] = useState(false);
   const [brandInput, setBrandInput] = useState("");
   const [savingBrand, setSavingBrand] = useState(false);
+  // Inline-edit state for vehicle usage (PRIVATE / COMMERCIAL).
+  const [editingUsage, setEditingUsage] = useState(false);
+  const [savingUsage, setSavingUsage] = useState(false);
 
   const [hoverPhoto, setHoverPhoto] = useState<{ url: string; x: number; y: number } | null>(null);
 
@@ -433,6 +437,182 @@ export default function VehicleDetailPage() {
   const [renewLifetime, setRenewLifetime] = useState(false);
   const [editLifetime, setEditLifetime] = useState(false);
 
+  // "Add Past Version" — attach a historic file with its own issued + expiry.
+  const [pastVersionDocId, setPastVersionDocId] = useState<string | null>(null);
+  const [pastVersionDocLabel, setPastVersionDocLabel] = useState("");
+  const [pastVersionIssued, setPastVersionIssued] = useState("");
+  const [pastVersionExpiry, setPastVersionExpiry] = useState("");
+  const [pastVersionFile, setPastVersionFile] = useState<File | null>(null);
+  const [pastVersionSaving, setPastVersionSaving] = useState(false);
+
+  const openPastVersion = (docId: string, docType: string) => {
+    setPastVersionDocId(docId);
+    setPastVersionDocLabel(docTypeLabel(docType));
+    setPastVersionIssued("");
+    setPastVersionExpiry("");
+    setPastVersionFile(null);
+  };
+
+  const closePastVersion = () => {
+    setPastVersionDocId(null);
+    setPastVersionFile(null);
+    setPastVersionIssued("");
+    setPastVersionExpiry("");
+  };
+
+  // Upload-with-validity modal — every file upload (first or additional)
+  // captures issued + expiry dates. Without this, file chips on the card
+  // were named "File 1 / File 2" with no way to know which validity period
+  // each file belonged to. The modal pre-fills the active doc's existing
+  // dates so adding a receipt to the same period is one click.
+  type UploadCtx = {
+    docId: string;
+    docType: string;
+    issuedISO: string;
+    expiryISO: string;
+    lifetime: boolean;
+    fileCount: number;
+  };
+  const [uploadFor, setUploadFor] = useState<UploadCtx | null>(null);
+  const [uploadIssued, setUploadIssued] = useState("");
+  const [uploadExpiry, setUploadExpiry] = useState("");
+  const [uploadLifetime, setUploadLifetime] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadSaving, setUploadSaving] = useState(false);
+
+  const openUpload = (
+    docId: string,
+    docType: string,
+    existing: {
+      issuedDate?: string | null;
+      expiryDate?: string | null;
+      isLifetime?: boolean;
+      fileCount: number;
+    },
+  ) => {
+    setUploadFor({
+      docId,
+      docType,
+      issuedISO: existing.issuedDate
+        ? new Date(existing.issuedDate).toISOString().split("T")[0]
+        : "",
+      expiryISO: existing.expiryDate
+        ? new Date(existing.expiryDate).toISOString().split("T")[0]
+        : "",
+      lifetime: Boolean(existing.isLifetime),
+      fileCount: existing.fileCount,
+    });
+    setUploadIssued(
+      existing.issuedDate
+        ? new Date(existing.issuedDate).toISOString().split("T")[0]
+        : "",
+    );
+    setUploadExpiry(
+      existing.expiryDate
+        ? new Date(existing.expiryDate).toISOString().split("T")[0]
+        : "",
+    );
+    setUploadLifetime(Boolean(existing.isLifetime));
+    setUploadFiles([]);
+  };
+
+  const closeUpload = () => {
+    setUploadFor(null);
+    setUploadFiles([]);
+    setUploadIssued("");
+    setUploadExpiry("");
+    setUploadLifetime(false);
+  };
+
+  const handleUploadSave = async () => {
+    if (!uploadFor) return;
+    if (uploadFiles.length === 0) {
+      toast.error("File required", "Attach at least one document");
+      return;
+    }
+    if (!uploadLifetime && !uploadExpiry) {
+      toast.error(
+        "Expiry required",
+        "Enter an expiry date or mark as lifetime validity",
+      );
+      return;
+    }
+    if (
+      !uploadLifetime &&
+      uploadIssued &&
+      uploadExpiry &&
+      uploadIssued > uploadExpiry
+    ) {
+      toast.error("Invalid dates", "Issued date cannot be after expiry");
+      return;
+    }
+    setUploadSaving(true);
+    try {
+      // 1. Update the active doc's dates/lifetime if they changed.
+      const datesChanged =
+        uploadLifetime !== uploadFor.lifetime ||
+        uploadIssued !== uploadFor.issuedISO ||
+        uploadExpiry !== uploadFor.expiryISO;
+      if (datesChanged) {
+        await complianceAPI.updateExpiry(uploadFor.docId, {
+          type: uploadFor.docType,
+          issuedDate: uploadIssued || null,
+          expiryDate: uploadLifetime ? undefined : uploadExpiry,
+          lifetime: uploadLifetime,
+        });
+      }
+      // 2. Append the file(s) to the active doc.
+      await complianceAPI.uploadDocument(uploadFor.docId, uploadFiles);
+      toast.success(
+        "Document uploaded",
+        `${docTypeLabel(uploadFor.docType)} updated`,
+      );
+      closeUpload();
+      await fetchVehicle();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error("Upload failed", e.response?.data?.message ?? "Could not upload");
+    } finally {
+      setUploadSaving(false);
+    }
+  };
+
+  const handleAddPastVersion = async () => {
+    if (!pastVersionDocId) return;
+    if (!pastVersionFile) {
+      toast.error("File required", "Attach the historic document");
+      return;
+    }
+    if (!pastVersionIssued && !pastVersionExpiry) {
+      toast.error("Dates required", "Enter the issued date, expiry date, or both");
+      return;
+    }
+    if (
+      pastVersionIssued &&
+      pastVersionExpiry &&
+      pastVersionIssued > pastVersionExpiry
+    ) {
+      toast.error("Invalid dates", "Issued date cannot be after expiry");
+      return;
+    }
+    setPastVersionSaving(true);
+    try {
+      await complianceAPI.addHistoricVersion(pastVersionDocId, {
+        file: pastVersionFile,
+        issuedDate: pastVersionIssued || undefined,
+        expiryDate: pastVersionExpiry || undefined,
+      });
+      toast.success("Past version added", `${pastVersionDocLabel} history updated`);
+      closePastVersion();
+      await fetchVehicle();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error("Add failed", e.response?.data?.message ?? "Could not add past version");
+    } finally {
+      setPastVersionSaving(false);
+    }
+  };
+
   // Public access log (who viewed/downloaded vehicle docs)
   type AccessLogEntry = {
     id: string;
@@ -474,7 +654,7 @@ export default function VehicleDetailPage() {
 
   // Per-doc history modal
   const [historyDocType, setHistoryDocType] = useState<string | null>(null);
-  const [historyData, setHistoryData] = useState<Array<{ id: string; expiryDate: string | null; documentUrl: string | null; isActive: boolean; createdAt: string; archivedAt: string | null }>>([]);
+  const [historyData, setHistoryData] = useState<Array<{ id: string; issuedDate: string | null; expiryDate: string | null; documentUrl: string | null; documentUrls: string[] | null; isActive: boolean; createdAt: string; archivedAt: string | null }>>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const openDocHistory = async (vehicleId: string, docType: string) => {
@@ -800,16 +980,29 @@ export default function VehicleDetailPage() {
     if (params.id) fastagAPI.getByVehicle(params.id as string).then((res) => setFastagData(res.data.data)).catch(() => setFastagData(null));
   }, [params.id]);
 
-  const handleGroupChange = async (groupId: string | null) => {
+  const handleGroupsChange = async (groupIds: string[]) => {
     if (!vehicle) return;
     setSavingGroup(true);
     try {
-      await vehicleAPI.updateGroup(vehicle.id, groupId);
+      await vehicleAPI.updateGroups(vehicle.id, groupIds);
       fetchVehicle();
-      setShowGroupPicker(false);
-      toast.success("Group Updated", groupId ? "Vehicle group changed" : "Vehicle removed from group");
-    } catch { toast.error("Failed", "Could not update group"); }
+      toast.success(
+        "Groups updated",
+        groupIds.length === 0
+          ? "Vehicle moved to default group"
+          : `Vehicle now in ${groupIds.length} group${groupIds.length === 1 ? "" : "s"}`,
+      );
+    } catch { toast.error("Failed", "Could not update groups"); }
     finally { setSavingGroup(false); }
+  };
+
+  const toggleGroupMembership = async (groupId: string) => {
+    if (!vehicle) return;
+    const current = (vehicle.groups ?? []).map((g) => g.id);
+    const next = current.includes(groupId)
+      ? current.filter((id) => id !== groupId)
+      : [...current, groupId];
+    await handleGroupsChange(next);
   };
 
   const handleBrandSave = async () => {
@@ -827,6 +1020,32 @@ export default function VehicleDetailPage() {
       toast.success("Brand Updated", next ? `Brand set to ${next}` : "Brand cleared");
     } catch { toast.error("Failed", "Could not update brand"); }
     finally { setSavingBrand(false); }
+  };
+
+  const handleUsageSave = async (next: "PRIVATE" | "COMMERCIAL" | null) => {
+    if (!vehicle) return;
+    if (next === (vehicle.vehicleUsage ?? null)) {
+      setEditingUsage(false);
+      return;
+    }
+    setSavingUsage(true);
+    try {
+      await vehicleAPI.updateUsage(vehicle.id, next);
+      await fetchVehicle();
+      setEditingUsage(false);
+      toast.success(
+        "Usage updated",
+        next === "COMMERCIAL"
+          ? "Marked as Commercial"
+          : next === "PRIVATE"
+            ? "Marked as Private"
+            : "Usage cleared",
+      );
+    } catch {
+      toast.error("Failed", "Could not update usage");
+    } finally {
+      setSavingUsage(false);
+    }
   };
 
   if (loading) return <VehicleDetailSkeleton />;
@@ -909,12 +1128,15 @@ export default function VehicleDetailPage() {
                         {vehicle.vehicleUsage === "COMMERCIAL" ? "Commercial" : "Private"}
                       </span>
                     )}
-                    {vehicle.group && (() => { const GIcon = getVehicleTypeIcon(vehicle.group.icon); return (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/20 text-white text-xs font-semibold backdrop-blur-sm">
-                        <GIcon className="w-3.5 h-3.5" />
-                        {vehicle.group.name}
-                      </span>
-                    ); })()}
+                    {(vehicle.groups ?? []).map((g) => {
+                      const GIcon = getVehicleTypeIcon(g.icon);
+                      return (
+                        <span key={g.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/20 text-white text-xs font-semibold backdrop-blur-sm">
+                          <GIcon className="w-3.5 h-3.5" />
+                          {g.name}
+                        </span>
+                      );
+                    })}
                   </p>
                 </div>
               </div>
@@ -1043,44 +1265,71 @@ export default function VehicleDetailPage() {
               Vehicle Specs
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {/* Group tile with edit */}
+              {/* Groups tile with multi-select edit */}
               <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 relative">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Group</p>
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Groups</p>
                   <button onClick={() => setShowGroupPicker(!showGroupPicker)}
-                    className="text-brand-500 hover:text-brand-600 transition-colors" title="Change group">
+                    className="text-brand-500 hover:text-brand-600 transition-colors" title="Change groups">
                     <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
                   </button>
                 </div>
-                {vehicle.group ? (() => { const GIcon = getVehicleTypeIcon(vehicle.group.icon); return (
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1 flex items-center gap-1.5">
-                    <GIcon className="w-4 h-4" style={vehicle.group.color ? { color: vehicle.group.color } : undefined} />
-                    {vehicle.group.name}
-                  </p>
-                ); })() : (
-                  <p className="text-sm text-gray-400 mt-1">No group</p>
+                {(vehicle.groups ?? []).length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {(vehicle.groups ?? []).map((g) => {
+                      const GIcon = getVehicleTypeIcon(g.icon);
+                      return (
+                        <span key={g.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-800 dark:text-gray-200">
+                          <GIcon className="w-3.5 h-3.5" style={g.color ? { color: g.color } : undefined} />
+                          {g.name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 mt-1">No groups</p>
                 )}
 
-                {/* Group picker dropdown */}
+                {/* Group picker — toggle membership per row, no "save" needed. */}
                 {showGroupPicker && (
-                  <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl p-2 min-w-[200px]">
-                    <button onClick={() => handleGroupChange(null)} disabled={savingGroup}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${!vehicle.group ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"}`}>
-                      <X className="w-4 h-4 text-gray-400" strokeWidth={1.5} />
-                      No Group
-                    </button>
-                    {allGroups.map((g) => { const GIcon = getVehicleTypeIcon(g.icon); return (
-                      <button key={g.id} onClick={() => handleGroupChange(g.id)} disabled={savingGroup}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${vehicle.group?.id === g.id ? "bg-brand-50 text-brand-600 dark:bg-brand-500/10" : "text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"}`}>
-                        <GIcon className="w-4 h-4" style={g.color ? { color: g.color } : undefined} />
-                        {g.name}
-                        {vehicle.group?.id === g.id && <Check className="w-3 h-3 ml-auto text-brand-500" strokeWidth={3} />}
+                  <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl p-2 min-w-[220px] max-h-[300px] overflow-y-auto">
+                    <p className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      Toggle membership
+                    </p>
+                    {allGroups.map((g) => {
+                      const GIcon = getVehicleTypeIcon(g.icon);
+                      const isMember = (vehicle.groups ?? []).some((vg) => vg.id === g.id);
+                      return (
+                        <button
+                          key={g.id}
+                          onClick={() => toggleGroupMembership(g.id)}
+                          disabled={savingGroup}
+                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isMember ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400" : "text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isMember}
+                            readOnly
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-brand-500 pointer-events-none"
+                          />
+                          <GIcon className="w-4 h-4" style={g.color ? { color: g.color } : undefined} />
+                          {g.name}
+                          {isMember && <Check className="w-3 h-3 ml-auto text-brand-500" strokeWidth={3} />}
+                        </button>
+                      );
+                    })}
+                    <div className="border-t border-gray-100 dark:border-gray-800 mt-1 pt-1">
+                      <button
+                        onClick={() => setShowGroupPicker(false)}
+                        className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"
+                      >
+                        Done
                       </button>
-                    ); })}
+                    </div>
                   </div>
                 )}
               </div>
-              {/* Brand tile with inline edit */}
+              {/* Brand tile — picker backed by the platform brand master */}
               <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 relative">
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Brand</p>
@@ -1095,37 +1344,36 @@ export default function VehicleDetailPage() {
                   )}
                 </div>
                 {editingBrand ? (
-                  <div className="mt-1 flex items-center gap-1">
-                    <input
-                      autoFocus
-                      type="text"
-                      value={brandInput}
-                      onChange={(e) => setBrandInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleBrandSave();
-                        if (e.key === "Escape") setEditingBrand(false);
-                      }}
+                  <div className="mt-1 space-y-1.5">
+                    <BrandPicker
+                      value={brandInput || null}
                       disabled={savingBrand}
-                      maxLength={50}
-                      placeholder="e.g. Maruti"
-                      className="w-full text-sm font-semibold text-gray-900 dark:text-white bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1 focus:border-brand-400 focus:outline-none"
+                      onChange={(name) => setBrandInput(name ?? "")}
+                      onRequested={(name) =>
+                        toast.info(
+                          "Brand requested",
+                          `${name} is pending superadmin approval — it'll show across all workspaces once approved.`,
+                        )
+                      }
                     />
-                    <button
-                      onClick={handleBrandSave}
-                      disabled={savingBrand}
-                      className="text-brand-500 hover:text-brand-600 disabled:opacity-50"
-                      title="Save"
-                    >
-                      <Check className="w-4 h-4" strokeWidth={2.5} />
-                    </button>
-                    <button
-                      onClick={() => setEditingBrand(false)}
-                      disabled={savingBrand}
-                      className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                      title="Cancel"
-                    >
-                      <X className="w-4 h-4" strokeWidth={2.5} />
-                    </button>
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <button
+                        onClick={handleBrandSave}
+                        disabled={savingBrand}
+                        className="inline-flex items-center gap-1 rounded-md bg-brand-500 hover:bg-brand-600 text-white px-2 py-1 text-xs font-bold disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingBrand(false)}
+                        disabled={savingBrand}
+                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 text-xs font-bold disabled:opacity-50"
+                      >
+                        <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1 truncate">
@@ -1137,7 +1385,6 @@ export default function VehicleDetailPage() {
                 { label: "Chassis No.", value: vehicle.chassisNumber || "—" },
                 { label: "Engine No.", value: vehicle.engineNumber || "—" },
                 { label: "GVW", value: vehicle.gvw ? `${vehicle.gvw} kg` : "—" },
-                { label: "Usage", value: vehicle.vehicleUsage === "COMMERCIAL" ? "Commercial" : vehicle.vehicleUsage === "PRIVATE" ? "Private" : "—" },
                 { label: "Fuel Type", value: vehicle.fuelType },
                 { label: "Permit", value: vehicle.permitType || "—" },
                 { label: "Seating", value: vehicle.seatingCapacity?.toString() || "—" },
@@ -1147,6 +1394,63 @@ export default function VehicleDetailPage() {
                   <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1 truncate">{item.value}</p>
                 </div>
               ))}
+
+              {/* Usage tile with inline edit */}
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 relative">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Usage</p>
+                  {!editingUsage && (
+                    <button
+                      onClick={() => setEditingUsage(true)}
+                      className="text-brand-500 hover:text-brand-600 transition-colors"
+                      title="Edit usage"
+                    >
+                      <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
+                {editingUsage ? (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {(["PRIVATE", "COMMERCIAL"] as const).map((opt) => {
+                      const active = (vehicle.vehicleUsage ?? null) === opt;
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => handleUsageSave(opt)}
+                          disabled={savingUsage}
+                          className={`text-[11px] font-bold uppercase tracking-wider rounded-md px-2.5 py-1 transition-colors disabled:opacity-50 ${
+                            active
+                              ? opt === "COMMERCIAL"
+                                ? "bg-amber-500 text-white"
+                                : "bg-emerald-500 text-white"
+                              : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800"
+                          }`}
+                        >
+                          {opt === "COMMERCIAL" ? "Commercial" : "Private"}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setEditingUsage(false)}
+                      disabled={savingUsage}
+                      className="text-gray-400 hover:text-gray-600 disabled:opacity-50 px-1"
+                      title="Cancel"
+                    >
+                      <X className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1 truncate">
+                    {vehicle.vehicleUsage === "COMMERCIAL"
+                      ? "Commercial"
+                      : vehicle.vehicleUsage === "PRIVATE"
+                        ? "Private"
+                        : <span className="text-gray-400 font-normal">—</span>}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1370,12 +1674,27 @@ export default function VehicleDetailPage() {
                         <>
                           {hasFiles && (
                             <div className="mt-2 ml-2 flex items-center gap-1 flex-wrap">
-                              {urls.map((url, idx) => (
+                              {(() => {
+                                // Files on the active doc share the doc's
+                                // validity window. The chip label uses that
+                                // window so users see the period each file
+                                // belongs to instead of an opaque "File 1".
+                                // Lifetime docs persist with expiryDate=null +
+                                // an issuedDate. Treat the legacy "no expiry,
+                                // no issued" case as truly unknown.
+                                const isLifetime = !doc.expiryDate && Boolean(doc.issuedDate);
+                                const chipBase = isLifetime
+                                  ? "Lifetime"
+                                  : doc.expiryDate
+                                    ? `Exp ${new Date(doc.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+                                    : "No expiry";
+                                return urls.map((url, idx) => (
                                 <span key={`${url}-${idx}`} className="inline-flex items-center gap-1 rounded-md bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 group">
                                   <a href={(resolveImageUrl(url) ?? "")} target="_blank" rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 hover:text-brand-800 dark:hover:text-brand-300">
                                     <FileText className="w-3 h-3" />
-                                    File {idx + 1}
+                                    {chipBase}
+                                    {urls.length > 1 ? ` · #${idx + 1}` : ""}
                                     <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                                   </a>
                                   <button
@@ -1387,20 +1706,26 @@ export default function VehicleDetailPage() {
                                     <X className="w-2.5 h-2.5" />
                                   </button>
                                 </span>
-                              ))}
+                                ));
+                              })()}
                             </div>
                           )}
                           <div className="mt-2 ml-2 flex items-center gap-2 flex-wrap">
-                            <label className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-500 hover:text-brand-600 cursor-pointer transition-colors">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openUpload(doc.id, doc.type, {
+                                  issuedDate: doc.issuedDate ?? null,
+                                  expiryDate: doc.expiryDate ?? null,
+                                  isLifetime: !doc.expiryDate && Boolean(doc.issuedDate),
+                                  fileCount: urls.length,
+                                })
+                              }
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-500 hover:text-brand-600 transition-colors"
+                            >
                               <Upload className="w-3 h-3" strokeWidth={2} />
                               {hasFiles ? "Add File" : "Upload Document"}
-                              <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => {
-                                const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m));
-                                if (fs.length > 0) {
-                                  complianceAPI.uploadDocument(doc.id, fs).then(() => fetchVehicle()).catch(console.error);
-                                }
-                              }} />
-                            </label>
+                            </button>
                             {hasFiles && (
                               <>
                                 <span className="text-gray-300 dark:text-gray-600">|</span>
@@ -1408,6 +1733,13 @@ export default function VehicleDetailPage() {
                                   className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1 transition-colors">
                                   <RefreshCw className="w-3 h-3" strokeWidth={2} />
                                   Renew
+                                </button>
+                                <span className="text-gray-300 dark:text-gray-600">|</span>
+                                <button onClick={() => openPastVersion(doc.id, doc.type)}
+                                  className="text-[11px] font-medium text-amber-600 hover:text-amber-700 dark:text-amber-400 flex items-center gap-1 transition-colors"
+                                  title="Attach a previous version with its own dates">
+                                  <Clock className="w-3 h-3" strokeWidth={2} />
+                                  Add Past Version
                                 </button>
                                 <span className="text-gray-300 dark:text-gray-600">|</span>
                                 <button onClick={() => openDocHistory(vehicle.id, doc.type)}
@@ -2926,16 +3258,29 @@ export default function VehicleDetailPage() {
             ) : (
               <>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold px-1">{historyData.length} record{historyData.length > 1 ? "s" : ""}</p>
-                {historyData.map((h) => (
+                {historyData.map((h) => {
+                  const fileCount = h.documentUrls?.length ?? (h.documentUrl ? 1 : 0);
+                  return (
                   <div key={h.id} className={`relative flex items-center justify-between p-3 rounded-xl text-xs transition-all ${h.isActive ? "bg-emerald-50 border border-emerald-200 dark:bg-emerald-500/5 dark:border-emerald-500/20" : "bg-gray-50 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700"}`}>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-2 h-2 rounded-full flex-shrink-0 ${h.isActive ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`} />
-                      <div>
-                        <div className="flex items-center gap-1.5">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-semibold text-gray-800 dark:text-gray-200">
-                            {h.expiryDate ? new Date(h.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Lifetime"}
+                            {h.issuedDate
+                              ? new Date(h.issuedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                              : "—"}
+                            <span className="text-gray-400 mx-1">→</span>
+                            {h.expiryDate
+                              ? new Date(h.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                              : "Lifetime"}
                           </span>
                           {h.isActive && <span className="text-[8px] font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-400 px-1.5 py-0.5 rounded-md">CURRENT</span>}
+                          {fileCount > 1 && (
+                            <span className="text-[8px] font-bold text-gray-600 bg-gray-200 dark:bg-gray-700 dark:text-gray-300 px-1.5 py-0.5 rounded-md">
+                              {fileCount} files
+                            </span>
+                          )}
                         </div>
                         <p className="text-[10px] text-gray-400 mt-0.5">
                           Created {new Date(h.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
@@ -2969,12 +3314,280 @@ export default function VehicleDetailPage() {
                       );
                     })()}
                   </div>
-                ))}
+                  );
+                })}
               </>
             )}
           </div>
           <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
             <button type="button" onClick={() => setHistoryDocType(null)} className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors">Close</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add past version modal */}
+      <Modal
+        isOpen={pastVersionDocId !== null}
+        onClose={closePastVersion}
+        className="w-[92%] max-w-[480px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">
+                Add past version
+              </h3>
+              <p className="text-[11px] text-gray-400">
+                {pastVersionDocLabel} · attach a previous policy with its own dates
+              </p>
+            </div>
+          </div>
+          <div className="px-6 py-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                  Issued date
+                </span>
+                <input
+                  type="date"
+                  value={pastVersionIssued}
+                  max={pastVersionExpiry || undefined}
+                  onChange={(e) => setPastVersionIssued(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-sm text-gray-800 dark:text-gray-200 focus:border-amber-400 focus:outline-none focus:ring-3 focus:ring-amber-400/10"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                  Expiry date
+                </span>
+                <input
+                  type="date"
+                  value={pastVersionExpiry}
+                  min={pastVersionIssued || undefined}
+                  onChange={(e) => setPastVersionExpiry(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-sm text-gray-800 dark:text-gray-200 focus:border-amber-400 focus:outline-none focus:ring-3 focus:ring-amber-400/10"
+                />
+              </label>
+            </div>
+            <label className="block">
+              <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                Document file <span className="text-red-500">*</span>
+              </span>
+              <div className="flex items-center gap-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 px-3 py-2">
+                <Upload className="w-4 h-4 text-gray-400" />
+                <span className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">
+                  {pastVersionFile?.name ?? "Select PDF, JPG, or PNG"}
+                </span>
+                <label className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800">
+                  Browse
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setPastVersionFile(f);
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </label>
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
+              Past versions appear in the History modal only — they don&apos;t replace the
+              active document.
+            </div>
+          </div>
+          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={closePastVersion}
+              disabled={pastVersionSaving}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleAddPastVersion}
+              disabled={pastVersionSaving || !pastVersionFile}
+              className="rounded-xl px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 shadow-sm transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {pastVersionSaving && (
+                <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              )}
+              Add past version
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Upload-with-validity modal — captures issued + expiry dates on every
+          file upload so chips in the history can be named by validity. */}
+      <Modal
+        isOpen={uploadFor !== null}
+        onClose={uploadSaving ? () => {} : closeUpload}
+        className="w-[92%] max-w-[520px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+              <Upload className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">
+                {uploadFor && uploadFor.fileCount > 0 ? "Add file" : "Upload document"}
+              </h3>
+              <p className="text-[11px] text-gray-400">
+                {uploadFor ? docTypeLabel(uploadFor.docType) : ""} · file(s) will be tagged with the validity below
+              </p>
+            </div>
+          </div>
+          <div className="px-6 py-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                  Issued date
+                </span>
+                <input
+                  type="date"
+                  value={uploadIssued}
+                  max={uploadExpiry || undefined}
+                  onChange={(e) => setUploadIssued(e.target.value)}
+                  disabled={uploadSaving}
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-sm text-gray-800 dark:text-gray-200 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 disabled:opacity-60"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                  Expiry date {!uploadLifetime && <span className="text-red-500">*</span>}
+                </span>
+                <input
+                  type="date"
+                  value={uploadLifetime ? "" : uploadExpiry}
+                  min={uploadIssued || undefined}
+                  onChange={(e) => setUploadExpiry(e.target.value)}
+                  disabled={uploadSaving || uploadLifetime}
+                  className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-sm text-gray-800 dark:text-gray-200 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 disabled:opacity-60"
+                />
+              </label>
+            </div>
+            <label className="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={uploadLifetime}
+                onChange={(e) => {
+                  setUploadLifetime(e.target.checked);
+                  if (e.target.checked) setUploadExpiry("");
+                }}
+                disabled={uploadSaving}
+                className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400"
+              />
+              Lifetime validity (no expiry)
+            </label>
+            <div>
+              <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                File(s) <span className="text-red-500">*</span>
+              </span>
+              <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 px-3 py-3">
+                {uploadFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {uploadFiles.map((f, idx) => (
+                      <span
+                        key={`${f.name}-${idx}`}
+                        className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] text-gray-700 dark:text-gray-200"
+                      >
+                        <FileText className="w-3 h-3 text-gray-400" />
+                        <span className="truncate max-w-[160px]">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setUploadFiles((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            )
+                          }
+                          disabled={uploadSaving}
+                          className="text-gray-400 hover:text-red-500"
+                          title="Remove"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-gray-400" />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">
+                    {uploadFiles.length === 0
+                      ? "Select PDF, JPG, or PNG"
+                      : `${uploadFiles.length} file${uploadFiles.length === 1 ? "" : "s"} ready`}
+                  </span>
+                  <label className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800">
+                    {uploadFiles.length === 0 ? <Upload className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                    {uploadFiles.length === 0 ? "Browse" : "Add more"}
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      multiple
+                      disabled={uploadSaving}
+                      onChange={(e) => {
+                        const incoming = Array.from(e.target.files ?? []);
+                        if (incoming.length === 0) return;
+                        setUploadFiles((prev) => {
+                          const seen = new Set(
+                            prev.map((f) => `${f.name}_${f.size}`),
+                          );
+                          const merged = [...prev];
+                          for (const f of incoming) {
+                            const key = `${f.name}_${f.size}`;
+                            if (!seen.has(key)) {
+                              merged.push(f);
+                              seen.add(key);
+                            }
+                          }
+                          return merged;
+                        });
+                        e.target.value = "";
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-300">
+              {uploadFor && uploadFor.fileCount > 0
+                ? "Files will be appended to this document. Changing the dates updates the active validity period for all files on this document."
+                : "These dates become the active validity for this document."}
+            </div>
+          </div>
+          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeUpload}
+              disabled={uploadSaving}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleUploadSave}
+              disabled={
+                uploadSaving ||
+                uploadFiles.length === 0 ||
+                (!uploadLifetime && !uploadExpiry)
+              }
+              className="rounded-xl px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 shadow-sm transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {uploadSaving && (
+                <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              )}
+              Upload
+            </button>
           </div>
         </div>
       </Modal>

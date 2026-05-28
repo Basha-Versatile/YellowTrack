@@ -37,7 +37,7 @@ type Paginated<T> = {
 
 type EnrichedVehicle = Record<string, unknown> & {
   _id: unknown;
-  group?: unknown;
+  groups?: unknown[];
   complianceDocuments: unknown[];
   challans: unknown[];
   driverMappings: Array<Record<string, unknown>>;
@@ -66,7 +66,8 @@ export async function findAll(
       { model: { $regex: search, $options: "i" } },
     ];
   }
-  if (groupId) extras.groupId = groupId;
+  // Mongoose matches `groupIds: id` as "array contains id" — no $in needed.
+  if (groupId) extras.groupIds = groupId;
   if (vehicleUsage) extras.vehicleUsage = vehicleUsage;
   if (lifecycle) extras.status = lifecycle;
   if (brand) {
@@ -99,14 +100,17 @@ export async function findAll(
   }
 
   const vehicleIds = vehicles.map((v) => v._id);
-  const groupIds = vehicles
-    .map((v) => v.groupId)
-    .filter((id): id is NonNullable<typeof id> => Boolean(id));
+  const allGroupIds = vehicles.flatMap((v) =>
+    Array.isArray(v.groupIds) ? v.groupIds : [],
+  );
+  const uniqueGroupIds = Array.from(new Set(allGroupIds.map((g) => String(g))));
 
   const [groups, complianceDocs, pendingChallans, activeMappings, sales] =
     await Promise.all([
-      groupIds.length
-        ? VehicleGroup.find(tenantFilter(ctx, { _id: { $in: groupIds } })).lean()
+      uniqueGroupIds.length
+        ? VehicleGroup.find(
+            tenantFilter(ctx, { _id: { $in: uniqueGroupIds } }),
+          ).lean()
         : [],
       ComplianceDocument.find(
         tenantFilter(ctx, { vehicleId: { $in: vehicleIds }, isActive: true }),
@@ -156,14 +160,20 @@ export async function findAll(
     salesByVehicle.set(String(s.vehicleId), s);
   }
 
-  const enriched: EnrichedVehicle[] = vehicles.map((v) => ({
-    ...v,
-    group: v.groupId ? groupsById.get(String(v.groupId)) ?? null : null,
-    complianceDocuments: complianceByVehicle.get(String(v._id)) ?? [],
-    challans: challansByVehicle.get(String(v._id)) ?? [],
-    driverMappings: mappingsByVehicle.get(String(v._id)) ?? [],
-    sale: salesByVehicle.get(String(v._id)) ?? null,
-  }));
+  const enriched: EnrichedVehicle[] = vehicles.map((v) => {
+    const vGroupIds: unknown[] = Array.isArray(v.groupIds) ? v.groupIds : [];
+    const groupsForVehicle = vGroupIds
+      .map((gid) => groupsById.get(String(gid)))
+      .filter((g): g is NonNullable<typeof g> => Boolean(g));
+    return {
+      ...v,
+      groups: groupsForVehicle,
+      complianceDocuments: complianceByVehicle.get(String(v._id)) ?? [],
+      challans: challansByVehicle.get(String(v._id)) ?? [],
+      driverMappings: mappingsByVehicle.get(String(v._id)) ?? [],
+      sale: salesByVehicle.get(String(v._id)) ?? null,
+    };
+  });
 
   return {
     vehicles: enriched,
@@ -178,8 +188,9 @@ export async function findById(
   const vehicle = await Vehicle.findOne(tenantFilter(ctx, { _id: id })).lean();
   if (!vehicle) return null;
 
+  const vGroupIds = Array.isArray(vehicle.groupIds) ? vehicle.groupIds : [];
   const [
-    group,
+    groups,
     complianceDocuments,
     challans,
     driverMappings,
@@ -187,11 +198,11 @@ export async function findById(
     serviceParts,
     sale,
   ] = await Promise.all([
-    vehicle.groupId
-      ? VehicleGroup.findOne(
-          tenantFilter(ctx, { _id: vehicle.groupId }),
+    vGroupIds.length
+      ? VehicleGroup.find(
+          tenantFilter(ctx, { _id: { $in: vGroupIds } }),
         ).lean()
-      : null,
+      : [],
     ComplianceDocument.find(
       tenantFilter(ctx, { vehicleId: id, isActive: true }),
     )
@@ -221,7 +232,7 @@ export async function findById(
 
   return {
     ...vehicle,
-    group,
+    groups,
     complianceDocuments,
     challans,
     driverMappings: mappings,
@@ -250,14 +261,17 @@ export async function findByIdAnyTenant(
   const vehicle = await Vehicle.findById(id).lean();
   if (!vehicle) return null;
 
+  const vGroupIds = Array.isArray(vehicle.groupIds) ? vehicle.groupIds : [];
   const [
-    group,
+    groups,
     complianceDocuments,
     challans,
     driverMappings,
     tyres,
   ] = await Promise.all([
-    vehicle.groupId ? VehicleGroup.findById(vehicle.groupId).lean() : null,
+    vGroupIds.length
+      ? VehicleGroup.find({ _id: { $in: vGroupIds } }).lean()
+      : [],
     ComplianceDocument.find({ vehicleId: id, isActive: true })
       .sort({ type: 1 })
       .lean(),
@@ -277,7 +291,7 @@ export async function findByIdAnyTenant(
 
   return {
     ...vehicle,
-    group,
+    groups,
     complianceDocuments,
     challans,
     driverMappings: mappings,

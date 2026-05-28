@@ -28,6 +28,12 @@ export {
 } from "./PasswordResetOtp";
 export { DocumentType, type DocumentTypeAttrs } from "./DocumentType";
 export { VehicleGroup, type VehicleGroupAttrs } from "./VehicleGroup";
+export {
+  VehicleBrand,
+  type VehicleBrandAttrs,
+  VEHICLE_BRAND_STATUS,
+  type VehicleBrandStatus,
+} from "./VehicleBrand";
 export { Vehicle, type VehicleAttrs } from "./Vehicle";
 export { ServiceRecord, type ServiceRecordAttrs } from "./ServiceRecord";
 export {
@@ -40,6 +46,10 @@ export { TyreReplacement, type TyreReplacementAttrs } from "./TyreReplacement";
 export { ServicePart, type ServicePartAttrs } from "./ServicePart";
 export { VehicleSale, type VehicleSaleAttrs } from "./VehicleSale";
 export { VehicleDeletionOtp, type VehicleDeletionOtpAttrs } from "./VehicleDeletionOtp";
+export {
+  DocTypeDeletionOtp,
+  type DocTypeDeletionOtpAttrs,
+} from "./DocTypeDeletionOtp";
 export {
   InsurancePolicy,
   type InsurancePolicyAttrs,
@@ -91,6 +101,7 @@ export {
   type EMIPaymentAttrs,
   EMI_PAYMENT_STATUSES,
 } from "./EMIPayment";
+export { DebitAccount, type DebitAccountAttrs } from "./DebitAccount";
 export {
   ActivityLog,
   type ActivityLogAttrs,

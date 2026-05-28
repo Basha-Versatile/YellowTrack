@@ -40,12 +40,12 @@ export const vehiclesApi = baseApi.injectEndpoints({
     }),
     onboardVehicle: b.mutation<
       Vehicle,
-      { registrationNumber: string; groupId: string; images?: File[] }
+      { registrationNumber: string; groupIds: string[]; images?: File[] }
     >({
-      query: ({ registrationNumber, groupId, images }) => {
+      query: ({ registrationNumber, groupIds, images }) => {
         const fd = new FormData();
         fd.append("registrationNumber", registrationNumber);
-        fd.append("groupId", groupId);
+        if (groupIds.length > 0) fd.append("groupIds", JSON.stringify(groupIds));
         images?.forEach((f) => fd.append("vehicleImages", f));
         return { url: "/vehicles/onboard", method: "POST", body: fd };
       },
@@ -57,11 +57,11 @@ export const vehiclesApi = baseApi.injectEndpoints({
       transformResponse: (r: { data: Vehicle }) => r.data,
       invalidatesTags: [{ type: "Vehicle", id: "LIST" }],
     }),
-    updateVehicleGroup: b.mutation<Vehicle, { id: string; groupId: string | null }>({
-      query: ({ id, groupId }) => ({
+    updateVehicleGroups: b.mutation<Vehicle, { id: string; groupIds: string[] }>({
+      query: ({ id, groupIds }) => ({
         url: `/vehicles/${id}/group`,
         method: "PATCH",
-        body: { groupId },
+        body: { groupIds },
       }),
       transformResponse: (r: { data: Vehicle }) => r.data,
       invalidatesTags: (_r, _e, { id }) => [
@@ -273,7 +273,7 @@ export const {
   useGetVehicleStatsQuery,
   useOnboardVehicleMutation,
   useOnboardManualMutation,
-  useUpdateVehicleGroupMutation,
+  useUpdateVehicleGroupsMutation,
   useUploadVehicleImagesMutation,
   useDeleteVehicleImageMutation,
   useSetProfileImageMutation,

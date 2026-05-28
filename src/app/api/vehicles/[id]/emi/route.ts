@@ -8,6 +8,7 @@ import {
   getEmiPlansForVehicle,
 } from "@/server/services/emi.service";
 import { logFromRequest } from "@/server/services/activityLog.service";
+import { parseMultipart, manyFiles, firstString } from "@/lib/upload";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,8 @@ const createSchema = z.object({
     .optional(),
   reminderLeadDays: z.array(z.coerce.number().int().min(0).max(60)).optional(),
   notes: z.string().max(500).nullable().optional(),
+  scheduleDocumentUrl: z.string().min(1).nullable().optional(),
+  scheduleDocumentUrls: z.array(z.string().min(1)).optional(),
 });
 
 export const GET = withRoute<{ id: string }>(
@@ -45,7 +48,45 @@ export const POST = withRoute<{ id: string }>(
   async ({ req, params, session }) => {
     const ctx = tenantOf(session);
     await requirePermission(session, "emi:create");
-    const input = await parseJson(req, createSchema);
+
+    // Accept both JSON (legacy callers) and multipart (new "schedule
+    // document upload" flow). When multipart, the schedule file URL goes in
+    // alongside the form fields.
+    const contentType = req.headers.get("content-type") ?? "";
+    let input: z.infer<typeof createSchema>;
+    if (contentType.includes("multipart/form-data")) {
+      const { fields, files } = await parseMultipart(req);
+      const scheduleFiles = manyFiles(files, "scheduleDocument");
+      const scheduleUrls = scheduleFiles.map((f) => f.url);
+      const reminderChannelsRaw = firstString(fields, "reminderChannels");
+      const reminderLeadDaysRaw = firstString(fields, "reminderLeadDays");
+      input = createSchema.parse({
+        lenderName: firstString(fields, "lenderName"),
+        lenderType: firstString(fields, "lenderType") || undefined,
+        lenderContactPhone: firstString(fields, "lenderContactPhone") || null,
+        lenderBranch: firstString(fields, "lenderBranch") || null,
+        debitBankName: firstString(fields, "debitBankName") || null,
+        debitAccountMasked: firstString(fields, "debitAccountMasked") || null,
+        debitAccountHolder: firstString(fields, "debitAccountHolder") || null,
+        principalAmount: firstString(fields, "principalAmount") || null,
+        emiAmount: firstString(fields, "emiAmount"),
+        totalInstallments: firstString(fields, "totalInstallments"),
+        startDate: firstString(fields, "startDate"),
+        dueDayOfMonth: firstString(fields, "dueDayOfMonth"),
+        reminderChannels: reminderChannelsRaw
+          ? JSON.parse(reminderChannelsRaw)
+          : undefined,
+        reminderLeadDays: reminderLeadDaysRaw
+          ? JSON.parse(reminderLeadDaysRaw)
+          : undefined,
+        notes: firstString(fields, "notes") || null,
+        scheduleDocumentUrl: scheduleUrls[0] ?? null,
+        scheduleDocumentUrls: scheduleUrls,
+      });
+    } else {
+      input = await parseJson(req, createSchema);
+    }
+
     const plan = await createEmiPlan(
       ctx,
       { ...input, vehicleId: params.id },

@@ -34,7 +34,7 @@ interface Vehicle {
   overallStatus: string;
   pendingChallanAmount: number;
   activeDriver: { id: string; name: string } | null;
-  group?: { id: string; name: string; icon: string; color?: string } | null;
+  groups?: Array<{ id: string; name: string; icon: string; color?: string }>;
   complianceDocuments: Array<{ type: string; status: string; expiryDate: string }>;
   driverMappings: Array<{ isActive: boolean; driver: { id: string; name: string } }>;
 }
@@ -314,6 +314,7 @@ export default function VehiclesPage() {
             const totalDocs = v.complianceDocuments.length;
             const score = totalDocs > 0 ? Math.round((greenDocs / totalDocs) * 100) : 0;
             const activeDriver = v.activeDriver || v.driverMappings?.find((m) => m.isActive)?.driver;
+            const primaryGroup = v.groups?.[0];
 
             return (
               <Link
@@ -328,13 +329,13 @@ export default function VehiclesPage() {
                   {/* Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      {(() => { const GroupIcon = v.group?.icon ? getVehicleTypeIcon(v.group.icon) : Truck; return v.profileImage ? (
+                      {(() => { const GroupIcon = primaryGroup?.icon ? getVehicleTypeIcon(primaryGroup.icon) : Truck; return v.profileImage ? (
                         <img src={`${resolveImageUrl(v.profileImage) ?? ""}`} alt={v.registrationNumber} className={`w-11 h-11 rounded-xl object-cover shadow-lg ${shadowClr}`}
                           onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(v.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
                           onMouseLeave={() => setHoverPhoto(null)} onError={(e) => (e.currentTarget.style.display = "none")} />
                       ) : (
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-lg ${shadowClr} ${!v.group?.color ? `bg-gradient-to-br ${grad}` : ''}`} style={{ backgroundColor: v.group?.color ? v.group.color + '12' : undefined }}>
-                          <GroupIcon className="w-5 h-5" style={v.group?.color ? { color: v.group.color } : { color: 'white' }} />
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-lg ${shadowClr} ${!primaryGroup?.color ? `bg-gradient-to-br ${grad}` : ''}`} style={{ backgroundColor: primaryGroup?.color ? primaryGroup.color + '12' : undefined }}>
+                          <GroupIcon className="w-5 h-5" style={primaryGroup?.color ? { color: primaryGroup.color } : { color: 'white' }} />
                         </div>
                       ); })()}
                       <div>
@@ -370,9 +371,12 @@ export default function VehiclesPage() {
 
                   {/* Meta chips */}
                   <div className="flex items-center gap-2 mb-4 flex-wrap">
-                    {v.group && (() => { const GIcon = getVehicleTypeIcon(v.group.icon); return (
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400 font-semibold flex items-center gap-1"><GIcon className="w-3 h-3" />{v.group.name}</span>
-                    ); })()}
+                    {(v.groups ?? []).map((g) => {
+                      const GIcon = getVehicleTypeIcon(g.icon);
+                      return (
+                        <span key={g.id} className="text-[10px] px-2 py-0.5 rounded-md bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400 font-semibold flex items-center gap-1"><GIcon className="w-3 h-3" />{g.name}</span>
+                      );
+                    })}
                     <span className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 font-semibold">{v.fuelType}</span>
                     {v.vehicleUsage && (
                       <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold ${v.vehicleUsage === "COMMERCIAL" ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"}`}>
@@ -420,6 +424,7 @@ export default function VehiclesPage() {
           {vehicles.map((v) => {
             const grad = v.overallStatus === "GREEN" ? "from-emerald-500 to-green-600" : v.overallStatus === "YELLOW" ? "from-amber-500 to-yellow-600" : v.overallStatus === "ORANGE" ? "from-red-500 to-rose-600" : "from-red-500 to-rose-600";
             const activeDriver = v.activeDriver || v.driverMappings?.find((m) => m.isActive)?.driver;
+            const primaryGroup = v.groups?.[0];
 
             return (
               <Link
@@ -431,13 +436,13 @@ export default function VehiclesPage() {
                 <div className={`w-1 h-12 rounded-full bg-gradient-to-b ${grad} flex-shrink-0`} />
 
                 {/* Icon */}
-                {(() => { const GroupIcon = v.group?.icon ? getVehicleTypeIcon(v.group.icon) : Truck; return v.profileImage ? (
+                {(() => { const GroupIcon = primaryGroup?.icon ? getVehicleTypeIcon(primaryGroup.icon) : Truck; return v.profileImage ? (
                   <img src={`${resolveImageUrl(v.profileImage) ?? ""}`} alt={v.registrationNumber} className="w-10 h-10 rounded-xl object-cover flex-shrink-0 shadow-md"
                     onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(v.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); }}
                     onMouseLeave={() => setHoverPhoto(null)} onError={(e) => (e.currentTarget.style.display = "none")} />
                 ) : (
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md ${!v.group?.color ? `bg-gradient-to-br ${grad}` : ''}`} style={{ backgroundColor: v.group?.color ? v.group.color + '12' : undefined }}>
-                    <GroupIcon className="w-4 h-4" style={v.group?.color ? { color: v.group.color } : { color: 'white' }} />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md ${!primaryGroup?.color ? `bg-gradient-to-br ${grad}` : ''}`} style={{ backgroundColor: primaryGroup?.color ? primaryGroup.color + '12' : undefined }}>
+                    <GroupIcon className="w-4 h-4" style={primaryGroup?.color ? { color: primaryGroup.color } : { color: 'white' }} />
                   </div>
                 ); })()}
 
@@ -468,9 +473,12 @@ export default function VehiclesPage() {
                         {v.vehicleUsage === "COMMERCIAL" ? "Commercial" : "Private"}
                       </span>
                     )}
-                    {v.group && (() => { const GIcon = getVehicleTypeIcon(v.group.icon); return (
-                      <><span className="text-gray-300 dark:text-gray-600">&bull;</span><span className="text-brand-500 dark:text-brand-400 font-medium flex items-center gap-0.5"><GIcon className="w-3 h-3" />{v.group.name}</span></>
-                    ); })()}
+                    {(v.groups ?? []).map((g) => {
+                      const GIcon = getVehicleTypeIcon(g.icon);
+                      return (
+                        <React.Fragment key={g.id}><span className="text-gray-300 dark:text-gray-600">&bull;</span><span className="text-brand-500 dark:text-brand-400 font-medium flex items-center gap-0.5"><GIcon className="w-3 h-3" />{g.name}</span></React.Fragment>
+                      );
+                    })}
                     {activeDriver && (
                       <>
                         <span className="text-gray-300 dark:text-gray-600">&bull;</span>

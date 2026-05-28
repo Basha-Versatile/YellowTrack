@@ -35,9 +35,13 @@ async function enrichGroups(
   if (groups.length === 0) return [];
   const ids = groups.map((g) => g._id);
 
+  // A vehicle may belong to multiple groups. Unwind groupIds so each
+  // membership is counted once per (vehicle, group) pair.
   const vehicleCounts = await Vehicle.aggregate([
-    { $match: aggregateTenantMatch(ctx, { groupId: { $in: ids } }) },
-    { $group: { _id: "$groupId", count: { $sum: 1 } } },
+    { $match: aggregateTenantMatch(ctx, { groupIds: { $in: ids } }) },
+    { $unwind: "$groupIds" },
+    { $match: aggregateTenantMatch(ctx, { groupIds: { $in: ids } }) },
+    { $group: { _id: "$groupIds", count: { $sum: 1 } } },
   ]);
 
   const countMap = new Map<string, number>(
@@ -51,9 +55,8 @@ async function enrichGroups(
 }
 
 /**
- * Move any vehicle whose `groupId` is null or points to a deleted group into
- * the "Others" fallback. Keeps per-group counts in sync with the overall
- * vehicle total, and makes the Others filter chip actually surface orphans.
+ * Make sure every vehicle has at least one valid group. Drops stale group
+ * references (deleted groups) and assigns "Others" to anyone left ungrouped.
  */
 async function reassignOrphans(
   ctx: ScopedContext,
@@ -64,9 +67,17 @@ async function reassignOrphans(
   if (!validIds.some((id) => String(id) === String(others._id))) {
     validIds.push(others._id);
   }
+  // 1. Strip dead group ids from each vehicle's groupIds array.
   await Vehicle.updateMany(
-    tenantFilter(ctx, { groupId: { $nin: validIds } }),
-    { $set: { groupId: others._id } },
+    tenantFilter(ctx, { groupIds: { $exists: true } }),
+    { $pull: { groupIds: { $nin: validIds } } },
+  );
+  // 2. Vehicles that ended up with zero groups get Others added.
+  await Vehicle.updateMany(
+    tenantFilter(ctx, {
+      $or: [{ groupIds: { $exists: false } }, { groupIds: { $size: 0 } }],
+    }),
+    { $addToSet: { groupIds: others._id } },
   );
 }
 
@@ -116,7 +127,7 @@ export async function remove(ctx: ScopedContext, id: string) {
 }
 
 export async function getVehicleCount(ctx: ScopedContext, id: string) {
-  return Vehicle.countDocuments(tenantFilter(ctx, { groupId: id }));
+  return Vehicle.countDocuments(tenantFilter(ctx, { groupIds: id }));
 }
 
 /**

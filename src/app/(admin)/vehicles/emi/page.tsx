@@ -1,14 +1,13 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { emiAPI, vehicleAPI } from "@/lib/api";
+import { emiAPI, vehicleAPI, debitAccountAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { VehicleAutocomplete } from "@/components/vehicles/VehicleAutocomplete";
 import {
   Plus,
   Wallet,
   CalendarClock,
-  AlertOctagon,
   CheckCircle2,
   Pause,
   Ban,
@@ -326,7 +325,7 @@ export default function EmiHubPage() {
         <div>
           <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Vehicles under EMI</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Track loan installments, upcoming dues, and defaulters across your fleet.
+            Track loan installments and upcoming dues across your fleet.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -370,7 +369,7 @@ export default function EmiHubPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
         <KpiCard
           icon={<CheckCircle2 className="w-4 h-4" />}
           label="Active EMIs"
@@ -395,12 +394,6 @@ export default function EmiHubPage() {
           label="Dues this week"
           value={hub?.summary.duesThisWeek ?? 0}
           tint="blue"
-        />
-        <KpiCard
-          icon={<AlertOctagon className="w-4 h-4" />}
-          label="Defaulters"
-          value={hub?.summary.defaulters ?? 0}
-          tint="red"
         />
       </div>
 
@@ -840,7 +833,10 @@ function SortRow({
 function StatusFilter({
   selected, onChange, onClose,
 }: { selected: EmiPlanRow["status"][]; onChange: (s: EmiPlanRow["status"][]) => void; onClose: () => void }) {
-  const ALL: EmiPlanRow["status"][] = ["ACTIVE", "PAUSED", "DEFAULTED", "CLOSED"];
+  // "DEFAULTED" intentionally excluded from the UI — the workspace doesn't
+  // surface defaulters as a public status; rows can still carry that status
+  // internally if set elsewhere, they just don't appear in the filter list.
+  const ALL: EmiPlanRow["status"][] = ["ACTIVE", "PAUSED", "CLOSED"];
   const toggle = (s: EmiPlanRow["status"]) => {
     onChange(selected.includes(s) ? selected.filter((x) => x !== s) : [...selected, s]);
   };
@@ -1348,6 +1344,71 @@ function CreateEmiModal({
     reminderChannels: ["EMAIL", "IN_APP"] as Array<"EMAIL" | "WHATSAPP" | "IN_APP">,
     notes: "",
   });
+  // Schedule documents — one or many PDFs/images of the amortization sheet.
+  // Files accumulate as the user picks them; each can be removed individually.
+  const [scheduleFiles, setScheduleFiles] = useState<File[]>([]);
+  // Saved debit accounts dropdown — fetched once when the modal opens.
+  type SavedDebitAccount = {
+    id?: string;
+    _id?: string;
+    bankName: string;
+    accountMasked: string;
+    accountHolder?: string | null;
+  };
+  const [savedDebits, setSavedDebits] = useState<SavedDebitAccount[]>([]);
+  const [debitMode, setDebitMode] = useState<"saved" | "new">("saved");
+  const [selectedDebitId, setSelectedDebitId] = useState<string>("");
+
+  useEffect(() => {
+    let cancelled = false;
+    debitAccountAPI
+      .list()
+      .then((r) => {
+        if (cancelled) return;
+        const rows = (r.data?.data ?? []) as Array<SavedDebitAccount & { _id?: string }>;
+        const normalized = rows.map((row) => ({
+          ...row,
+          id: String(row.id ?? row._id ?? ""),
+        }));
+        setSavedDebits(normalized);
+        // Default to "saved" when at least one exists; otherwise jump straight
+        // to the "new" form so the user isn't staring at an empty dropdown.
+        // Also auto-select the most-recently-used account so the user doesn't
+        // have to click the dropdown when only one card is on file.
+        if (normalized.length > 0) {
+          setDebitMode("saved");
+          setSelectedDebitId(normalized[0].id ?? "");
+        } else {
+          setDebitMode("new");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSavedDebits([]);
+          setDebitMode("new");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // When the user picks a saved account, mirror its fields into the form so
+  // submit (and the auto-upsert on save) still sees a consistent payload.
+  useEffect(() => {
+    if (debitMode !== "saved") return;
+    const found = savedDebits.find((a) => a.id === selectedDebitId);
+    if (!found) {
+      setForm((p) => ({ ...p, debitBankName: "", debitAccountMasked: "", debitAccountHolder: "" }));
+      return;
+    }
+    setForm((p) => ({
+      ...p,
+      debitBankName: found.bankName,
+      debitAccountMasked: found.accountMasked,
+      debitAccountHolder: found.accountHolder ?? "",
+    }));
+  }, [debitMode, selectedDebitId, savedDebits]);
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -1381,6 +1442,7 @@ function CreateEmiModal({
         dueDayOfMonth: Number(form.dueDayOfMonth),
         reminderChannels: form.reminderChannels,
         notes: form.notes.trim() || null,
+        scheduleDocuments: scheduleFiles,
       });
       await onCreated();
     } catch (err) {
@@ -1538,31 +1600,163 @@ function CreateEmiModal({
             </Section>
 
             <Section title="Debit source">
-              <Grid2>
-                <Field label="Bank">
-                  <input
+              {savedDebits.length > 0 && (
+                <div className="flex items-center gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setDebitMode("saved")}
+                    className={`text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors ${
+                      debitMode === "saved"
+                        ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                    }`}
+                  >
+                    Saved account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDebitMode("new");
+                      setSelectedDebitId("");
+                      set("debitBankName", "");
+                      set("debitAccountMasked", "");
+                      set("debitAccountHolder", "");
+                    }}
+                    className={`text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors ${
+                      debitMode === "new"
+                        ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                    }`}
+                  >
+                    + New account
+                  </button>
+                </div>
+              )}
+
+              {debitMode === "saved" && savedDebits.length > 0 ? (
+                <Field label="Choose a saved account">
+                  <select
                     className="input"
-                    value={form.debitBankName}
-                    onChange={(e) => set("debitBankName", e.target.value)}
-                    placeholder="e.g. ICICI Bank"
-                  />
+                    value={selectedDebitId}
+                    onChange={(e) => setSelectedDebitId(e.target.value)}
+                  >
+                    <option value="">— Select —</option>
+                    {savedDebits.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.bankName} · {a.accountMasked}
+                        {a.accountHolder ? ` · ${a.accountHolder}` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
-                <Field label="Account holder">
-                  <input
-                    className="input"
-                    value={form.debitAccountHolder}
-                    onChange={(e) => set("debitAccountHolder", e.target.value)}
-                  />
-                </Field>
-                <Field label="Account number (masked)">
-                  <input
-                    className="input"
-                    value={form.debitAccountMasked}
-                    onChange={(e) => set("debitAccountMasked", e.target.value)}
-                    placeholder="e.g. XXXX1234"
-                  />
-                </Field>
-              </Grid2>
+              ) : (
+                <Grid2>
+                  <Field label="Bank">
+                    <input
+                      className="input"
+                      value={form.debitBankName}
+                      onChange={(e) => set("debitBankName", e.target.value)}
+                      placeholder="e.g. ICICI Bank"
+                    />
+                  </Field>
+                  <Field label="Account holder">
+                    <input
+                      className="input"
+                      value={form.debitAccountHolder}
+                      onChange={(e) => set("debitAccountHolder", e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Account number (masked)">
+                    <input
+                      className="input"
+                      value={form.debitAccountMasked}
+                      onChange={(e) => set("debitAccountMasked", e.target.value)}
+                      placeholder="e.g. XXXX1234"
+                    />
+                  </Field>
+                </Grid2>
+              )}
+              {debitMode === "new" && (
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
+                  Saved automatically after this plan is created — next time it&apos;ll appear in
+                  the dropdown above.
+                </p>
+              )}
+            </Section>
+
+            <Section title="EMI schedule documents">
+              <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40 p-3 space-y-2.5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-yellow-100 text-yellow-600 dark:bg-yellow-500/15 dark:text-yellow-400 flex-shrink-0">
+                    <Wallet className="w-4 h-4" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                      {scheduleFiles.length > 0
+                        ? `${scheduleFiles.length} file${scheduleFiles.length === 1 ? "" : "s"} attached`
+                        : "Optional — upload the amortization sheet(s) from your bank"}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">PDF / JPG / PNG — pick one or more</p>
+                  </div>
+                  <label className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-[11px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800">
+                    {scheduleFiles.length > 0 ? "Add more" : "Browse"}
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      multiple
+                      onChange={(e) => {
+                        const picked = Array.from(e.target.files ?? []);
+                        if (picked.length === 0) return;
+                        // De-dup by (name + size) so the same file added twice
+                        // collapses to one chip.
+                        setScheduleFiles((prev) => {
+                          const seen = new Set(
+                            prev.map((f) => `${f.name}::${f.size}`),
+                          );
+                          const merged = [...prev];
+                          for (const f of picked) {
+                            const k = `${f.name}::${f.size}`;
+                            if (!seen.has(k)) {
+                              merged.push(f);
+                              seen.add(k);
+                            }
+                          }
+                          return merged;
+                        });
+                        // Reset the input so re-selecting the same file fires onChange.
+                        e.target.value = "";
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                {scheduleFiles.length > 0 && (
+                  <ul className="flex flex-wrap gap-1.5">
+                    {scheduleFiles.map((f, i) => (
+                      <li
+                        key={`${f.name}-${i}`}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] font-medium text-gray-700 dark:text-gray-300 max-w-full"
+                      >
+                        <span className="truncate max-w-[180px]" title={f.name}>
+                          {f.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setScheduleFiles((prev) =>
+                              prev.filter((_, idx) => idx !== i),
+                            )
+                          }
+                          className="text-gray-400 hover:text-red-600"
+                          title="Remove this file"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </Section>
 
             <Section title="Reminders">

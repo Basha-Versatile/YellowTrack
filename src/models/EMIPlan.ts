@@ -79,6 +79,13 @@ const emiPlanSchema = new Schema(
 
     notes: { type: String, trim: true, default: null, maxlength: 500 },
 
+    // Uploaded EMI schedule files (PDF/JPG/PNG) — amortization sheet(s) from
+    // the lender. `scheduleDocumentUrls` is the canonical multi-file list;
+    // `scheduleDocumentUrl` (singular) is preserved as a fallback pointer to
+    // the first file so older readers continue to work.
+    scheduleDocumentUrl: { type: String, trim: true, default: null },
+    scheduleDocumentUrls: { type: [String], default: [] },
+
     createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     closedAt: { type: Date, default: null },
   },
@@ -89,6 +96,12 @@ emiPlanSchema.index({ tenantId: 1, vehicleId: 1, status: 1 });
 emiPlanSchema.index({ tenantId: 1, status: 1, nextDueDate: 1 });
 
 export type EMIPlanAttrs = InferSchemaType<typeof emiPlanSchema>;
+
+// Force re-registration in dev so schema edits propagate without restarting
+// the Next.js server (Mongoose caches the model on globalThis).
+if (process.env.NODE_ENV !== "production" && models.EMIPlan) {
+  delete models.EMIPlan;
+}
 
 export const EMIPlan: Model<EMIPlanAttrs> =
   (models.EMIPlan as Model<EMIPlanAttrs>) ??

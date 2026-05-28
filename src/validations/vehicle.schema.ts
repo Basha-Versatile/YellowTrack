@@ -1,12 +1,34 @@
 import { z } from "zod";
 
+// Accept groupIds as either a JSON-encoded array (e.g. ["id1","id2"]) or a
+// repeated query/form value. The transform normalizes both into string[].
+const groupIdsInput = z
+  .union([z.array(z.string()), z.string()])
+  .optional()
+  .nullable()
+  .transform((v) => {
+    if (v == null) return undefined;
+    if (Array.isArray(v)) return v.filter(Boolean);
+    const trimmed = v.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [trimmed];
+      } catch {
+        return [trimmed];
+      }
+    }
+    return [trimmed];
+  });
+
 export const onboardVehicleSchema = z.object({
   registrationNumber: z
     .string()
     .min(4, "Registration number must be at least 4 characters")
     .max(15, "Registration number must be at most 15 characters")
     .transform((val) => val.toUpperCase().replace(/\s/g, "")),
-  groupId: z.string().optional().nullable(),
+  groupIds: groupIdsInput,
   vehicleUsage: z.enum(["PRIVATE", "COMMERCIAL"]).optional().nullable(),
 });
 
@@ -38,7 +60,7 @@ export const manualOnboardSchema = z
     seatingCapacity: z.coerce.number().int().optional().nullable(),
     permitType: z.string().optional().nullable(),
     vehicleUsage: z.enum(["PRIVATE", "COMMERCIAL"]).optional().nullable(),
-    groupId: z.string().optional().nullable(),
+    groupIds: groupIdsInput,
   })
   .passthrough(); // allow dynamic doc-expiry fields (e.g. rcExpiry, route_permitExpiry)
 

@@ -21,7 +21,7 @@ interface VehicleBasic {
   make: string;
   model: string;
   profileImage: string | null;
-  group?: { name: string; icon: string; color?: string } | null;
+  groups?: Array<{ name: string; icon: string; color?: string }>;
 }
 
 type ServiceView = "list" | "grid";
@@ -246,18 +246,19 @@ export default function VehicleServicesPage() {
             /* List View */
             <div className="rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
               {[...vehicleServiceMap.entries()].filter(([, d]) => !svcSearch || d.vehicle.registrationNumber.toLowerCase().includes(svcSearch.toLowerCase())).map(([vid, data]) => {
-                const GroupIcon = data.vehicle.group?.icon ? getVehicleTypeIcon(data.vehicle.group.icon) : Car;
+                const primary = data.vehicle.groups?.[0];
+                const GroupIcon = primary?.icon ? getVehicleTypeIcon(primary.icon) : Car;
                 return (
                 <Link key={vid} href={`/vehicles/services/${vid}`}
                   className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors group">
                   <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${!data.vehicle.profileImage ? "bg-gray-100 dark:bg-gray-800" : ""}`}
-                    style={!data.vehicle.profileImage && data.vehicle.group?.color ? { backgroundColor: `${data.vehicle.group.color}12` } : undefined}
+                    style={!data.vehicle.profileImage && primary?.color ? { backgroundColor: `${primary.color}12` } : undefined}
                     onMouseEnter={(e) => { if (data.vehicle.profileImage) { const r = e.currentTarget.getBoundingClientRect(); setHoverPhoto({ url: `${resolveImageUrl(data.vehicle.profileImage) ?? ""}`, x: r.right + 12, y: r.top + r.height / 2 }); } }}
                     onMouseLeave={() => setHoverPhoto(null)}>
                     {data.vehicle.profileImage ? (
                       <img src={`${resolveImageUrl(data.vehicle.profileImage) ?? ""}`} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
                     ) : (
-                      <GroupIcon className="w-5 h-5" style={data.vehicle.group?.color ? { color: data.vehicle.group.color } : undefined} />
+                      <GroupIcon className="w-5 h-5" style={primary?.color ? { color: primary.color } : undefined} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -283,18 +284,19 @@ export default function VehicleServicesPage() {
             /* Grid View */
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {[...vehicleServiceMap.entries()].filter(([, d]) => !svcSearch || d.vehicle.registrationNumber.toLowerCase().includes(svcSearch.toLowerCase())).map(([vid, data]) => {
-                const GroupIcon = data.vehicle.group?.icon ? getVehicleTypeIcon(data.vehicle.group.icon) : Car;
+                const primary = data.vehicle.groups?.[0];
+                const GroupIcon = primary?.icon ? getVehicleTypeIcon(primary.icon) : Car;
                 return (
                 <Link key={vid} href={`/vehicles/services/${vid}`}
                   className="block rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] hover:shadow-lg hover:border-brand-200 dark:hover:border-brand-500/30 transition-all group overflow-hidden">
                   <div className="p-5">
                     <div className="flex items-center gap-3 mb-4">
                       <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden ${!data.vehicle.profileImage ? "bg-gray-100 dark:bg-gray-800" : ""}`}
-                        style={!data.vehicle.profileImage && data.vehicle.group?.color ? { backgroundColor: `${data.vehicle.group.color}12` } : undefined}>
+                        style={!data.vehicle.profileImage && primary?.color ? { backgroundColor: `${primary.color}12` } : undefined}>
                         {data.vehicle.profileImage ? (
                           <img src={`${resolveImageUrl(data.vehicle.profileImage) ?? ""}`} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
                         ) : (
-                          <GroupIcon className="w-5 h-5" style={data.vehicle.group?.color ? { color: data.vehicle.group.color } : undefined} />
+                          <GroupIcon className="w-5 h-5" style={primary?.color ? { color: primary.color } : undefined} />
                         )}
                       </div>
                       <div className="min-w-0">

@@ -507,6 +507,103 @@ export function subscriptionExpiringEmail(input: {
   };
 }
 
+export function docTypeDeletionOtpEmail(input: {
+  to: string;
+  recipientName: string;
+  docTypeName: string;
+  docTypeCode: string;
+  otp: string;
+  expiresInMinutes: number;
+}): Email {
+  const text = [
+    `Hi ${input.recipientName},`,
+    "",
+    `Use the verification code below to confirm deletion of the document type "${input.docTypeName}" (${input.docTypeCode}):`,
+    "",
+    `  Code: ${input.otp}`,
+    "",
+    `This code expires in ${input.expiresInMinutes} minutes. If you didn't request this, ignore this email — no changes have been made.`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p>Hi <strong>${escapeHtml(input.recipientName)}</strong>,</p>
+    <p>Use the verification code below to confirm deletion of the document type
+       <strong>${escapeHtml(input.docTypeName)}</strong>
+       (<code style="background:#F3F4F6;padding:1px 6px;border-radius:4px">${escapeHtml(input.docTypeCode)}</code>):</p>
+    <div style="background:#F9FAFB;border:1px solid ${BORDER};border-radius:12px;padding:18px;margin:16px 0;text-align:center">
+      <div style="font-family:'SFMono-Regular',Menlo,Monaco,Consolas,monospace;font-size:30px;font-weight:800;letter-spacing:10px;color:${BRAND_DARK}">
+        ${escapeHtml(input.otp)}
+      </div>
+    </div>
+    <p style="color:#6B7280;font-size:12px">
+      This code expires in <strong>${input.expiresInMinutes} minutes</strong>.
+      If you didn't request this, no changes have been made.
+    </p>`;
+  return {
+    to: input.to,
+    subject: `Confirm deletion: ${input.docTypeName}`,
+    text,
+    html: html("Document type deletion code", bodyHtml),
+  };
+}
+
+export function brandRequestEmail(input: {
+  to: string | string[];
+  brandName: string;
+  tenantName: string;
+  requesterName: string;
+  reviewUrl: string;
+}): Email {
+  const text = [
+    `Hi superadmin,`,
+    "",
+    `${input.requesterName} from "${input.tenantName}" has requested a new vehicle brand:`,
+    `  Brand: ${input.brandName}`,
+    "",
+    `Review and approve / reject: ${input.reviewUrl}`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p><strong>${escapeHtml(input.requesterName)}</strong> from
+       <strong>${escapeHtml(input.tenantName)}</strong> has requested a new vehicle brand:</p>
+    <table cellpadding="6" cellspacing="0" style="background:#F9FAFB;border:1px solid ${BORDER};border-radius:8px;font-size:13px;margin:12px 0">
+      <tr><td style="color:#6B7280">Brand</td><td><strong>${escapeHtml(input.brandName)}</strong></td></tr>
+      <tr><td style="color:#6B7280">Tenant</td><td>${escapeHtml(input.tenantName)}</td></tr>
+    </table>
+    <p style="color:#6B7280;font-size:12px">Approve to publish the brand to every workspace.</p>`;
+  return {
+    to: input.to,
+    subject: `New brand request: ${input.brandName}`,
+    text,
+    html: html("Vehicle brand request", bodyHtml, input.reviewUrl, "Review request"),
+  };
+}
+
+export function brandApprovedEmail(input: {
+  to: string;
+  brandName: string;
+  recipientName: string;
+}): Email {
+  const text = [
+    `Hi ${input.recipientName},`,
+    "",
+    `Good news — the vehicle brand "${input.brandName}" you requested is now approved and available across your workspace.`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p>Hi <strong>${escapeHtml(input.recipientName)}</strong>,</p>
+    <p>The vehicle brand <strong>${escapeHtml(input.brandName)}</strong> you requested has been approved and is now available in the brand picker.</p>`;
+  return {
+    to: input.to,
+    subject: `Brand approved: ${input.brandName}`,
+    text,
+    html: html("Brand request approved", bodyHtml),
+  };
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

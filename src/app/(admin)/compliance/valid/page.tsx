@@ -42,7 +42,7 @@ interface Vehicle {
   fuelType: string;
   overallStatus: string;
   profileImage: string | null;
-  group?: { id: string; name: string; icon: string; color?: string } | null;
+  groups?: Array<{ id: string; name: string; icon: string; color?: string }>;
   complianceDocuments: ComplianceDoc[];
 }
 
@@ -74,7 +74,7 @@ type DocItem = {
   ownerName: string | null;
   vehicleMake: string;
   vehicleModel: string;
-  group: Vehicle["group"];
+  groups: Vehicle["groups"];
   doc: ComplianceDoc;
   days: number | null;
 };
@@ -113,7 +113,7 @@ export default function ValidComplianceDocumentsPage() {
           ownerName: v.ownerName,
           vehicleMake: v.make,
           vehicleModel: v.model,
-          group: v.group,
+          groups: v.groups,
           doc,
           days: daysUntil(doc.expiryDate),
         })),
@@ -128,7 +128,7 @@ export default function ValidComplianceDocumentsPage() {
   const docTypeCounts = useMemo(() => {
     const search = regSearch.trim().toLowerCase();
     const scoped = allValid.filter((it) => {
-      if (groupFilter !== "ALL" && it.group?.id !== groupFilter) return false;
+      if (groupFilter !== "ALL" && !(it.groups ?? []).some((g) => g.id === groupFilter)) return false;
       if (search && !it.registrationNumber.toLowerCase().includes(search)) return false;
       return true;
     });
@@ -141,7 +141,7 @@ export default function ValidComplianceDocumentsPage() {
     const search = regSearch.trim().toLowerCase();
     return allValid
       .filter((it) => {
-        if (groupFilter !== "ALL" && it.group?.id !== groupFilter) return false;
+        if (groupFilter !== "ALL" && !(it.groups ?? []).some((g) => g.id === groupFilter)) return false;
         if (docTypeFilter !== "ALL" && it.doc.type !== docTypeFilter) return false;
         if (search && !it.registrationNumber.toLowerCase().includes(search)) return false;
         return true;

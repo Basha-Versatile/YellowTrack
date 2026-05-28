@@ -15,7 +15,9 @@ export const POST = withRoute(
     const { fields, files } = await parseMultipart(req);
     const input = onboardVehicleSchema.parse({
       registrationNumber: firstString(fields, "registrationNumber"),
-      groupId: firstString(fields, "groupId"),
+      // The multipart payload sends groupIds as JSON-encoded string; the zod
+      // transform handles both JSON arrays and bare ids.
+      groupIds: firstString(fields, "groupIds"),
       vehicleUsage: firstString(fields, "vehicleUsage"),
     });
 
@@ -24,7 +26,7 @@ export const POST = withRoute(
       ctx,
       input.registrationNumber,
       images,
-      input.groupId ?? null,
+      input.groupIds ?? null,
       getRequestOrigin(req),
       input.vehicleUsage ?? null,
     );
@@ -34,7 +36,7 @@ export const POST = withRoute(
       entityId: String((vehicle as { id?: string; _id?: string }).id ?? (vehicle as { _id?: string })._id ?? ""),
       entityLabel: input.registrationNumber,
       summary: `Onboarded vehicle ${input.registrationNumber}`,
-      metadata: { groupId: input.groupId ?? null, vehicleUsage: input.vehicleUsage ?? null },
+      metadata: { groupIds: input.groupIds ?? [], vehicleUsage: input.vehicleUsage ?? null },
       // Revert support — undoing vehicle.create soft-deletes the vehicle.
       revertable: true,
     });
