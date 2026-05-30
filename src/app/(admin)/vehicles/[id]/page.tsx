@@ -34,6 +34,7 @@ interface ComplianceDoc {
   id: string;
   type: string;
   status: string;
+  documentNumber: string | null;
   issuedDate: string | null;
   expiryDate: string | null;
   documentUrl: string | null;
@@ -468,12 +469,78 @@ export default function VehicleDetailPage() {
   type UploadCtx = {
     docId: string;
     docType: string;
+    documentNumber: string;
     issuedISO: string;
     expiryISO: string;
     lifetime: boolean;
     fileCount: number;
   };
   const [uploadFor, setUploadFor] = useState<UploadCtx | null>(null);
+  const [uploadDocNumber, setUploadDocNumber] = useState("");
+
+  // "Share documents" modal — pick docs to bundle into a 24h public link
+  // that the recipient can view + download as a merged PDF.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareSelected, setShareSelected] = useState<Set<string>>(new Set());
+  const [shareSubmitting, setShareSubmitting] = useState(false);
+  const [shareResult, setShareResult] = useState<{
+    url: string;
+    expiresAt: string;
+  } | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const closeShare = () => {
+    if (shareSubmitting) return;
+    setShareOpen(false);
+    setShareSelected(new Set());
+    setShareResult(null);
+    setShareCopied(false);
+  };
+
+  const toggleShareDoc = (id: string) => {
+    setShareSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleCreateShare = async () => {
+    if (!vehicle) return;
+    if (shareSelected.size === 0) {
+      toast.error("Pick at least one", "Tick the documents to include");
+      return;
+    }
+    setShareSubmitting(true);
+    try {
+      const res = await complianceAPI.createShare(
+        vehicle.id,
+        Array.from(shareSelected),
+      );
+      const data = res.data?.data as { url?: string; expiresAt?: string } | undefined;
+      if (data?.url && data?.expiresAt) {
+        setShareResult({ url: data.url, expiresAt: data.expiresAt });
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? "Could not create share link";
+      toast.error("Share failed", msg);
+    } finally {
+      setShareSubmitting(false);
+    }
+  };
+
+  const copyShareUrl = async () => {
+    if (!shareResult) return;
+    try {
+      await navigator.clipboard.writeText(shareResult.url);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      toast.error("Copy failed", "Couldn't write to clipboard");
+    }
+  };
   const [uploadIssued, setUploadIssued] = useState("");
   const [uploadExpiry, setUploadExpiry] = useState("");
   const [uploadLifetime, setUploadLifetime] = useState(false);
@@ -484,6 +551,7 @@ export default function VehicleDetailPage() {
     docId: string,
     docType: string,
     existing: {
+      documentNumber?: string | null;
       issuedDate?: string | null;
       expiryDate?: string | null;
       isLifetime?: boolean;
@@ -493,6 +561,7 @@ export default function VehicleDetailPage() {
     setUploadFor({
       docId,
       docType,
+      documentNumber: existing.documentNumber ?? "",
       issuedISO: existing.issuedDate
         ? new Date(existing.issuedDate).toISOString().split("T")[0]
         : "",
@@ -502,6 +571,7 @@ export default function VehicleDetailPage() {
       lifetime: Boolean(existing.isLifetime),
       fileCount: existing.fileCount,
     });
+    setUploadDocNumber(existing.documentNumber ?? "");
     setUploadIssued(
       existing.issuedDate
         ? new Date(existing.issuedDate).toISOString().split("T")[0]
@@ -519,6 +589,7 @@ export default function VehicleDetailPage() {
   const closeUpload = () => {
     setUploadFor(null);
     setUploadFiles([]);
+    setUploadDocNumber("");
     setUploadIssued("");
     setUploadExpiry("");
     setUploadLifetime(false);
@@ -548,25 +619,54 @@ export default function VehicleDetailPage() {
     }
     setUploadSaving(true);
     try {
-      // 1. Update the active doc's dates/lifetime if they changed.
       const datesChanged =
         uploadLifetime !== uploadFor.lifetime ||
         uploadIssued !== uploadFor.issuedISO ||
         uploadExpiry !== uploadFor.expiryISO;
-      if (datesChanged) {
-        await complianceAPI.updateExpiry(uploadFor.docId, {
-          type: uploadFor.docType,
-          issuedDate: uploadIssued || null,
-          expiryDate: uploadLifetime ? undefined : uploadExpiry,
-          lifetime: uploadLifetime,
-        });
+      const docNumberChanged = uploadDocNumber.trim() !== uploadFor.documentNumber;
+
+      // When the active doc already has files and the user has supplied a
+      // new validity window, treat this upload as a renewal: archive the
+      // current doc (it surfaces in History under its own dates) and create
+      // a new active doc carrying the new files + new dates. Without this,
+      // every upload would collapse onto the latest expiry and prior files
+      // would lose their original validity context.
+      const shouldRenew = datesChanged && uploadFor.fileCount > 0;
+
+      if (shouldRenew) {
+        await complianceAPI.renewDocument(
+          uploadFor.docId,
+          {
+            type: uploadFor.docType,
+            issuedDate: uploadIssued || undefined,
+            expiryDate: uploadLifetime ? undefined : uploadExpiry,
+            lifetime: uploadLifetime,
+            documentNumber: uploadDocNumber.trim() || null,
+          },
+          uploadFiles,
+        );
+        toast.success(
+          "Renewed",
+          `${docTypeLabel(uploadFor.docType)} archived under previous validity and a new period started`,
+        );
+      } else {
+        // First upload (no existing files) OR same-validity addition — keep
+        // the original "update dates + append file" flow.
+        if (datesChanged || docNumberChanged) {
+          await complianceAPI.updateExpiry(uploadFor.docId, {
+            type: uploadFor.docType,
+            issuedDate: uploadIssued || null,
+            expiryDate: uploadLifetime ? undefined : uploadExpiry,
+            lifetime: uploadLifetime,
+            documentNumber: uploadDocNumber.trim() || null,
+          });
+        }
+        await complianceAPI.uploadDocument(uploadFor.docId, uploadFiles);
+        toast.success(
+          "Document uploaded",
+          `${docTypeLabel(uploadFor.docType)} updated`,
+        );
       }
-      // 2. Append the file(s) to the active doc.
-      await complianceAPI.uploadDocument(uploadFor.docId, uploadFiles);
-      toast.success(
-        "Document uploaded",
-        `${docTypeLabel(uploadFor.docType)} updated`,
-      );
       closeUpload();
       await fetchVehicle();
     } catch (err: unknown) {
@@ -1587,6 +1687,14 @@ export default function VehicleDetailPage() {
                     <span className={`text-xs font-bold ${theme.text}`}>{complianceScore}%</span>
                   </div>
                 )}
+                <button
+                  onClick={() => setShareOpen(true)}
+                  disabled={vehicle.complianceDocuments.length === 0}
+                  className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 disabled:opacity-50"
+                  title="Share selected documents via a 24-hour link"
+                >
+                  <Share2 className="w-3.5 h-3.5" /> Share
+                </button>
                 <button onClick={openAddCompliance}
                   className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-colors">
                   <Plus className="w-3.5 h-3.5" /> Add Document
@@ -1647,6 +1755,11 @@ export default function VehicleDetailPage() {
                           {doc.issuedDate && (
                             <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
                               From: {new Date(doc.issuedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                            </p>
+                          )}
+                          {doc.documentNumber && (
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-mono">
+                              No. {doc.documentNumber}
                             </p>
                           )}
                         </div>
@@ -1715,6 +1828,7 @@ export default function VehicleDetailPage() {
                               type="button"
                               onClick={() =>
                                 openUpload(doc.id, doc.type, {
+                                  documentNumber: doc.documentNumber ?? null,
                                   issuedDate: doc.issuedDate ?? null,
                                   expiryDate: doc.expiryDate ?? null,
                                   isLifetime: !doc.expiryDate && Boolean(doc.issuedDate),
@@ -3446,6 +3560,27 @@ export default function VehicleDetailPage() {
             </div>
           </div>
           <div className="px-6 py-4 space-y-4">
+            <label className="block">
+              <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                Document number{" "}
+                <span className="text-gray-400 font-normal normal-case">(optional)</span>
+              </span>
+              <input
+                type="text"
+                value={uploadDocNumber}
+                onChange={(e) => setUploadDocNumber(e.target.value)}
+                placeholder={
+                  uploadFor && /INSURANCE/i.test(uploadFor.docType)
+                    ? "e.g. Policy no. 12345678"
+                    : uploadFor && /PERMIT/i.test(uploadFor.docType)
+                      ? "e.g. Permit no. KA-2026-1234"
+                      : "e.g. number printed on the document"
+                }
+                disabled={uploadSaving}
+                maxLength={120}
+                className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-sm text-gray-800 dark:text-gray-200 focus:border-brand-400 focus:outline-none focus:ring-3 focus:ring-brand-400/10 disabled:opacity-60"
+              />
+            </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
@@ -3558,11 +3693,28 @@ export default function VehicleDetailPage() {
                 </div>
               </div>
             </div>
-            <div className="rounded-lg border border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-300">
-              {uploadFor && uploadFor.fileCount > 0
-                ? "Files will be appended to this document. Changing the dates updates the active validity period for all files on this document."
-                : "These dates become the active validity for this document."}
-            </div>
+            {(() => {
+              if (!uploadFor) return null;
+              const datesDiffer =
+                uploadLifetime !== uploadFor.lifetime ||
+                uploadIssued !== uploadFor.issuedISO ||
+                uploadExpiry !== uploadFor.expiryISO;
+              const willRenew = datesDiffer && uploadFor.fileCount > 0;
+              if (willRenew) {
+                return (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
+                    The dates differ from the current document — saving will archive the existing version (it&apos;ll show up in History under its own validity) and start a new period with these files.
+                  </div>
+                );
+              }
+              return (
+                <div className="rounded-lg border border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-300">
+                  {uploadFor.fileCount > 0
+                    ? "Files will be appended to this document under the current validity."
+                    : "These dates become the active validity for this document."}
+                </div>
+              );
+            })()}
           </div>
           <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
             <button
@@ -3588,6 +3740,184 @@ export default function VehicleDetailPage() {
               )}
               Upload
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Share documents — generate a 24h public link of the picked docs */}
+      <Modal
+        isOpen={shareOpen}
+        onClose={closeShare}
+        className="w-[92%] max-w-[520px] rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+      >
+        <div className="flex flex-col">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+              <Share2 className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">
+                Share documents
+              </h3>
+              <p className="text-[11px] text-gray-400">
+                {shareResult
+                  ? "Link is ready · expires in 24 hours"
+                  : "Pick documents to bundle into a 24-hour share link"}
+              </p>
+            </div>
+          </div>
+
+          {!shareResult ? (
+            <div className="px-6 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+              {vehicle && vehicle.complianceDocuments.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                      Documents on this vehicle
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!vehicle) return;
+                        const all = new Set(
+                          vehicle.complianceDocuments
+                            .filter((d) => {
+                              const urls = d.documentUrls && d.documentUrls.length > 0
+                                ? d.documentUrls
+                                : d.documentUrl
+                                  ? [d.documentUrl]
+                                  : [];
+                              return urls.length > 0;
+                            })
+                            .map((d) => d.id),
+                        );
+                        setShareSelected(
+                          shareSelected.size === all.size ? new Set() : all,
+                        );
+                      }}
+                      className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400"
+                    >
+                      {shareSelected.size > 0 ? "Clear all" : "Select all"}
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {vehicle.complianceDocuments.map((doc) => {
+                      const urls = doc.documentUrls && doc.documentUrls.length > 0
+                        ? doc.documentUrls
+                        : doc.documentUrl
+                          ? [doc.documentUrl]
+                          : [];
+                      const hasFiles = urls.length > 0;
+                      const isOn = shareSelected.has(doc.id);
+                      return (
+                        <label
+                          key={doc.id}
+                          className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                            !hasFiles
+                              ? "opacity-50 cursor-not-allowed border-gray-100 dark:border-gray-800"
+                              : isOn
+                                ? "border-brand-300 bg-brand-50/40 dark:border-brand-500/40 dark:bg-brand-500/10"
+                                : "border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/30"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={!hasFiles}
+                            checked={isOn}
+                            onChange={() => hasFiles && toggleShareDoc(doc.id)}
+                            className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                              {docTypeLabel(doc.type)}
+                            </p>
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                              {hasFiles
+                                ? `${urls.length} file${urls.length === 1 ? "" : "s"}`
+                                : "No file attached"}
+                              {doc.documentNumber ? ` · No. ${doc.documentNumber}` : ""}
+                              {doc.expiryDate
+                                ? ` · Exp ${new Date(doc.expiryDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+                                : doc.issuedDate
+                                  ? " · Lifetime"
+                                  : ""}
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-6">
+                  No documents to share yet.
+                </p>
+              )}
+              <div className="rounded-lg border border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10 px-3 py-2 text-[11px] text-blue-800 dark:text-blue-300">
+                The recipient can preview each document and download all selected files as a single merged PDF. The link automatically stops working after 24 hours.
+              </div>
+            </div>
+          ) : (
+            <div className="px-6 py-5 space-y-3">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-800 dark:text-emerald-300">
+                Link generated. Anyone with this URL can preview and download the selected documents until{" "}
+                <strong>
+                  {new Date(shareResult.expiresAt).toLocaleString("en-IN", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </strong>
+                .
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={shareResult.url}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="flex-1 h-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 text-xs font-mono text-gray-700 dark:text-gray-300"
+                />
+                <button
+                  type="button"
+                  onClick={copyShareUrl}
+                  className="h-10 px-3 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0"
+                >
+                  {shareCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <a
+                href={shareResult.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Open in new tab
+              </a>
+            </div>
+          )}
+
+          <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeShare}
+              disabled={shareSubmitting}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
+            >
+              {shareResult ? "Done" : "Cancel"}
+            </button>
+            {!shareResult && (
+              <button
+                type="button"
+                onClick={handleCreateShare}
+                disabled={shareSubmitting || shareSelected.size === 0}
+                className="rounded-xl px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 shadow-sm transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {shareSubmitting && (
+                  <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                )}
+                Generate link
+              </button>
+            )}
           </div>
         </div>
       </Modal>

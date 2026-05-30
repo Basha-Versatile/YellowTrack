@@ -53,9 +53,9 @@ function TopNav() {
     <nav className="sticky top-0 z-50 backdrop-blur-md bg-white/80 dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 group">
-          <span className="relative w-20 h-20 rounded-xl overflow-hidden p-1 mix-blend-multiply dark:mix-blend-normal">
+          <span className="relative w-20 h-20 rounded-xl overflow-hidden p-1">
             <Image
-              src="/images/logo/yellow-track-logo4.jpeg"
+              src="/images/logo/yellow-track-logo.svg"
               alt="Yellow Track"
               fill
               sizes="40px"
@@ -1046,9 +1046,9 @@ function Footer() {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 gap-8">
           <div className="col-span-2">
             <Link href="/" className="inline-flex items-center gap-2.5">
-              <span className="relative w-20 h-20 rounded-xl overflow-hidden mix-blend-multiply dark:mix-blend-normal">
+              <span className="relative w-20 h-20 rounded-xl overflow-hidden">
                 <Image
-                  src="/images/logo/yellow-track-logo4.jpeg"
+                  src="/images/logo/yellow-track-logo.svg"
                   alt="Yellow Track"
                   fill
                   sizes="40px"
@@ -1097,7 +1097,16 @@ function Footer() {
         </div>
 
         <div className="mt-10 pt-6 border-t border-gray-100 dark:border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-gray-400 dark:text-gray-500">
-          <p>© {new Date().getFullYear()} Yellow Track. All rights reserved.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-center sm:text-left">
+            <p>© {new Date().getFullYear()} Yellow Track. All rights reserved.</p>
+            <span className="hidden sm:inline text-gray-300 dark:text-gray-700">·</span>
+            <p className="text-gray-500 dark:text-gray-400">
+              From the house of{" "}
+              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                Versatile Commerce
+              </span>
+            </p>
+          </div>
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5" />

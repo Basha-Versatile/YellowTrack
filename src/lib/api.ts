@@ -672,11 +672,31 @@ export const complianceAPI = {
   },
   removeDocumentFile: (docId: string, url: string) =>
     api.delete(`/compliance/${docId}/upload`, { data: { url } }),
-  updateExpiry: (docId: string, data: { type: string; issuedDate?: string | null; expiryDate?: string; lifetime?: boolean }) =>
-    api.put(`/compliance/${docId}`, data),
-  renewDocument: (docId: string, data: { expiryDate?: string; type: string; lifetime?: boolean }, files?: File | File[]) => {
+  updateExpiry: (
+    docId: string,
+    data: {
+      type: string;
+      issuedDate?: string | null;
+      expiryDate?: string;
+      lifetime?: boolean;
+      documentNumber?: string | null;
+    },
+  ) => api.put(`/compliance/${docId}`, data),
+  renewDocument: (
+    docId: string,
+    data: {
+      expiryDate?: string;
+      issuedDate?: string;
+      type: string;
+      lifetime?: boolean;
+      documentNumber?: string | null;
+    },
+    files?: File | File[],
+  ) => {
     const formData = new FormData();
     if (data.expiryDate) formData.append("expiryDate", data.expiryDate);
+    if (data.issuedDate) formData.append("issuedDate", data.issuedDate);
+    if (data.documentNumber) formData.append("documentNumber", data.documentNumber);
     formData.append("type", data.type);
     if (data.lifetime) formData.append("lifetime", "true");
     if (files) {
@@ -716,6 +736,11 @@ export const complianceAPI = {
     });
   },
   removeDocument: (docId: string) => api.delete(`/compliance/${docId}`),
+  // Time-bounded share — server creates a token-protected 24h link that
+  // renders the selected docs on a public page and offers a merged-PDF
+  // download.
+  createShare: (vehicleId: string, complianceDocIds: string[]) =>
+    api.post(`/compliance/share`, { vehicleId, complianceDocIds }),
 };
 
 // ── Insurance ──────────────────────────────────────────────
@@ -830,6 +855,7 @@ export const emiAPI = {
       lenderType?: "BANK" | "NBFC" | "PARTNER";
       lenderContactPhone?: string | null;
       lenderBranch?: string | null;
+      loanAccountNumber?: string | null;
       debitBankName?: string | null;
       debitAccountMasked?: string | null;
       debitAccountHolder?: string | null;
@@ -855,6 +881,7 @@ export const emiAPI = {
     if (data.lenderType) fd.append("lenderType", data.lenderType);
     if (data.lenderContactPhone) fd.append("lenderContactPhone", data.lenderContactPhone);
     if (data.lenderBranch) fd.append("lenderBranch", data.lenderBranch);
+    if (data.loanAccountNumber) fd.append("loanAccountNumber", data.loanAccountNumber);
     if (data.debitBankName) fd.append("debitBankName", data.debitBankName);
     if (data.debitAccountMasked) fd.append("debitAccountMasked", data.debitAccountMasked);
     if (data.debitAccountHolder) fd.append("debitAccountHolder", data.debitAccountHolder);
@@ -887,6 +914,7 @@ export const emiAPI = {
       lenderType: "BANK" | "NBFC" | "PARTNER";
       lenderContactPhone: string | null;
       lenderBranch: string | null;
+      loanAccountNumber: string | null;
       debitBankName: string | null;
       debitAccountMasked: string | null;
       debitAccountHolder: string | null;
@@ -894,6 +922,12 @@ export const emiAPI = {
       reminderLeadDays: number[];
       notes: string | null;
       status: "ACTIVE" | "PAUSED" | "DEFAULTED" | "CLOSED";
+      // Schedule-affecting fields — server regenerates unpaid installments.
+      principalAmount: number | null;
+      emiAmount: number;
+      totalInstallments: number;
+      startDate: string;
+      dueDayOfMonth: number;
     }>,
   ) => api.patch(`/emi/${planId}`, patch),
 
@@ -934,6 +968,12 @@ export const emiAPI = {
       action: "mark-paid-until",
       ...(untilDate ? { untilDate } : {}),
     }),
+
+  // Two-step close-plan flow. Step 1 emails an OTP; step 2 verifies it and
+  // flips the plan to CLOSED. Mirrors the doc-type / vehicle deletion gates.
+  requestClose: (planId: string) => api.post(`/emi/${planId}/close`),
+  confirmClose: (planId: string, otp: string) =>
+    api.post(`/emi/${planId}/close/confirm`, { otp }),
 };
 
 // ── Public (no auth) ────────────────────────────────────────

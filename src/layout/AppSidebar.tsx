@@ -371,7 +371,7 @@ const AppSidebar: React.FC = () => {
           }`}
         >
           <Image
-            src="/images/logo/yellow-track-logo4.jpeg"
+            src="/images/logo/yellow-track-logo.svg"
             alt="Yellow Track"
             fill
             sizes="80px"

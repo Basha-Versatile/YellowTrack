@@ -189,7 +189,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setPermissions(new Set());
     localStorage.removeItem("tenant");
     toast.info("Signed out", "You have been logged out successfully");
-    router.push("/auth");
+    router.push("/");
   }, [router, toast]);
 
   const logoutAll = useCallback(async () => {
@@ -203,7 +203,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setTenant(null);
     setPermissions(new Set());
     localStorage.removeItem("tenant");
-    router.push("/auth");
+    router.push("/");
   }, [router]);
 
   const updateProfile = useCallback(

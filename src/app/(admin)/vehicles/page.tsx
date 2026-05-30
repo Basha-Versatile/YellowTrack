@@ -227,7 +227,7 @@ export default function VehiclesPage() {
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Filtered by brand</span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 dark:bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 px-3 py-1 text-xs font-bold">
-            {brandFilter}
+            {brandFilter === "__none__" ? "Unbranded" : brandFilter}
             <button onClick={clearBrandFilter} className="hover:text-yellow-900 dark:hover:text-yellow-100" aria-label="Clear brand filter">
               <X className="w-3.5 h-3.5" strokeWidth={2.5} />
             </button>

@@ -10,6 +10,17 @@ const lifetimeFlag = z.preprocess(
   z.boolean().default(false),
 );
 
+// Optional, free-form document number (policy number, permit number, etc.).
+// Trimmed; "" is normalised to null so the model field stays clean.
+const optionalDocNumber = z.preprocess(
+  (val) => {
+    if (val === undefined || val === null) return undefined;
+    const s = String(val).trim();
+    return s.length === 0 ? null : s;
+  },
+  z.string().max(120).nullable().optional(),
+);
+
 export const uploadComplianceDocSchema = z.object({
   type: z
     .string()
@@ -17,6 +28,7 @@ export const uploadComplianceDocSchema = z.object({
     .min(1, "Document type is required")
     .max(80, "Document type must be at most 80 characters")
     .transform((v) => v.toUpperCase().replace(/[^A-Z0-9 _-]/g, "").replace(/\s+/g, "_")),
+  documentNumber: optionalDocNumber,
   issuedDate: optionalDate,
   expiryDate: optionalDate,
   lifetime: lifetimeFlag,

@@ -175,7 +175,7 @@ export default function PublicVehiclePage() {
         <div className="relative z-10 max-w-2xl mx-auto px-6 py-12 text-center">
           {/* Logo */}
           <div className="flex items-center justify-center gap-2.5 mb-6">
-            <img src="/images/logo/yellow-track-logo4.jpeg" alt="Yellow Track" className="w-11 h-11 rounded-xl object-contain" />
+            <img src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" className="w-11 h-11 rounded-xl object-contain" />
             <span className="text-xl font-extrabold tracking-tight">
               <span className="text-yellow-400">Yellow</span>
               <span className="text-white"> Track</span>

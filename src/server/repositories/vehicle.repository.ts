@@ -71,7 +71,17 @@ export async function findAll(
   if (vehicleUsage) extras.vehicleUsage = vehicleUsage;
   if (lifecycle) extras.status = lifecycle;
   if (brand) {
-    extras.brand = { $regex: `^${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+    // `__none__` is the dashboard's "Unbranded" sentinel — vehicles whose
+    // brand field is missing, null, or empty. Match exactly that.
+    if (brand === "__none__") {
+      extras.$or = [
+        { brand: null },
+        { brand: { $exists: false } },
+        { brand: "" },
+      ];
+    } else {
+      extras.brand = { $regex: `^${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+    }
   }
 
   if (status) {

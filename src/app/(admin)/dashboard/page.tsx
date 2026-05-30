@@ -542,7 +542,12 @@ function BrandCard({ brand, count }: { brand: string | null; count: number }) {
     ? { avatar: "bg-gray-100 dark:bg-gray-800", icon: "text-gray-400 dark:text-gray-500" }
     : brandColor(label);
   const Icon = isUnbranded ? null : BRAND_ICONS[label.toLowerCase()] ?? null;
-  const href = isUnbranded ? "/vehicles" : `/vehicles?brand=${encodeURIComponent(label)}`;
+  // `__none__` is the sentinel the vehicles list / repo recognises for
+  // "vehicles with no brand on file". A bare `/vehicles` link is wrong
+  // because it shows every vehicle, not just the unbranded ones.
+  const href = isUnbranded
+    ? "/vehicles?brand=__none__"
+    : `/vehicles?brand=${encodeURIComponent(label)}`;
 
   return (
     <Link

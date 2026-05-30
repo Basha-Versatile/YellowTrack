@@ -123,6 +123,7 @@ export async function updateExpiry(
   expiryDate: Date | null,
   status: string,
   issuedDate?: Date | null,
+  documentNumber?: string | null,
 ) {
   // Build the patch explicitly so passing `undefined` leaves the existing
   // value untouched, while passing `null` actively clears it (e.g. when the
@@ -133,6 +134,7 @@ export async function updateExpiry(
     lastVerifiedAt: new Date(),
   };
   if (issuedDate !== undefined) patch.issuedDate = issuedDate;
+  if (documentNumber !== undefined) patch.documentNumber = documentNumber;
   return ComplianceDocument.findOneAndUpdate(
     tenantFilter(ctx, { _id: id }),
     patch,

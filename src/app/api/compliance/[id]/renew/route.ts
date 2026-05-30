@@ -21,6 +21,8 @@ export const POST = withRoute<{ id: string }>(
     if (!oldDoc) throw new NotFoundError("Document not found");
 
     const expiryDateRaw = firstString(fields, "expiryDate");
+    const issuedDateRaw = firstString(fields, "issuedDate");
+    const docNumberRaw = firstString(fields, "documentNumber");
     const lifetimeRaw = firstString(fields, "lifetime");
     const isLifetime = lifetimeRaw === "true" || lifetimeRaw === "1";
     const finalExpiry = isLifetime
@@ -28,6 +30,9 @@ export const POST = withRoute<{ id: string }>(
       : expiryDateRaw
         ? new Date(expiryDateRaw)
         : null;
+    // issuedDate is optional; falls back to the renewal date so the history
+    // entry always has a "valid from" marker.
+    const finalIssued = issuedDateRaw ? new Date(issuedDateRaw) : new Date();
 
     const uploaded = manyFiles(files, "document");
     const urls = uploaded.map((f) => f.url);
@@ -36,6 +41,10 @@ export const POST = withRoute<{ id: string }>(
     const newDoc = await complianceRepo.renewDocument(ctx, params.id, {
       vehicleId: oldDoc.vehicleId,
       type: oldDoc.type,
+      // Carry the document number forward if explicitly provided; otherwise
+      // null on the new active doc (each renewal usually gets a new number).
+      documentNumber: docNumberRaw ? docNumberRaw.trim() : null,
+      issuedDate: finalIssued,
       expiryDate: finalExpiry,
       documentUrl: urls[0] ?? null,
       documentUrls: urls,

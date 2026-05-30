@@ -41,6 +41,9 @@ const emiPlanSchema = new Schema(
     },
     lenderContactPhone: { type: String, trim: true, default: null },
     lenderBranch: { type: String, trim: true, default: null },
+    // Loan Account Number — optional reference shown alongside the lender so
+    // users can match the plan against the lender's statements.
+    loanAccountNumber: { type: String, trim: true, default: null, maxlength: 60 },
 
     debitBankName: { type: String, trim: true, default: null },
     debitAccountMasked: { type: String, trim: true, default: null },

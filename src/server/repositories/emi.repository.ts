@@ -97,6 +97,25 @@ export async function insertManyPayments(
   return EMIPayment.insertMany(rows.map((r) => ({ ...stamp, ...r })));
 }
 
+/**
+ * Delete every installment row for a plan with installmentNumber strictly
+ * greater than the supplied cut-off (typically `paidInstallments`). Used when
+ * the user edits schedule fields — paid installments stay, unpaid future
+ * installments are dropped so the new schedule can be regenerated.
+ */
+export async function deletePaymentsAfter(
+  ctx: ScopedContext,
+  emiPlanId: string,
+  installmentNumberGt: number,
+) {
+  return EMIPayment.deleteMany(
+    tenantFilter(ctx, {
+      emiPlanId,
+      installmentNumber: { $gt: installmentNumberGt },
+    }),
+  );
+}
+
 export async function updatePayment(
   ctx: ScopedContext,
   id: string,

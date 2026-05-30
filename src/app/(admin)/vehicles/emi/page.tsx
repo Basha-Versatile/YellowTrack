@@ -40,6 +40,7 @@ type EmiPlanRow = {
   vehicleId: string;
   lenderName: string;
   lenderType: "BANK" | "NBFC" | "PARTNER";
+  loanAccountNumber: string | null;
   debitBankName: string | null;
   debitAccountMasked: string | null;
   principalAmount: number | null;
@@ -102,6 +103,9 @@ export default function EmiHubPage() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [loading, setLoading] = useState(true);
   const [creatingFor, setCreatingFor] = useState<VehicleBasic | null>(null);
+  // Schedule peek — opens an installments-table modal in place of jumping
+  // to the full vehicle detail page when "Schedule" is clicked in the list.
+  const [scheduleFor, setScheduleFor] = useState<{ planId: string; row: EmiPlanRow } | null>(null);
   const [openCreatePicker, setOpenCreatePicker] = useState(false);
   const [createPickerSelection, setCreatePickerSelection] = useState("");
   const [calMonth, setCalMonth] = useState(() => {
@@ -505,7 +509,11 @@ export default function EmiHubPage() {
               </thead>
               <tbody className="divide-y divide-gray-100/50 dark:divide-gray-800/50">
                 {filtered.map((r, i) => (
-                  <Row key={r.id ? String(r.id) : `row-${i}`} row={r} />
+                  <Row
+                    key={r.id ? String(r.id) : `row-${i}`}
+                    row={r}
+                    onOpenSchedule={() => setScheduleFor({ planId: r.id, row: r })}
+                  />
                 ))}
               </tbody>
             </table>
@@ -701,6 +709,14 @@ export default function EmiHubPage() {
             toast.success("EMI plan created", "Schedule generated successfully");
             await load();
           }}
+        />
+      )}
+
+      {scheduleFor && (
+        <SchedulePeekModal
+          planId={scheduleFor.planId}
+          row={scheduleFor.row}
+          onClose={() => setScheduleFor(null)}
         />
       )}
     </div>
@@ -1017,7 +1033,7 @@ function EmptyState({
   );
 }
 
-function Row({ row }: { row: EmiPlanRow }) {
+function Row({ row, onOpenSchedule }: { row: EmiPlanRow; onOpenSchedule: () => void }) {
   const due = daysUntil(row.nextDueDate);
   const dueChip = (() => {
     if (row.status !== "ACTIVE" || !row.nextDueDate) return "—";
@@ -1147,15 +1163,227 @@ function Row({ row }: { row: EmiPlanRow }) {
         </span>
       </td>
       <td className="px-5 py-3.5 text-right">
-        <Link
-          href={`/vehicles/${row.vehicleId}#emi`}
+        <button
+          type="button"
+          onClick={onOpenSchedule}
           className="inline-flex items-center gap-1 text-[11px] font-semibold text-yellow-700 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-300"
+          title="Preview the installment schedule"
         >
           <FileSpreadsheet className="w-3.5 h-3.5" />
           Schedule
-        </Link>
+        </button>
       </td>
     </tr>
+  );
+}
+
+// ── Schedule peek modal ────────────────────────────────────────────────────
+// Renders this plan's installment table inline so clicking "Schedule" doesn't
+// kick the user out of the EMI hub into the full vehicle page.
+
+type PeekPayment = {
+  id: string;
+  installmentNumber: number;
+  scheduledDate: string;
+  amount: number;
+  paidDate: string | null;
+  paidAmount: number | null;
+  status: "SCHEDULED" | "PAID" | "OVERDUE" | "PARTIAL" | "SKIPPED" | "BOUNCED";
+};
+
+const PEEK_STATUS_TINT: Record<PeekPayment["status"], string> = {
+  PAID: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+  SCHEDULED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  OVERDUE: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  BOUNCED: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  PARTIAL: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+  SKIPPED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500",
+};
+
+function SchedulePeekModal({
+  planId,
+  row,
+  onClose,
+}: {
+  planId: string;
+  row: EmiPlanRow;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const [payments, setPayments] = useState<PeekPayment[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const currentRowRef = useRef<HTMLTableRowElement | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    emiAPI
+      .getPlan(planId)
+      .then((res) => {
+        if (!alive) return;
+        const data = res.data?.data as { payments?: PeekPayment[] } | undefined;
+        setPayments(data?.payments ?? []);
+      })
+      .catch(() => {
+        if (!alive) return;
+        toast.error("Could not load schedule", "Try again in a moment");
+        setPayments([]);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+    // toast is intentionally excluded from deps — useToast returns a new ref each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planId]);
+
+  // Centre on the installment whose due date falls inside the current month.
+  const currentMonthIndex = useMemo(() => {
+    if (!payments) return -1;
+    const now = new Date();
+    return payments.findIndex((p) => {
+      const d = new Date(p.scheduledDate);
+      return (
+        d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      );
+    });
+  }, [payments]);
+
+  useEffect(() => {
+    if (!loading && currentRowRef.current) {
+      currentRowRef.current.scrollIntoView({ block: "center", behavior: "auto" });
+    }
+  }, [loading]);
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      className="w-[95%] max-w-4xl rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
+    >
+      <div className="flex flex-col max-h-[85vh]">
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 flex items-center justify-center">
+            <FileSpreadsheet className="w-5 h-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">
+              Installment schedule
+            </h3>
+            <p className="text-[11px] text-gray-400 truncate">
+              {row.vehicle ? `${row.vehicle.registrationNumber} · ` : ""}
+              {row.lenderName} · {row.totalInstallments} × {formatINR(row.emiAmount)}
+            </p>
+          </div>
+          <Link
+            href={`/vehicles/${row.vehicleId}#emi`}
+            className="text-[11px] font-semibold text-yellow-700 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-300 whitespace-nowrap"
+            title="Open the full vehicle page"
+          >
+            Open vehicle →
+          </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 flex items-center justify-center"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 overflow-y-auto">
+          {loading ? (
+            <p className="text-xs text-gray-400 text-center py-10">Loading…</p>
+          ) : !payments || payments.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-10">
+              No installments scheduled.
+            </p>
+          ) : (
+            <div className="rounded-lg border border-gray-100 dark:border-gray-800 overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 dark:bg-gray-800/50 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left">#</th>
+                    <th className="px-3 py-2 text-left">Due date</th>
+                    <th className="px-3 py-2 text-right">Amount</th>
+                    <th className="px-3 py-2 text-left">Paid on</th>
+                    <th className="px-3 py-2 text-right">Paid amount</th>
+                    <th className="px-3 py-2 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {payments.map((p, i) => {
+                    const isCurrent = i === currentMonthIndex;
+                    return (
+                      <tr
+                        key={p.id}
+                        ref={isCurrent ? currentRowRef : null}
+                        className={
+                          isCurrent
+                            ? "bg-yellow-50/70 dark:bg-yellow-500/10 outline outline-1 outline-yellow-300/60"
+                            : ""
+                        }
+                      >
+                        <td className="px-3 py-2 font-mono font-semibold text-gray-700 dark:text-gray-300">
+                          {p.installmentNumber}
+                          {isCurrent && (
+                            <span className="ml-1 inline-flex items-center text-[9px] font-bold uppercase tracking-wider text-yellow-700 dark:text-yellow-400">
+                              · this month
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300">
+                          {new Date(p.scheduledDate).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold text-gray-900 dark:text-white">
+                          {formatINR(p.amount)}
+                        </td>
+                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
+                          {p.paidDate
+                            ? new Date(p.paidDate).toLocaleDateString("en-IN", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })
+                            : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">
+                          {p.paidAmount != null ? formatINR(p.paidAmount) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span
+                            className={`inline-flex text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${PEEK_STATUS_TINT[p.status]}`}
+                          >
+                            {p.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -1333,6 +1561,7 @@ function CreateEmiModal({
     lenderType: "BANK" as "BANK" | "NBFC" | "PARTNER",
     lenderContactPhone: "",
     lenderBranch: "",
+    loanAccountNumber: "",
     debitBankName: "",
     debitAccountMasked: "",
     debitAccountHolder: "",
@@ -1432,6 +1661,7 @@ function CreateEmiModal({
         lenderType: form.lenderType,
         lenderContactPhone: form.lenderContactPhone.trim() || null,
         lenderBranch: form.lenderBranch.trim() || null,
+        loanAccountNumber: form.loanAccountNumber.trim() || null,
         debitBankName: form.debitBankName.trim() || null,
         debitAccountMasked: form.debitAccountMasked.trim() || null,
         debitAccountHolder: form.debitAccountHolder.trim() || null,
@@ -1524,6 +1754,15 @@ function CreateEmiModal({
                     value={form.lenderContactPhone}
                     onChange={(e) => set("lenderContactPhone", e.target.value)}
                     placeholder="Phone (optional)"
+                  />
+                </Field>
+                <Field label="Loan account number (LAN)">
+                  <input
+                    className="input"
+                    value={form.loanAccountNumber}
+                    onChange={(e) => set("loanAccountNumber", e.target.value)}
+                    placeholder="Optional · e.g. 50200000634900"
+                    maxLength={60}
                   />
                 </Field>
               </Grid2>

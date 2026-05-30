@@ -128,7 +128,7 @@ export default function ForgotPasswordPage() {
           <div className="px-6 sm:px-8 pt-7 pb-5">
             <div className="flex items-center gap-2.5 mb-5">
               <Image
-                src="/images/logo/yellow-track-logo4.jpeg"
+                src="/images/logo/yellow-track-logo.svg"
                 alt="Yellow Track"
                 width={40}
                 height={40}

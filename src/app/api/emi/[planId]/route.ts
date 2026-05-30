@@ -19,6 +19,7 @@ const updateSchema = z.object({
   lenderType: z.enum(["BANK", "NBFC", "PARTNER"]).optional(),
   lenderContactPhone: z.string().nullable().optional(),
   lenderBranch: z.string().nullable().optional(),
+  loanAccountNumber: z.string().max(60).nullable().optional(),
   debitBankName: z.string().nullable().optional(),
   debitAccountMasked: z.string().nullable().optional(),
   debitAccountHolder: z.string().nullable().optional(),
@@ -28,6 +29,13 @@ const updateSchema = z.object({
   reminderLeadDays: z.array(z.coerce.number().int().min(0).max(60)).optional(),
   notes: z.string().max(500).nullable().optional(),
   status: z.enum(["ACTIVE", "PAUSED", "DEFAULTED", "CLOSED"]).optional(),
+  // Schedule-affecting fields — service regenerates the unpaid tail when any
+  // of these change. principalAmount is just metadata.
+  principalAmount: z.coerce.number().min(0).nullable().optional(),
+  emiAmount: z.coerce.number().min(0).optional(),
+  totalInstallments: z.coerce.number().int().min(1).max(600).optional(),
+  startDate: z.string().min(1).optional(),
+  dueDayOfMonth: z.coerce.number().int().min(1).max(31).optional(),
 });
 
 export const GET = withRoute<{ planId: string }>(

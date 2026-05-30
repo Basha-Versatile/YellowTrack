@@ -17,6 +17,10 @@ const complianceDocumentSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     vehicleId: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true },
     type: { type: String, required: true }, // kept as string to support route_permit variants
+    // Optional identifier printed on the physical document — policy number,
+    // permit number, RC number, etc. Free-form, no validation, since each
+    // type has its own format.
+    documentNumber: { type: String, trim: true, default: null, maxlength: 120 },
     // `issuedDate` is the "valid from" date — the day the document was
     // issued / started being valid. Optional because legacy docs were
     // added before this field existed.
@@ -37,6 +41,10 @@ const complianceDocumentSchema = new Schema(
 complianceDocumentSchema.index({ vehicleId: 1, type: 1, isActive: 1 });
 
 export type ComplianceDocumentAttrs = InferSchemaType<typeof complianceDocumentSchema>;
+
+if (process.env.NODE_ENV !== "production" && models.ComplianceDocument) {
+  delete models.ComplianceDocument;
+}
 
 export const ComplianceDocument: Model<ComplianceDocumentAttrs> =
   (models.ComplianceDocument as Model<ComplianceDocumentAttrs>) ??

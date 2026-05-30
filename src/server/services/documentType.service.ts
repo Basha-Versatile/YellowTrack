@@ -105,15 +105,98 @@ export async function update(
     hasExpiry: boolean;
   }>,
 ) {
-  const dt = await getById(ctx, id) as unknown as {
+  const dt = (await getById(ctx, id)) as unknown as {
+    _id: unknown;
     isSystem: boolean;
     code: string;
+    name: string;
+    description?: string | null;
+    hasExpiry: boolean;
   };
-  if (dt.isSystem && data.code !== undefined && data.code !== dt.code) {
-    throw new BadRequestError("Cannot change the code of a system document type");
+
+  // System types are global rows (tenantId: null) shared across every tenant.
+  // Mutating one would leak edits to other tenants — instead, "fork" into a
+  // tenant-scoped clone with `clonedFromSystemCode` set so the list view hides
+  // the parent system row. ComplianceDocuments referencing the old code are
+  // migrated for this tenant only.
+  if (dt.isSystem) {
+    const newCode = (data.code ?? dt.code).trim().toUpperCase();
+    const newName = (data.name ?? dt.name).trim();
+    const newDescription = data.description ?? dt.description ?? undefined;
+    const newHasExpiry = data.hasExpiry ?? dt.hasExpiry;
+
+    // Re-use an existing fork for this tenant if one is already in place
+    // (covers the case where the tenant edits the same default twice).
+    const existingClone = await DocumentType.findOne({
+      tenantId: ctx.tenantId,
+      clonedFromSystemCode: dt.code,
+    });
+    if (existingClone) {
+      const cloneDoc = existingClone as unknown as { _id: unknown; code: string };
+      const oldCloneCode = cloneDoc.code;
+      // Block collision with another tenant-owned code under this tenant.
+      if (newCode !== oldCloneCode) {
+        const conflict = await DocumentType.findOne({
+          tenantId: ctx.tenantId,
+          code: newCode,
+          _id: { $ne: cloneDoc._id },
+        });
+        if (conflict) {
+          throw new ConflictError(
+            `Document type with code "${newCode}" already exists`,
+          );
+        }
+        await ComplianceDocument.updateMany(
+          tenantFilter(ctx, { type: oldCloneCode }),
+          { $set: { type: newCode } },
+        );
+      }
+      existingClone.set({
+        code: newCode,
+        name: newName,
+        description: newDescription,
+        hasExpiry: newHasExpiry,
+      });
+      await existingClone.save();
+      return existingClone;
+    }
+
+    // Fresh fork. The new code may collide with another tenant-owned row OR
+    // (when the user keeps the system code) with the system row — only the
+    // first matters because the system row lives under tenantId: null.
+    const conflict = await DocumentType.findOne({
+      tenantId: ctx.tenantId,
+      code: newCode,
+    });
+    if (conflict) {
+      throw new ConflictError(
+        `Document type with code "${newCode}" already exists`,
+      );
+    }
+    const clone = await DocumentType.create({
+      ...tenantStamp(ctx),
+      code: newCode,
+      name: newName,
+      description: newDescription,
+      hasExpiry: newHasExpiry,
+      isSystem: false,
+      isActive: true,
+      clonedFromSystemCode: dt.code,
+    });
+    // Migrate this tenant's existing compliance docs onto the new code, even
+    // if the code didn't change — the doc-type they now reference is the
+    // tenant clone (same code value), not the parent system row.
+    if (newCode !== dt.code) {
+      await ComplianceDocument.updateMany(
+        tenantFilter(ctx, { type: dt.code }),
+        { $set: { type: newCode } },
+      );
+    }
+    return clone;
   }
-  // Code rename — ensure uniqueness and migrate every ComplianceDocument that
-  // references the old code so existing rows don't become orphaned references.
+
+  // Non-system path — straight update on the tenant's own row. Code renames
+  // still migrate every ComplianceDocument referencing the old code.
   if (data.code !== undefined && data.code !== dt.code) {
     const dup = await repo.findByCode(ctx, data.code);
     if (dup) {

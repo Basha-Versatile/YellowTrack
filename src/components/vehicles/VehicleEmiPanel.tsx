@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Banknote,
   Plus,
+  Pencil,
   Building2,
   CalendarClock,
   CreditCard,
@@ -25,6 +26,7 @@ type EmiPlan = {
   lenderType: "BANK" | "NBFC" | "PARTNER";
   lenderContactPhone: string | null;
   lenderBranch: string | null;
+  loanAccountNumber: string | null;
   debitBankName: string | null;
   debitAccountMasked: string | null;
   debitAccountHolder: string | null;
@@ -106,15 +108,20 @@ export default function VehicleEmiPanel({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // Open the same modal in edit mode for the active plan.
+  const [editingPlan, setEditingPlan] = useState<EmiPlan | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [pendingUnpaid, setPendingUnpaid] = useState<EmiPayment | null>(null);
   const [unpaidLoading, setUnpaidLoading] = useState(false);
   const [pendingBulkPaid, setPendingBulkPaid] = useState(false);
   const [bulkPaidLoading, setBulkPaidLoading] = useState(false);
-  // Close-plan typed confirmation — guards against accidental clicks on the
-  // close button by requiring the literal word "CLOSE" to be typed.
+  // Close-plan two-step gate. Step 1 is a warning + "Send code" button;
+  // step 2 is the OTP entry. Mirrors the doc-type / vehicle deletion flows.
   const [closePromptOpen, setClosePromptOpen] = useState(false);
-  const [closeConfirmInput, setCloseConfirmInput] = useState("");
+  const [closeStep, setCloseStep] = useState<"warn" | "otp">("warn");
+  const [closeOtpInput, setCloseOtpInput] = useState("");
+  const [closeOtpRequesting, setCloseOtpRequesting] = useState(false);
+  const [closeOtpExpiresAt, setCloseOtpExpiresAt] = useState<Date | null>(null);
   const [closing, setClosing] = useState(false);
   // Installments table renders every row inside a scroll container so it
   // doesn't dominate the page on long plans. The row in the same month/year
@@ -345,8 +352,17 @@ export default function VehicleEmiPanel({
         {activePlan && activePlan.status === "ACTIVE" && (
           <div className="flex items-center gap-1.5">
             <button
+              onClick={() => setEditingPlan(activePlan)}
+              className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-yellow-50 hover:bg-yellow-100 text-yellow-700 text-xs font-semibold transition-colors dark:bg-yellow-500/10 dark:text-yellow-400 dark:hover:bg-yellow-500/20"
+              title="Edit this EMI plan"
+            >
+              <Pencil className="w-3 h-3" /> Edit plan
+            </button>
+            <button
               onClick={() => {
-                setCloseConfirmInput("");
+                setCloseStep("warn");
+                setCloseOtpInput("");
+                setCloseOtpExpiresAt(null);
                 setClosePromptOpen(true);
               }}
               className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
@@ -486,7 +502,7 @@ export default function VehicleEmiPanel({
           </div>
 
           {/* Lender / debit detail strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 text-[11px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5 text-[11px]">
             <DetailLine
               label="Branch / IFSC"
               value={activePlan.lenderBranch || "—"}
@@ -494,6 +510,10 @@ export default function VehicleEmiPanel({
             <DetailLine
               label="Lender contact"
               value={activePlan.lenderContactPhone || "—"}
+            />
+            <DetailLine
+              label="Loan account number"
+              value={activePlan.loanAccountNumber || "—"}
             />
             <DetailLine
               label="Debit from"
@@ -684,6 +704,20 @@ export default function VehicleEmiPanel({
         />
       )}
 
+      {editingPlan && (
+        <InlineCreateEmiModal
+          vehicleId={vehicleId}
+          vehicleLabel={`${vehicleRegistration} · ${vehicleMake} ${vehicleModel}`}
+          editPlan={editingPlan}
+          onClose={() => setEditingPlan(null)}
+          onCreated={async () => {
+            setEditingPlan(null);
+            toast.success("EMI plan updated", "Changes saved");
+            await loadPlans();
+          }}
+        />
+      )}
+
       <ConfirmDialog
         isOpen={pendingUnpaid !== null}
         title={
@@ -716,75 +750,194 @@ export default function VehicleEmiPanel({
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => !closing && setClosePromptOpen(false)}
+            onClick={() => !closing && !closeOtpRequesting && setClosePromptOpen(false)}
           />
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="p-6">
-              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 mb-4 mx-auto">
-                <Ban className="w-5 h-5" />
-              </div>
-              <h2 className="text-base font-bold text-gray-900 dark:text-white text-center">
-                Close this EMI plan?
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
-                Closing the plan with{" "}
-                <span className="font-semibold text-gray-700 dark:text-gray-300">
-                  {activePlan.lenderName}
-                </span>{" "}
-                will stop new reminders and mark it CLOSED. Existing
-                installments stay on file. This action is reversible from the
-                activity log.
-              </p>
-              <div className="mt-5">
-                <label className="block">
-                  <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
-                    Type <span className="font-mono text-red-600 dark:text-red-400">CLOSE</span> to confirm
-                  </span>
-                  <input
-                    autoFocus
-                    type="text"
-                    value={closeConfirmInput}
-                    onChange={(e) => setCloseConfirmInput(e.target.value)}
-                    placeholder="CLOSE"
-                    className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-sm font-mono uppercase tracking-wider text-gray-800 dark:text-gray-200 focus:border-red-400 focus:outline-none focus:ring-3 focus:ring-red-400/10"
-                  />
-                </label>
-              </div>
-            </div>
-            <div className="flex gap-2.5 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (closeConfirmInput.trim().toUpperCase() !== "CLOSE") return;
-                  setClosing(true);
-                  try {
-                    await handleStatusChange("CLOSED");
-                    setClosePromptOpen(false);
-                    setCloseConfirmInput("");
-                  } finally {
-                    setClosing(false);
-                  }
-                }}
-                disabled={
-                  closing ||
-                  closeConfirmInput.trim().toUpperCase() !== "CLOSE"
-                }
-                className="flex-1 h-10 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
-              >
-                {closing && (
-                  <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                )}
-                Close plan
-              </button>
-              <button
-                type="button"
-                onClick={() => !closing && setClosePromptOpen(false)}
-                disabled={closing}
-                className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                Cancel
-              </button>
-            </div>
+            {closeStep === "warn" ? (
+              <>
+                <div className="p-6">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 mb-4 mx-auto">
+                    <Ban className="w-5 h-5" />
+                  </div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white text-center">
+                    Close this EMI plan?
+                  </h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                    Closing the plan with{" "}
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">
+                      {activePlan.lenderName}
+                    </span>{" "}
+                    will stop new reminders and mark it CLOSED. Existing
+                    installments stay on file. This action is reversible from
+                    the activity log.
+                  </p>
+                  <p className="mt-3 text-[11px] text-amber-700 dark:text-amber-400 text-center">
+                    Continuing will email a one-time code to your registered
+                    address — you&apos;ll need to enter it to authorize closure.
+                  </p>
+                </div>
+                <div className="flex gap-2.5 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setCloseOtpRequesting(true);
+                      try {
+                        const res = await emiAPI.requestClose(activePlan.id);
+                        const expires = (
+                          res.data?.data as { expiresAt?: string } | undefined
+                        )?.expiresAt;
+                        setCloseOtpExpiresAt(expires ? new Date(expires) : null);
+                        setCloseStep("otp");
+                        toast.success(
+                          "Code sent",
+                          "Check your email for the 6-digit code",
+                        );
+                      } catch (err) {
+                        const msg =
+                          (err as { response?: { data?: { message?: string } } })
+                            ?.response?.data?.message ?? "Could not send code";
+                        toast.error("Send failed", msg);
+                      } finally {
+                        setCloseOtpRequesting(false);
+                      }
+                    }}
+                    disabled={closeOtpRequesting}
+                    className="flex-1 h-10 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                  >
+                    {closeOtpRequesting && (
+                      <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    )}
+                    Send authorization code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => !closeOtpRequesting && setClosePromptOpen(false)}
+                    disabled={closeOtpRequesting}
+                    className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-6">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 mb-4 mx-auto">
+                    <Ban className="w-5 h-5" />
+                  </div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white text-center">
+                    Enter authorization code
+                  </h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-2">
+                    We sent a 6-digit code to your registered email. Enter it
+                    below to close the EMI plan with{" "}
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">
+                      {activePlan.lenderName}
+                    </span>
+                    .
+                  </p>
+                  {closeOtpExpiresAt && (
+                    <p className="mt-1 text-[10px] text-gray-400 text-center">
+                      Code expires at{" "}
+                      {closeOtpExpiresAt.toLocaleTimeString("en-IN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      .
+                    </p>
+                  )}
+                  <div className="mt-5">
+                    <label className="block">
+                      <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+                        6-digit code
+                      </span>
+                      <input
+                        autoFocus
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={closeOtpInput}
+                        onChange={(e) =>
+                          setCloseOtpInput(e.target.value.replace(/\D/g, ""))
+                        }
+                        placeholder="••••••"
+                        className="w-full h-12 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-center text-2xl font-mono tracking-[0.5em] text-gray-800 dark:text-gray-200 focus:border-red-400 focus:outline-none focus:ring-3 focus:ring-red-400/10"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setCloseOtpRequesting(true);
+                        try {
+                          const res = await emiAPI.requestClose(activePlan.id);
+                          const expires = (
+                            res.data?.data as { expiresAt?: string } | undefined
+                          )?.expiresAt;
+                          setCloseOtpExpiresAt(expires ? new Date(expires) : null);
+                          setCloseOtpInput("");
+                          toast.success("New code sent", "Check your email");
+                        } catch (err) {
+                          const msg =
+                            (err as { response?: { data?: { message?: string } } })
+                              ?.response?.data?.message ?? "Could not resend";
+                          toast.error("Resend failed", msg);
+                        } finally {
+                          setCloseOtpRequesting(false);
+                        }
+                      }}
+                      disabled={closeOtpRequesting || closing}
+                      className="mt-2 text-[11px] text-yellow-700 dark:text-yellow-400 hover:underline disabled:opacity-50"
+                    >
+                      Resend code
+                    </button>
+                  </div>
+                </div>
+                <div className="flex gap-2.5 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!/^\d{6}$/.test(closeOtpInput.trim())) {
+                        toast.error("Invalid code", "Enter the 6-digit code");
+                        return;
+                      }
+                      setClosing(true);
+                      try {
+                        await emiAPI.confirmClose(activePlan.id, closeOtpInput.trim());
+                        toast.success("Plan closed", "EMI plan marked CLOSED");
+                        setClosePromptOpen(false);
+                        setCloseOtpInput("");
+                        setCloseStep("warn");
+                        await loadPlans();
+                      } catch (err) {
+                        const msg =
+                          (err as { response?: { data?: { message?: string } } })
+                            ?.response?.data?.message ?? "Close failed";
+                        toast.error("Could not close", msg);
+                      } finally {
+                        setClosing(false);
+                      }
+                    }}
+                    disabled={closing || !/^\d{6}$/.test(closeOtpInput.trim())}
+                    className="flex-1 h-10 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                  >
+                    {closing && (
+                      <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    )}
+                    Authorize & close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      !closing && !closeOtpRequesting && setClosePromptOpen(false)
+                    }
+                    disabled={closing || closeOtpRequesting}
+                    className="h-10 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -902,56 +1055,91 @@ function DetailLine({ label, value }: { label: string; value: string }) {
 function InlineCreateEmiModal({
   vehicleId,
   vehicleLabel,
+  editPlan = null,
   onClose,
   onCreated,
 }: {
   vehicleId: string;
   vehicleLabel: string;
+  // When provided, the modal switches to edit mode — pre-fills from this
+  // plan and sends a PATCH instead of POST. Schedule-affecting edits go
+  // through the service which regenerates the unpaid installment tail.
+  editPlan?: EmiPlan | null;
   onClose: () => void;
   onCreated: () => void | Promise<void>;
 }) {
   const toast = useToast();
+  const isEdit = editPlan !== null;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({
-    lenderName: "",
-    lenderType: "BANK" as "BANK" | "NBFC" | "PARTNER",
-    debitBankName: "",
-    debitAccountMasked: "",
-    emiAmount: "",
-    totalInstallments: "12",
-    startDate: new Date().toISOString().slice(0, 10),
-    dueDayOfMonth: "5",
-    notes: "",
-  });
+  const [form, setForm] = useState(() => ({
+    lenderName: editPlan?.lenderName ?? "",
+    lenderType: (editPlan?.lenderType ?? "BANK") as "BANK" | "NBFC" | "PARTNER",
+    loanAccountNumber: editPlan?.loanAccountNumber ?? "",
+    debitBankName: editPlan?.debitBankName ?? "",
+    debitAccountMasked: editPlan?.debitAccountMasked ?? "",
+    emiAmount: editPlan ? String(editPlan.emiAmount) : "",
+    totalInstallments: editPlan ? String(editPlan.totalInstallments) : "12",
+    startDate: editPlan
+      ? new Date(editPlan.startDate).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10),
+    dueDayOfMonth: editPlan ? String(editPlan.dueDayOfMonth) : "5",
+    notes: editPlan?.notes ?? "",
+  }));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSaving(true);
     try {
-      await emiAPI.create(vehicleId, {
-        lenderName: form.lenderName.trim(),
-        lenderType: form.lenderType,
-        debitBankName: form.debitBankName.trim() || null,
-        debitAccountMasked: form.debitAccountMasked.trim() || null,
-        emiAmount: Number(form.emiAmount),
-        totalInstallments: Number(form.totalInstallments),
-        startDate: form.startDate,
-        dueDayOfMonth: Number(form.dueDayOfMonth),
-        notes: form.notes.trim() || null,
-      });
+      if (isEdit && editPlan) {
+        await emiAPI.updatePlan(editPlan.id, {
+          lenderName: form.lenderName.trim(),
+          lenderType: form.lenderType,
+          loanAccountNumber: form.loanAccountNumber.trim() || null,
+          debitBankName: form.debitBankName.trim() || null,
+          debitAccountMasked: form.debitAccountMasked.trim() || null,
+          emiAmount: Number(form.emiAmount),
+          totalInstallments: Number(form.totalInstallments),
+          startDate: form.startDate,
+          dueDayOfMonth: Number(form.dueDayOfMonth),
+          notes: form.notes.trim() || null,
+        });
+      } else {
+        await emiAPI.create(vehicleId, {
+          lenderName: form.lenderName.trim(),
+          lenderType: form.lenderType,
+          loanAccountNumber: form.loanAccountNumber.trim() || null,
+          debitBankName: form.debitBankName.trim() || null,
+          debitAccountMasked: form.debitAccountMasked.trim() || null,
+          emiAmount: Number(form.emiAmount),
+          totalInstallments: Number(form.totalInstallments),
+          startDate: form.startDate,
+          dueDayOfMonth: Number(form.dueDayOfMonth),
+          notes: form.notes.trim() || null,
+        });
+      }
       await onCreated();
     } catch (err) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Failed to create EMI plan";
+          ?.message ?? (isEdit ? "Failed to update EMI plan" : "Failed to create EMI plan");
       setError(msg);
       toast.error("Save failed", msg);
     } finally {
       setSaving(false);
     }
   };
+
+  // Track whether schedule-affecting fields are being changed in edit mode
+  // so the UI can warn the user that the unpaid installment tail will be
+  // regenerated. Paid installments are never touched.
+  const scheduleDirty = isEdit && editPlan && (
+    Number(form.emiAmount) !== editPlan.emiAmount ||
+    Number(form.totalInstallments) !== editPlan.totalInstallments ||
+    Number(form.dueDayOfMonth) !== editPlan.dueDayOfMonth ||
+    form.startDate !== new Date(editPlan.startDate).toISOString().slice(0, 10)
+  );
 
   return (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
@@ -962,7 +1150,9 @@ function InlineCreateEmiModal({
       <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh]">
         <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 px-5 py-4 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-white">New EMI plan</h2>
+            <h2 className="text-base font-bold text-white">
+              {isEdit ? "Edit EMI plan" : "New EMI plan"}
+            </h2>
             <p className="text-white/80 text-[11px] mt-0.5">{vehicleLabel}</p>
           </div>
           <button
@@ -1050,6 +1240,17 @@ function InlineCreateEmiModal({
                   required
                 />
               </Tile>
+              <Tile label="Loan account number (LAN)">
+                <input
+                  className="input"
+                  value={form.loanAccountNumber}
+                  onChange={(e) =>
+                    setForm({ ...form, loanAccountNumber: e.target.value })
+                  }
+                  placeholder="Optional · e.g. 50200000634900"
+                  maxLength={60}
+                />
+              </Tile>
               <Tile label="Debit bank">
                 <input
                   className="input"
@@ -1078,6 +1279,15 @@ function InlineCreateEmiModal({
                 maxLength={500}
               />
             </Tile>
+            {scheduleDirty && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                You&apos;ve changed schedule fields. Paid installments stay as-is —
+                only unpaid installments will be regenerated with the new values.
+                {editPlan && editPlan.paidInstallments > 0 && (
+                  <> {editPlan.paidInstallments} installment(s) already paid will not change.</>
+                )}
+              </div>
+            )}
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
                 {error}
@@ -1093,7 +1303,13 @@ function InlineCreateEmiModal({
               {saving && (
                 <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
               )}
-              {saving ? "Creating…" : "Create EMI plan"}
+              {saving
+                ? isEdit
+                  ? "Saving…"
+                  : "Creating…"
+                : isEdit
+                  ? "Save changes"
+                  : "Create EMI plan"}
             </button>
             <button
               type="button"

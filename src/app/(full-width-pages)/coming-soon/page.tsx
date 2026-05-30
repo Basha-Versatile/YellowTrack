@@ -22,7 +22,7 @@ export default function ComingSoon() {
         <div className="mx-auto w-full max-w-[460px] text-center">
           <Link href="/" className="inline-block mb-6">
             <Image
-              src="/images/logo/yellow-track-logo4.jpeg"
+              src="/images/logo/yellow-track-logo.svg"
               alt="Yellow Track"
               width={64}
               height={64}

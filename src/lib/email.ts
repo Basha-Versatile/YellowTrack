@@ -548,6 +548,47 @@ export function docTypeDeletionOtpEmail(input: {
   };
 }
 
+export function emiPlanCloseOtpEmail(input: {
+  to: string;
+  recipientName: string;
+  lenderName: string;
+  registrationNumber: string;
+  otp: string;
+  expiresInMinutes: number;
+}): Email {
+  const text = [
+    `Hi ${input.recipientName},`,
+    "",
+    `Use the verification code below to confirm closing the EMI plan with ${input.lenderName} for vehicle ${input.registrationNumber}:`,
+    "",
+    `  Code: ${input.otp}`,
+    "",
+    `This code expires in ${input.expiresInMinutes} minutes. If you didn't request this, ignore this email — no changes have been made.`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p>Hi <strong>${escapeHtml(input.recipientName)}</strong>,</p>
+    <p>Use the verification code below to confirm closing the EMI plan with
+       <strong>${escapeHtml(input.lenderName)}</strong> for vehicle
+       <code style="background:#F3F4F6;padding:1px 6px;border-radius:4px">${escapeHtml(input.registrationNumber)}</code>:</p>
+    <div style="background:#F9FAFB;border:1px solid ${BORDER};border-radius:12px;padding:18px;margin:16px 0;text-align:center">
+      <div style="font-family:'SFMono-Regular',Menlo,Monaco,Consolas,monospace;font-size:30px;font-weight:800;letter-spacing:10px;color:${BRAND_DARK}">
+        ${escapeHtml(input.otp)}
+      </div>
+    </div>
+    <p style="color:#6B7280;font-size:12px">
+      This code expires in <strong>${input.expiresInMinutes} minutes</strong>.
+      If you didn't request this, no changes have been made.
+    </p>`;
+  return {
+    to: input.to,
+    subject: `Confirm EMI plan closure: ${input.lenderName}`,
+    text,
+    html: html("EMI plan closure code", bodyHtml),
+  };
+}
+
 export function brandRequestEmail(input: {
   to: string | string[];
   brandName: string;

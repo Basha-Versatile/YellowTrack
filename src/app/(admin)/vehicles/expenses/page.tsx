@@ -308,7 +308,7 @@ function VehicleExpensesContent() {
         <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 24px 0;border-bottom:3px solid #f59e0b;margin-bottom:24px">
           <div style="display:flex;align-items:center;gap:12px">
-            <img src="/images/logo/yellow-track-logo4.jpeg" style="width:40px;height:40px;border-radius:10px" />
+            <img src="/images/logo/yellow-track-logo.svg" style="width:40px;height:40px;border-radius:10px" />
             <div><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px"><span style="color:#f59e0b">Yellow</span> <span style="color:#1f2937">Track</span></div><div style="font-size:11px;color:#9ca3af;font-weight:500;letter-spacing:0.05em;text-transform:uppercase">Fleet Expense Report</div></div>
           </div>
           <div style="text-align:right;font-size:12px;color:#6b7280;line-height:1.7">
@@ -390,14 +390,14 @@ function VehicleExpensesContent() {
         <div style="margin-top:40px;border-top:3px solid #f59e0b;padding-top:28px;display:flex;align-items:center;justify-content:space-between">
           <!-- Left: branding -->
           <div>
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><img src="/images/logo/yellow-track-logo4.jpeg" style="width:28px;height:28px;border-radius:8px" /><span style="font-size:15px;font-weight:800"><span style="color:#f59e0b">Yellow</span> <span style="color:#1f2937">Track</span></span></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><img src="/images/logo/yellow-track-logo.svg" style="width:28px;height:28px;border-radius:8px" /><span style="font-size:15px;font-weight:800"><span style="color:#f59e0b">Yellow</span> <span style="color:#1f2937">Track</span></span></div>
             <div style="font-size:11px;color:#9ca3af;line-height:1.7">Fleet Management System<br>Confidential \u2014 Auto-generated report<br>${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</div>
           </div>
           <!-- Right: Approved stamp image + text -->
           <div style="flex-shrink:0;text-align:center">
             <img src="/images/approved-stamp.png" style="width:160px;height:160px" />
             <div style="margin-top:6px;font-size:9px;font-weight:800;letter-spacing:1px;color:#166534;text-transform:uppercase">Verified &amp; Approved by</div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-top:3px"><img src="/images/logo/yellow-track-logo4.jpeg" style="width:18px;height:18px;border-radius:4px;vertical-align:middle;position:relative;top:1px" /><span style="font-size:12px;font-weight:900;letter-spacing:0.5px"><span style="color:#f59e0b">Yellow</span> <span style="color:#1f2937">Track</span></span></div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-top:3px"><img src="/images/logo/yellow-track-logo.svg" style="width:18px;height:18px;border-radius:4px;vertical-align:middle;position:relative;top:1px" /><span style="font-size:12px;font-weight:900;letter-spacing:0.5px"><span style="color:#f59e0b">Yellow</span> <span style="color:#1f2937">Track</span></span></div>
           </div>
         </div>
 

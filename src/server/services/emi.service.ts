@@ -1,15 +1,19 @@
 import "server-only";
+import crypto from "crypto";
 import {
   BadRequestError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  UnauthorizedError,
 } from "@/lib/errors";
-import { Expense, Vehicle } from "@/models";
+import { EmiPlanCloseOtp, Expense, User, Vehicle } from "@/models";
 import {
   type ScopedContext,
+  tenantFilter,
   tenantStamp,
 } from "@/lib/auth/tenant-context";
+import { emiPlanCloseOtpEmail, sendEmail } from "@/lib/email";
 import * as emiRepo from "../repositories/emi.repository";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -88,6 +92,7 @@ export type CreateEmiPlanInput = {
   lenderType?: "BANK" | "NBFC" | "PARTNER";
   lenderContactPhone?: string | null;
   lenderBranch?: string | null;
+  loanAccountNumber?: string | null;
   debitBankName?: string | null;
   debitAccountMasked?: string | null;
   debitAccountHolder?: string | null;
@@ -166,6 +171,7 @@ export async function createEmiPlan(
     lenderType: input.lenderType ?? "BANK",
     lenderContactPhone: input.lenderContactPhone ?? null,
     lenderBranch: input.lenderBranch ?? null,
+    loanAccountNumber: input.loanAccountNumber ?? null,
     debitBankName: input.debitBankName ?? null,
     debitAccountMasked: input.debitAccountMasked ?? null,
     debitAccountHolder: input.debitAccountHolder ?? null,
@@ -262,23 +268,96 @@ export async function updateEmiPlan(
     lenderType: "BANK" | "NBFC" | "PARTNER";
     lenderContactPhone: string | null;
     lenderBranch: string | null;
+    loanAccountNumber: string | null;
     debitBankName: string | null;
     debitAccountMasked: string | null;
     debitAccountHolder: string | null;
     reminderChannels: Array<"EMAIL" | "WHATSAPP" | "IN_APP">;
     reminderLeadDays: number[];
     notes: string | null;
+    // Schedule-affecting fields — paid installments stay frozen; the unpaid
+    // tail is deleted and regenerated from the new values.
+    principalAmount: number | null;
+    emiAmount: number;
+    totalInstallments: number;
+    startDate: string | Date;
+    dueDayOfMonth: number;
   }>,
 ) {
   const plan = await emiRepo.findPlanById(ctx, id);
   if (!plan) throw new NotFoundError("EMI plan not found");
+
   const cleaned: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
     cleaned[k] = v;
   }
   if (Object.keys(cleaned).length === 0) return plan;
-  return emiRepo.updatePlan(ctx, id, cleaned);
+
+  // Identify whether the patch touches the schedule. principalAmount is just
+  // metadata — it does NOT trigger a schedule rebuild.
+  const scheduleKeys = ["emiAmount", "totalInstallments", "startDate", "dueDayOfMonth"] as const;
+  const touchesSchedule = scheduleKeys.some((k) => k in cleaned);
+
+  if (touchesSchedule) {
+    const p = plan as unknown as {
+      emiAmount: number;
+      totalInstallments: number;
+      startDate: Date;
+      dueDayOfMonth: number;
+      paidInstallments: number;
+    };
+    const newEmiAmount = (cleaned.emiAmount as number | undefined) ?? p.emiAmount;
+    const newTotal = (cleaned.totalInstallments as number | undefined) ?? p.totalInstallments;
+    const newStartDate = cleaned.startDate
+      ? new Date(cleaned.startDate as string | Date)
+      : new Date(p.startDate);
+    const newDueDay = (cleaned.dueDayOfMonth as number | undefined) ?? p.dueDayOfMonth;
+    const paidCount = p.paidInstallments ?? 0;
+
+    if (newTotal < paidCount) {
+      throw new BadRequestError(
+        `Total installments (${newTotal}) cannot be less than the number already paid (${paidCount}). Mark installments unpaid first if you need to shrink the plan.`,
+      );
+    }
+    if (!newEmiAmount || newEmiAmount <= 0) {
+      throw new BadRequestError("EMI amount must be greater than zero");
+    }
+    if (!Number.isInteger(newDueDay) || newDueDay < 1 || newDueDay > 31) {
+      throw new BadRequestError("Due day of month must be between 1 and 31");
+    }
+    if (Number.isNaN(newStartDate.getTime())) {
+      throw new BadRequestError("Invalid start date");
+    }
+
+    // Drop unpaid future installments. Paid (and otherwise locked) rows stay.
+    await emiRepo.deletePaymentsAfter(ctx, id, paidCount);
+
+    // Rebuild only the tail (installmentNumber > paidCount) using the new
+    // schedule parameters. Insert with explicit installmentNumber so they
+    // pick up where the paid rows left off.
+    if (paidCount < newTotal) {
+      const tail = buildSchedule(newStartDate, newTotal, newDueDay, newEmiAmount)
+        .filter((row) => row.installmentNumber > paidCount);
+      await emiRepo.insertManyPayments(
+        ctx,
+        tail.map((row) => ({
+          emiPlanId: id,
+          vehicleId: String((plan as unknown as { vehicleId: unknown }).vehicleId),
+          ...row,
+        })),
+      );
+    }
+
+    cleaned.endDate = computeEndDate(newStartDate, newTotal);
+    if (cleaned.startDate) cleaned.startDate = newStartDate;
+  }
+
+  const updated = await emiRepo.updatePlan(ctx, id, cleaned);
+  if (touchesSchedule) {
+    await refreshNextDueDate(ctx, id);
+  }
+  return updated;
 }
 
 export async function setPlanStatus(
@@ -297,6 +376,103 @@ export async function setPlanStatus(
     patch.nextDueDate = null;
   }
   return emiRepo.updatePlan(ctx, id, patch);
+}
+
+// ── Close-plan OTP gate ────────────────────────────────────────────────────
+// Closing a plan is reversible from the activity log, but it stops reminders
+// and locks the schedule — easy to do by mistake on a touchscreen. The OTP
+// gate matches the vehicle-deletion / doc-type-deletion patterns: warning →
+// request code → enter code → close.
+
+const PLAN_CLOSE_OTP_TTL_MIN = 10;
+
+export async function requestPlanCloseOtp(
+  ctx: ScopedContext,
+  planId: string,
+  userId: string,
+): Promise<{ expiresAt: Date }> {
+  const plan = await emiRepo.findPlanById(ctx, planId);
+  if (!plan) throw new NotFoundError("EMI plan not found");
+  if (plan.status === "CLOSED") {
+    throw new ConflictError("This EMI plan is already closed");
+  }
+
+  // Fresh request invalidates any prior code for the same user + plan.
+  await EmiPlanCloseOtp.deleteMany(
+    tenantFilter(ctx, { emiPlanId: planId, userId }),
+  );
+  const otp = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+  const expiresAt = new Date(Date.now() + PLAN_CLOSE_OTP_TTL_MIN * 60 * 1000);
+  await EmiPlanCloseOtp.create({
+    ...tenantStamp(ctx),
+    emiPlanId: planId,
+    userId,
+    otp,
+    expiresAt,
+  });
+
+  // Best-effort email — log failures, don't surface to the caller.
+  try {
+    const [user, vehicle] = await Promise.all([
+      User.findById(userId).select("email name").lean(),
+      Vehicle.findById((plan as { vehicleId: unknown }).vehicleId)
+        .select("registrationNumber")
+        .lean(),
+    ]);
+    const email = (user as { email?: string } | null)?.email;
+    if (email) {
+      await sendEmail(
+        emiPlanCloseOtpEmail({
+          to: email,
+          recipientName: (user as { name?: string } | null)?.name ?? "there",
+          lenderName: (plan as { lenderName: string }).lenderName,
+          registrationNumber:
+            (vehicle as { registrationNumber?: string } | null)
+              ?.registrationNumber ?? "—",
+          otp,
+          expiresInMinutes: PLAN_CLOSE_OTP_TTL_MIN,
+        }),
+      );
+    }
+  } catch (err) {
+    console.error(
+      "[emi.requestPlanCloseOtp] email failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  return { expiresAt };
+}
+
+export async function confirmPlanClose(
+  ctx: ScopedContext,
+  planId: string,
+  userId: string,
+  otp: string,
+) {
+  const cleanOtp = otp.trim();
+  if (!/^\d{6}$/.test(cleanOtp)) {
+    throw new BadRequestError("Enter the 6-digit code from the email");
+  }
+  const row = await EmiPlanCloseOtp.findOne(
+    tenantFilter(ctx, { emiPlanId: planId, userId }),
+  ).sort({ createdAt: -1 });
+  if (!row) {
+    throw new UnauthorizedError(
+      "Code expired or not found. Request a new one.",
+    );
+  }
+  const r = row as unknown as { otp: string; expiresAt: Date };
+  if (r.expiresAt.getTime() < Date.now()) {
+    await EmiPlanCloseOtp.deleteOne({ _id: (row as { _id: unknown })._id });
+    throw new UnauthorizedError("Code expired. Request a new one.");
+  }
+  if (r.otp !== cleanOtp) {
+    throw new UnauthorizedError("Incorrect code");
+  }
+  // Burn the OTP first so a second click can't replay it.
+  await EmiPlanCloseOtp.deleteOne({ _id: (row as { _id: unknown })._id });
+  return setPlanStatus(ctx, planId, "CLOSED");
 }
 
 /**

@@ -50,6 +50,8 @@ export {
   DocTypeDeletionOtp,
   type DocTypeDeletionOtpAttrs,
 } from "./DocTypeDeletionOtp";
+export { EmiPlanCloseOtp, type EmiPlanCloseOtpAttrs } from "./EmiPlanCloseOtp";
+export { DocumentShareLink, type DocumentShareLinkAttrs } from "./DocumentShareLink";
 export {
   InsurancePolicy,
   type InsurancePolicyAttrs,

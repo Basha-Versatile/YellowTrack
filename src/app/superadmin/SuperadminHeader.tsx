@@ -52,7 +52,7 @@ const SuperadminHeader: React.FC = () => {
 
           <Link href="/superadmin" className="xl:hidden flex items-center gap-2">
             <img
-              src="/images/logo/yellow-track-logo4.jpeg"
+              src="/images/logo/yellow-track-logo.svg"
               alt="Yellow Track"
               className="w-9 h-9 rounded-lg object-contain"
             />

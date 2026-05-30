@@ -24,9 +24,32 @@ function readScope(ctx: ScopedContext): Record<string, unknown> {
 }
 
 export async function findAll(ctx: ScopedContext) {
-  return DocumentType.find(readScope(ctx))
-    .sort({ isSystem: -1, name: 1 })
-    .lean();
+  // 1. Tenant-owned doc types (including forked clones of system defaults).
+  // 2. System doc types — but suppress any whose code has been forked by this
+  //    tenant, so the list shows the tenant's edited variant instead of both.
+  if (isCrossTenant(ctx)) {
+    return DocumentType.find({ isActive: true })
+      .sort({ isSystem: -1, name: 1 })
+      .lean();
+  }
+  const [tenantRows, systemRows] = await Promise.all([
+    DocumentType.find({ isActive: true, tenantId: ctx.tenantId })
+      .sort({ name: 1 })
+      .lean(),
+    DocumentType.find({ isActive: true, tenantId: null })
+      .sort({ name: 1 })
+      .lean(),
+  ]);
+  const shadowedSystemCodes = new Set(
+    tenantRows
+      .map((r) => (r as { clonedFromSystemCode?: string | null }).clonedFromSystemCode)
+      .filter((c): c is string => Boolean(c)),
+  );
+  const visibleSystem = systemRows.filter(
+    (r) => !shadowedSystemCodes.has((r as { code: string }).code),
+  );
+  // System rows first (matches old ordering), then tenant rows.
+  return [...visibleSystem, ...tenantRows];
 }
 
 export async function findById(ctx: ScopedContext, id: string) {

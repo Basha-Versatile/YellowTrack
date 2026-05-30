@@ -53,6 +53,7 @@ export const PUT = withRoute<{ id: string }>(
       finalExpiry,
       status,
       finalIssued,
+      input.documentNumber as string | null | undefined,
     );
     const d = doc as { type?: string };
     const b = before as

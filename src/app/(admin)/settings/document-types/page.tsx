@@ -104,7 +104,10 @@ export default function DocumentTypesMastersPage() {
           description: formDescription.trim() || undefined,
           hasExpiry: formHasExpiry,
         };
-        if (!editing.isSystem && formCode.trim() && formCode.trim() !== editing.code) {
+        // System types fork on edit (server clones into the tenant scope) —
+        // send the code along even if it matches, so the server has the
+        // tenant's chosen value when forking.
+        if (formCode.trim() && (editing.isSystem || formCode.trim() !== editing.code)) {
           payload.code = formCode.trim();
         }
         await documentTypeAPI.update(editing.id ?? editing._id, payload);
@@ -289,14 +292,13 @@ export default function DocumentTypesMastersPage() {
                 type="text"
                 value={formCode}
                 onChange={(e) => setFormCode(e.target.value)}
-                disabled={!!editing && !!editing.isSystem}
                 placeholder="e.g. ALL_INDIA_PERMIT"
-                className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-mono uppercase text-gray-900 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:bg-gray-50 dark:disabled:bg-gray-800/40 disabled:text-gray-400"
+                className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-mono uppercase text-gray-900 focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
               />
               <p className="text-[10px] text-gray-400 mt-1">
                 Unique identifier. Uppercase, no spaces.{" "}
                 {editing && editing.isSystem
-                  ? "System type — code is locked."
+                  ? "Default type — saving creates your own copy for this tenant and migrates existing documents."
                   : editing
                     ? "Renaming will update every vehicle document that references this code."
                     : ""}

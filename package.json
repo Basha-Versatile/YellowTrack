@@ -41,6 +41,7 @@
     "mongoose": "^8.23.0",
     "next": "^16.2.4",
     "nodemailer": "^8.0.8",
+    "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
     "prismjs": "^1.30.0",
     "qrcode": "^1.5.4",
