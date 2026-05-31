@@ -18,12 +18,12 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       <header className="sticky top-0 z-40 backdrop-blur-md bg-white/80 dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-900">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
-            <span className="relative w-9 h-9 rounded-lg overflow-hidden">
+            <span className="relative w-12 h-12">
               <Image
                 src="/images/logo/yellow-track-logo.svg"
                 alt="Yellow Track"
                 fill
-                sizes="36px"
+                sizes="48px"
                 className="object-contain"
                 priority
               />

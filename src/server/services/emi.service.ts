@@ -84,6 +84,33 @@ async function refreshNextDueDate(ctx: ScopedContext, planId: string) {
   });
 }
 
+/**
+ * Self-heal `nextDueDate` on read for ACTIVE plans where it ended up null —
+ * usually because the plan was created or modified before the persist path
+ * was wired up, or because a partial write skipped the refresh. Recomputes
+ * from the live payments and patches the row so the dashboard / vehicle
+ * panel show the correct "Next due".
+ *
+ * Safe to call on every read: it short-circuits when the field is already
+ * set or when the plan isn't ACTIVE.
+ */
+async function ensureNextDueDate<T extends Record<string, unknown>>(
+  ctx: ScopedContext,
+  plan: T,
+): Promise<T> {
+  const status = (plan as { status?: string }).status;
+  const nextDueDate = (plan as { nextDueDate?: unknown }).nextDueDate;
+  if (status !== "ACTIVE" || nextDueDate) return plan;
+  const planId = String((plan as { _id?: unknown })._id ?? "");
+  if (!planId) return plan;
+  const next = await emiRepo.findNextScheduledPayment(ctx, planId);
+  if (!next) return plan;
+  await emiRepo.updatePlan(ctx, planId, {
+    nextDueDate: next.scheduledDate,
+  });
+  return { ...plan, nextDueDate: next.scheduledDate } as T;
+}
+
 // ── Plan input ──────────────────────────────────────────────────────────────
 
 export type CreateEmiPlanInput = {
@@ -243,21 +270,25 @@ export async function listEmiPlans(
 export async function getEmiPlan(ctx: ScopedContext, id: string) {
   const plan = await emiRepo.findPlanById(ctx, id);
   if (!plan) throw new NotFoundError("EMI plan not found");
-  return plan;
+  return ensureNextDueDate(ctx, plan as Record<string, unknown>);
 }
 
 export async function getEmiPlansForVehicle(
   ctx: ScopedContext,
   vehicleId: string,
 ) {
-  return emiRepo.findPlansByVehicleId(ctx, vehicleId);
+  const plans = await emiRepo.findPlansByVehicleId(ctx, vehicleId);
+  return Promise.all(
+    plans.map((p) => ensureNextDueDate(ctx, p as Record<string, unknown>)),
+  );
 }
 
 export async function getEmiSchedule(ctx: ScopedContext, planId: string) {
   const plan = await emiRepo.findPlanById(ctx, planId);
   if (!plan) throw new NotFoundError("EMI plan not found");
   const payments = await emiRepo.findPaymentsByPlan(ctx, planId);
-  return { plan, payments };
+  const fixed = await ensureNextDueDate(ctx, plan as Record<string, unknown>);
+  return { plan: fixed, payments };
 }
 
 export async function updateEmiPlan(
@@ -358,6 +389,48 @@ export async function updateEmiPlan(
     await refreshNextDueDate(ctx, id);
   }
   return updated;
+}
+
+/**
+ * Append amortization-sheet files (PDFs / images) to an existing plan and
+ * keep the singular `scheduleDocumentUrl` pointed at the first file so older
+ * readers don't break.
+ */
+export async function appendScheduleFiles(
+  ctx: ScopedContext,
+  id: string,
+  urls: string[],
+) {
+  const plan = await emiRepo.findPlanById(ctx, id);
+  if (!plan) throw new NotFoundError("EMI plan not found");
+  if (urls.length === 0) return plan;
+  const existing = (plan as unknown as { scheduleDocumentUrls?: string[] })
+    .scheduleDocumentUrls ?? [];
+  const merged = [...existing, ...urls];
+  return emiRepo.updatePlan(ctx, id, {
+    scheduleDocumentUrls: merged,
+    scheduleDocumentUrl: merged[0] ?? null,
+  });
+}
+
+/**
+ * Drop one schedule-document URL from a plan. The singular pointer follows
+ * the surviving first URL.
+ */
+export async function removeScheduleFile(
+  ctx: ScopedContext,
+  id: string,
+  url: string,
+) {
+  const plan = await emiRepo.findPlanById(ctx, id);
+  if (!plan) throw new NotFoundError("EMI plan not found");
+  const existing = (plan as unknown as { scheduleDocumentUrls?: string[] })
+    .scheduleDocumentUrls ?? [];
+  const remaining = existing.filter((u) => u !== url);
+  return emiRepo.updatePlan(ctx, id, {
+    scheduleDocumentUrls: remaining,
+    scheduleDocumentUrl: remaining[0] ?? null,
+  });
 }
 
 export async function setPlanStatus(
@@ -693,11 +766,18 @@ export async function getEmiHub(
     dueWithinDays?: number | null;
   } = {},
 ) {
-  const [rows, byStatus, monthlyOutflow] = await Promise.all([
+  const [rawRows, byStatus, monthlyOutflow] = await Promise.all([
     emiRepo.findHubRows(ctx, filters),
     emiRepo.countByStatus(ctx),
     emiRepo.sumMonthlyOutflow(ctx),
   ]);
+
+  // Self-heal nextDueDate for any ACTIVE rows where it leaked through as
+  // null. Walks the list serially to keep DB pressure low; on a fresh
+  // dataset this is a no-op because the field is already populated.
+  const rows = await Promise.all(
+    rawRows.map((r) => ensureNextDueDate(ctx, r as Record<string, unknown>)),
+  );
 
   const today = new Date();
   const week = new Date();
@@ -706,12 +786,13 @@ export async function getEmiHub(
   let duesThisWeek = 0;
   let defaulters = 0;
   for (const r of rows) {
-    if (r.status === "DEFAULTED") defaulters += 1;
+    const row = r as { status?: string; nextDueDate?: Date | string | null };
+    if (row.status === "DEFAULTED") defaulters += 1;
     if (
-      r.status === "ACTIVE" &&
-      r.nextDueDate &&
-      new Date(r.nextDueDate) >= today &&
-      new Date(r.nextDueDate) <= week
+      row.status === "ACTIVE" &&
+      row.nextDueDate &&
+      new Date(row.nextDueDate) >= today &&
+      new Date(row.nextDueDate) <= week
     ) {
       duesThisWeek += 1;
     }

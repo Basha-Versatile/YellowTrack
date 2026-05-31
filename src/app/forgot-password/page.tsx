@@ -130,9 +130,9 @@ export default function ForgotPasswordPage() {
               <Image
                 src="/images/logo/yellow-track-logo.svg"
                 alt="Yellow Track"
-                width={40}
-                height={40}
-                className="w-10 h-10 rounded-xl object-contain"
+                width={64}
+                height={64}
+                className="w-16 h-16 object-contain"
               />
               <span className="text-lg font-extrabold tracking-tight">
                 <span className="text-yellow-500">Yellow</span>

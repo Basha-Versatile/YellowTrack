@@ -102,7 +102,7 @@ export default function AuthPage() {
 
   const logo = (
     <div className="mb-2 flex items-center gap-2.5">
-      <Image src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" width={60} height={60} className="w-30 h-30 rounded-xl object-contain" />
+      <Image src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" width={120} height={120} className="w-40 h-40 object-contain" />
       {/* <span className="text-xl font-extrabold tracking-tight">
         <span className="text-yellow-500">Yellow</span>
         <span className="text-gray-900 dark:text-white"> Track</span>
@@ -343,7 +343,7 @@ export default function AuthPage() {
                     isSignUp ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6 pointer-events-none"
                   }`}
                 >
-                  <Image src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" width={80} height={80} className="w-20 h-20 rounded-2xl object-contain mb-6" />
+                  <Image src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" width={112} height={112} className="w-28 h-28 object-contain mb-6" />
                   <h2 className="text-4xl font-black text-gray-900 dark:text-white mb-3 tracking-tight leading-[1.1]">
                     Welcome<br />Back!
                   </h2>
@@ -364,7 +364,7 @@ export default function AuthPage() {
                     !isSignUp ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6 pointer-events-none"
                   }`}
                 >
-                  <Image src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" width={80} height={80} className="w-20 h-20 rounded-2xl object-contain mb-6" />
+                  <Image src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" width={120} height={120} className="w-35 h-35 object-contain mb-6" />
                   <h2 className="text-4xl font-black text-gray-900 dark:text-white mb-3 tracking-tight leading-[1.1]">
                     Join<br />Yellow Track
                   </h2>

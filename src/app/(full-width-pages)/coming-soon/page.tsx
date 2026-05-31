@@ -24,9 +24,9 @@ export default function ComingSoon() {
             <Image
               src="/images/logo/yellow-track-logo.svg"
               alt="Yellow Track"
-              width={64}
-              height={64}
-              className="rounded-xl object-contain"
+              width={112}
+              height={112}
+              className="w-28 h-28 object-contain mx-auto"
             />
           </Link>
 

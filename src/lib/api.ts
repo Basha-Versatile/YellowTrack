@@ -743,6 +743,85 @@ export const complianceAPI = {
     api.post(`/compliance/share`, { vehicleId, complianceDocIds }),
 };
 
+// ── Custom Compliance ─────────────────────────────────────────────────────
+// User-defined "documents bank" — groups of arbitrary documents (GST cert,
+// labour licence, partnership deed, etc.) that aren't tied to a vehicle or
+// driver. Mirrors the vehicle compliance APIs but with groups as the owner.
+export const customComplianceAPI = {
+  // Groups
+  listGroups: () => api.get("/custom-compliance/groups"),
+  createGroup: (data: {
+    name: string;
+    description?: string | null;
+    color?: string | null;
+  }) => api.post("/custom-compliance/groups", data),
+  getGroup: (id: string) => api.get(`/custom-compliance/groups/${id}`),
+  updateGroup: (
+    id: string,
+    data: { name?: string; description?: string | null; color?: string | null },
+  ) => api.patch(`/custom-compliance/groups/${id}`, data),
+  deleteGroup: (id: string) => api.delete(`/custom-compliance/groups/${id}`),
+
+  // Documents inside a group
+  listDocuments: (groupId: string) =>
+    api.get(`/custom-compliance/groups/${groupId}/documents`),
+  createDocument: (
+    groupId: string,
+    data: {
+      label: string;
+      documentNumber?: string | null;
+      issuedDate?: string | null;
+      expiryDate?: string | null;
+      lifetime?: boolean;
+      notes?: string | null;
+      documents?: File[] | null;
+    },
+  ) => {
+    const fd = new FormData();
+    fd.append("label", data.label);
+    if (data.documentNumber) fd.append("documentNumber", data.documentNumber);
+    if (data.issuedDate) fd.append("issuedDate", data.issuedDate);
+    if (data.expiryDate) fd.append("expiryDate", data.expiryDate);
+    if (data.lifetime) fd.append("lifetime", "true");
+    if (data.notes) fd.append("notes", data.notes);
+    if (data.documents) {
+      for (const f of data.documents) fd.append("document", f);
+    }
+    return api.post(`/custom-compliance/groups/${groupId}/documents`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  updateDocument: (
+    docId: string,
+    data: {
+      label?: string;
+      documentNumber?: string | null;
+      issuedDate?: string | null;
+      expiryDate?: string | null;
+      lifetime?: boolean;
+      notes?: string | null;
+    },
+  ) => api.patch(`/custom-compliance/documents/${docId}`, data),
+  deleteDocument: (docId: string) =>
+    api.delete(`/custom-compliance/documents/${docId}`),
+
+  // File-level operations
+  appendFiles: (docId: string, files: File[]) => {
+    const fd = new FormData();
+    for (const f of files) fd.append("document", f);
+    return api.post(`/custom-compliance/documents/${docId}/upload`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  removeFile: (docId: string, url: string) =>
+    api.delete(`/custom-compliance/documents/${docId}/upload`, { data: { url } }),
+
+  // Share — provide groupId for a whole-group share, or documentIds for a
+  // curated share. Returns { token, url, expiresAt }.
+  createShare: (input: { groupId?: string; documentIds?: string[] }) =>
+    api.post(`/custom-compliance/share`, input),
+};
+
 // ── Insurance ──────────────────────────────────────────────
 export const insuranceAPI = {
   getAll: (params?: { page?: number; limit?: number; status?: string; search?: string }) =>
@@ -974,6 +1053,18 @@ export const emiAPI = {
   requestClose: (planId: string) => api.post(`/emi/${planId}/close`),
   confirmClose: (planId: string, otp: string) =>
     api.post(`/emi/${planId}/close/confirm`, { otp }),
+
+  // Manage the amortization-sheet files on an existing plan — the Edit
+  // modal uses these to show existing files, append more, or remove one.
+  appendScheduleFiles: (planId: string, files: File[]) => {
+    const fd = new FormData();
+    for (const f of files) fd.append("scheduleDocument", f);
+    return api.post(`/emi/${planId}/schedule-files`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  removeScheduleFile: (planId: string, url: string) =>
+    api.delete(`/emi/${planId}/schedule-files`, { data: { url } }),
 };
 
 // ── Public (no auth) ────────────────────────────────────────

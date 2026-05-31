@@ -14,6 +14,9 @@ import {
   CheckCircle2,
   Pause,
   Ban,
+  ExternalLink,
+  FileText,
+  Upload,
   X,
   IndianRupee,
   Calendar,
@@ -41,6 +44,8 @@ type EmiPlan = {
   nextDueDate: string | null;
   reminderChannels: Array<"EMAIL" | "WHATSAPP" | "IN_APP">;
   notes: string | null;
+  scheduleDocumentUrl?: string | null;
+  scheduleDocumentUrls?: string[];
 };
 
 type EmiPayment = {
@@ -1087,6 +1092,65 @@ function InlineCreateEmiModal({
     notes: editPlan?.notes ?? "",
   }));
 
+  // Amortization-sheet file management. In create mode `pendingFiles` is
+  // sent up with POST /vehicles/[id]/emi (matches the existing
+  // `scheduleDocuments` field on emiAPI.create). In edit mode `existingFiles`
+  // mirrors the plan's stored URLs — the user can remove a URL (DELETE
+  // /emi/[planId]/schedule-files) or upload more (POST same path) before
+  // hitting Save. We persist file changes immediately so failures show up
+  // discretely, then save the rest of the form last.
+  const [existingFiles, setExistingFiles] = useState<string[]>(
+    () =>
+      (editPlan?.scheduleDocumentUrls && editPlan.scheduleDocumentUrls.length > 0
+        ? editPlan.scheduleDocumentUrls
+        : editPlan?.scheduleDocumentUrl
+          ? [editPlan.scheduleDocumentUrl]
+          : []) ?? [],
+  );
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+
+  const addPendingFiles = (files: FileList | File[]) => {
+    const incoming = Array.from(files);
+    if (incoming.length === 0) return;
+    setPendingFiles((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}_${f.size}`));
+      const merged = [...prev];
+      for (const f of incoming) {
+        const key = `${f.name}_${f.size}`;
+        if (!seen.has(key)) {
+          merged.push(f);
+          seen.add(key);
+        }
+      }
+      return merged;
+    });
+  };
+
+  const dropPendingFile = (idx: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // In edit mode, remove an already-persisted file. We hit the server right
+  // away so the change survives even if the user later hits Cancel — the
+  // file is gone either way, and that matches the user's mental model.
+  const removeExistingFile = async (url: string) => {
+    if (!editPlan) return;
+    setScheduleBusy(true);
+    try {
+      await emiAPI.removeScheduleFile(editPlan.id, url);
+      setExistingFiles((prev) => prev.filter((u) => u !== url));
+      toast.success("File removed", "Schedule document deleted");
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Could not remove file";
+      toast.error("Remove failed", msg);
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -1105,6 +1169,10 @@ function InlineCreateEmiModal({
           dueDayOfMonth: Number(form.dueDayOfMonth),
           notes: form.notes.trim() || null,
         });
+        // Append any newly-picked files to the existing plan.
+        if (pendingFiles.length > 0) {
+          await emiAPI.appendScheduleFiles(editPlan.id, pendingFiles);
+        }
       } else {
         await emiAPI.create(vehicleId, {
           lenderName: form.lenderName.trim(),
@@ -1117,6 +1185,7 @@ function InlineCreateEmiModal({
           startDate: form.startDate,
           dueDayOfMonth: Number(form.dueDayOfMonth),
           notes: form.notes.trim() || null,
+          scheduleDocuments: pendingFiles.length > 0 ? pendingFiles : null,
         });
       }
       await onCreated();
@@ -1279,6 +1348,102 @@ function InlineCreateEmiModal({
                 maxLength={500}
               />
             </Tile>
+
+            {/* Amortization-sheet files — shown in both create and edit
+                modes. In edit mode the current files are listed and can be
+                removed inline; new files queue up and upload when Save is
+                clicked. */}
+            <Tile label="Schedule documents">
+              <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 px-3 py-3 space-y-2">
+                {existingFiles.length === 0 && pendingFiles.length === 0 && (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    No schedule documents on this plan yet.
+                  </p>
+                )}
+                {existingFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {existingFiles.map((url, idx) => {
+                      const ext = (url.split("?")[0].split(".").pop() ?? "file").toUpperCase();
+                      return (
+                        <span
+                          key={`${url}-${idx}`}
+                          className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] text-gray-700 dark:text-gray-200"
+                        >
+                          <FileText className="w-3 h-3 text-gray-400" />
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold hover:text-yellow-700 dark:hover:text-yellow-400 inline-flex items-center gap-0.5"
+                            title="Open file"
+                          >
+                            {ext}
+                            <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => removeExistingFile(url)}
+                            disabled={scheduleBusy || saving}
+                            title="Remove file"
+                            className="text-gray-400 hover:text-red-500 disabled:opacity-40"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {pendingFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {pendingFiles.map((f, idx) => (
+                      <span
+                        key={`pending-${f.name}-${idx}`}
+                        className="inline-flex items-center gap-1 rounded-md bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/30 text-yellow-800 dark:text-yellow-300 px-2 py-1 text-[11px]"
+                      >
+                        <FileText className="w-3 h-3 opacity-70" />
+                        <span className="truncate max-w-[160px]">{f.name}</span>
+                        <span className="text-[9px] font-bold uppercase opacity-70">
+                          Pending
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => dropPendingFile(idx)}
+                          disabled={saving}
+                          title="Drop from upload queue"
+                          className="text-current opacity-60 hover:opacity-100"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 pt-1">
+                  <Upload className="w-4 h-4 text-gray-400" />
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 flex-1 truncate">
+                    {pendingFiles.length === 0
+                      ? "Add amortization sheets — PDF, JPG, PNG"
+                      : `${pendingFiles.length} new file${pendingFiles.length === 1 ? "" : "s"} will upload on save`}
+                  </span>
+                  <label className="inline-flex items-center gap-1 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2 py-1 text-[11px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800">
+                    {existingFiles.length + pendingFiles.length === 0 ? "Browse" : "Add more"}
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      multiple
+                      disabled={saving || scheduleBusy}
+                      onChange={(e) => {
+                        if (e.target.files) addPendingFiles(e.target.files);
+                        e.target.value = "";
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </Tile>
+
             {scheduleDirty && (
               <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                 You&apos;ve changed schedule fields. Paid installments stay as-is —

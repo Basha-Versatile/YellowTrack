@@ -11,11 +11,12 @@ import {
   Shield,
   Clock,
   ArrowLeft,
+  FolderArchive,
 } from "lucide-react";
 
 type ShareDoc = {
   id: string;
-  type: string;
+  label: string;
   documentNumber: string | null;
   issuedDate: string | null;
   expiryDate: string | null;
@@ -23,13 +24,8 @@ type ShareDoc = {
 };
 
 type ShareData = {
-  link: { token: string; expiresAt: string; vehicleId: string; tenantId: string };
-  vehicle: {
-    registrationNumber: string;
-    make: string;
-    model: string;
-    ownerName?: string | null;
-  };
+  link: { token: string; expiresAt: string; isGroupShare: boolean };
+  group: { id: string; name: string; description: string | null } | null;
   documents: ShareDoc[];
 };
 
@@ -42,11 +38,7 @@ function formatDate(d: string | null): string {
   });
 }
 
-function docTypeLabel(t: string): string {
-  return t.replace(/_/g, " ").replace(/\w\S*/g, (s) => s[0].toUpperCase() + s.slice(1).toLowerCase());
-}
-
-export default function PublicSharePage() {
+export default function PublicCustomSharePage() {
   const params = useParams<{ token: string }>();
   const token = params?.token;
   const [data, setData] = useState<ShareData | null>(null);
@@ -58,7 +50,7 @@ export default function PublicSharePage() {
   useEffect(() => {
     if (!token) return;
     setLoading(true);
-    fetch(`/api/public/share/${token}`)
+    fetch(`/api/public/custom-share/${token}`)
       .then(async (res) => {
         const json = (await res.json()) as {
           success: boolean;
@@ -76,7 +68,6 @@ export default function PublicSharePage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  // Live countdown to expiry so the recipient knows how long they have left.
   useEffect(() => {
     if (!data) return;
     const tick = () => {
@@ -98,7 +89,7 @@ export default function PublicSharePage() {
     if (!token) return;
     setDownloading(true);
     try {
-      const res = await fetch(`/api/public/share/${token}/pdf`);
+      const res = await fetch(`/api/public/custom-share/${token}/pdf`);
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || "Download failed");
@@ -107,7 +98,10 @@ export default function PublicSharePage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${data?.vehicle.registrationNumber ?? "documents"}.pdf`;
+      const slug = (data?.group?.name ?? "documents")
+        .replace(/[^A-Za-z0-9]+/g, "-")
+        .toLowerCase();
+      a.download = `${slug}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -179,21 +173,27 @@ export default function PublicSharePage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 sm:p-8 shadow-sm">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-yellow-600 dark:text-yellow-400 mb-2">
-            Shared compliance documents
+            Shared documents
           </p>
-          <h1 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">
-            {data.vehicle.registrationNumber}
+          <h1 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+            <FolderArchive className="w-5 h-5 text-yellow-500" />
+            {data.group?.name ?? "Documents"}
           </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {data.vehicle.make} {data.vehicle.model}
-            {data.vehicle.ownerName ? ` · ${data.vehicle.ownerName}` : ""}
+          {data.group?.description && (
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {data.group.description}
+            </p>
+          )}
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            {data.documents.length} document{data.documents.length === 1 ? "" : "s"}
+            {data.link.isGroupShare ? " · whole-group share" : ""}
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={handleDownloadPdf}
-              disabled={downloading}
+              disabled={downloading || data.documents.length === 0}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all disabled:opacity-60"
             >
               {downloading ? (
@@ -228,7 +228,7 @@ export default function PublicSharePage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-gray-900 dark:text-white">
-                      {docTypeLabel(doc.type)}
+                      {doc.label}
                     </p>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                       {doc.expiryDate

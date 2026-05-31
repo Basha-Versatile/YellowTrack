@@ -14,7 +14,7 @@ import {
 } from "../icons/index";
 import { BsFillCarFrontFill } from "react-icons/bs";
 import { MdSpaceDashboard } from "react-icons/md";
-import { Activity, Database, Lightbulb, Shield, UsersRound, 
+import { Activity, Database, FolderArchive, Lightbulb, Shield, UsersRound,
   // Bell
 
 } from "lucide-react";
@@ -67,6 +67,14 @@ const navItems: NavItem[] = [
       // { name: "Add Driver", path: "/drivers/add", perm: "drivers:create" },
       { name: "Compliance", path: "/drivers/compliance", perm: "drivers:read" },
     ],
+  },
+  {
+    icon: <FolderArchive className="h-5 w-5" />,
+    name: "Custom Compliance",
+    path: "/custom-compliance",
+    // Reuses the existing compliance read gate — anyone who can see vehicle
+    // compliance can see the documents bank too.
+    perm: "compliance:read",
   },
   {
     icon: <UsersRound className="h-5 w-5" />,
@@ -366,16 +374,16 @@ const AppSidebar: React.FC = () => {
         <Link
           href="/dashboard"
           aria-label="Yellow Track"
-          className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-white transition-all duration-300 ${
-            expanded ? "size-25" : "size-14"
+          className={`relative block flex-shrink-0 transition-all duration-300 ${
+            expanded ? "size-36" : "size-16"
           }`}
         >
           <Image
             src="/images/logo/yellow-track-logo.svg"
             alt="Yellow Track"
             fill
-            sizes="80px"
-            className="object-contain p-1.5"
+            sizes="144px"
+            className="object-contain"
             priority
           />
         </Link>

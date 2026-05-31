@@ -53,13 +53,13 @@ function TopNav() {
     <nav className="sticky top-0 z-50 backdrop-blur-md bg-white/80 dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 group">
-          <span className="relative w-20 h-20 rounded-xl overflow-hidden p-1">
+          <span className="relative w-35 h-35">
             <Image
               src="/images/logo/yellow-track-logo.svg"
               alt="Yellow Track"
               fill
-              sizes="40px"
-              className="object-contain p-1"
+              sizes="140px"
+              className="object-contain"
               priority
             />
           </span>
@@ -234,9 +234,9 @@ function HeroMockup() {
 
           {/* KPI tiles */}
           <div className="grid grid-cols-3 gap-2">
-            <KPITile label="Vehicles" value="42" tone="gray" />
-            <KPITile label="Compliant" value="38" tone="emerald" />
-            <KPITile label="Expiring" value="4" tone="amber" />
+            <KPITile label="Vehicles" value="1000+" tone="gray" />
+            <KPITile label="Compliant" value="942" tone="emerald" />
+            <KPITile label="Expiring" value="58" tone="amber" />
           </div>
 
           {/* Compliance row */}
@@ -294,7 +294,7 @@ function HeroMockup() {
         <Truck className="w-5 h-5 text-yellow-400 dark:text-yellow-600" />
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-yellow-400 dark:text-yellow-600">Fleet size</p>
-          <p className="text-sm font-black text-white dark:text-gray-900">42 vehicles</p>
+          <p className="text-sm font-black text-white dark:text-gray-900">1000+ vehicles</p>
         </div>
       </div>
     </div>
@@ -1046,13 +1046,13 @@ function Footer() {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 gap-8">
           <div className="col-span-2">
             <Link href="/" className="inline-flex items-center gap-2.5">
-              <span className="relative w-20 h-20 rounded-xl overflow-hidden">
+              <span className="relative w-35 h-35">
                 <Image
                   src="/images/logo/yellow-track-logo.svg"
                   alt="Yellow Track"
                   fill
-                  sizes="40px"
-                  className="object-contain p-1"
+                  sizes="140px"
+                  className="object-contain"
                 />
               </span>
               {/* <span className="text-lg font-black tracking-tight">

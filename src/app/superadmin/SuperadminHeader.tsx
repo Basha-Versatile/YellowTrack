@@ -54,7 +54,7 @@ const SuperadminHeader: React.FC = () => {
             <img
               src="/images/logo/yellow-track-logo.svg"
               alt="Yellow Track"
-              className="w-9 h-9 rounded-lg object-contain"
+              className="w-14 h-14 object-contain"
             />
             <span className="text-lg font-extrabold tracking-tight">
               <span className="text-yellow-500">Yellow</span>

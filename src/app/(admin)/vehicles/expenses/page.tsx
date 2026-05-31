@@ -308,7 +308,7 @@ function VehicleExpensesContent() {
         <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 24px 0;border-bottom:3px solid #f59e0b;margin-bottom:24px">
           <div style="display:flex;align-items:center;gap:12px">
-            <img src="/images/logo/yellow-track-logo.svg" style="width:40px;height:40px;border-radius:10px" />
+            <img src="/images/logo/yellow-track-logo.svg" style="width:60px;height:60px;border-radius:10px" />
             <div><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px"><span style="color:#f59e0b">Yellow</span> <span style="color:#1f2937">Track</span></div><div style="font-size:11px;color:#9ca3af;font-weight:500;letter-spacing:0.05em;text-transform:uppercase">Fleet Expense Report</div></div>
           </div>
           <div style="text-align:right;font-size:12px;color:#6b7280;line-height:1.7">

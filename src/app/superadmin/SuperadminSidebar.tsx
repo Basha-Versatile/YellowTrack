@@ -269,16 +269,16 @@ const SuperadminSidebar: React.FC = () => {
         <Link
           href="/"
           aria-label="Yellow Track"
-          className={`relative block flex-shrink-0 rounded-xl overflow-hidden bg-white transition-all duration-300 ${
-            expanded ? "size-25" : "size-14"
+          className={`relative block flex-shrink-0 transition-all duration-300 ${
+            expanded ? "size-36" : "size-16"
           }`}
         >
           <Image
             src="/images/logo/yellow-track-logo.svg"
             alt="Yellow Track"
             fill
-            sizes="80px"
-            className="object-contain p-1.5"
+            sizes="144px"
+            className="object-contain"
             priority
           />
         </Link>

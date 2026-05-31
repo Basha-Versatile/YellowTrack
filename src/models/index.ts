@@ -53,6 +53,19 @@ export {
 export { EmiPlanCloseOtp, type EmiPlanCloseOtpAttrs } from "./EmiPlanCloseOtp";
 export { DocumentShareLink, type DocumentShareLinkAttrs } from "./DocumentShareLink";
 export {
+  CustomComplianceGroup,
+  type CustomComplianceGroupAttrs,
+} from "./CustomComplianceGroup";
+export {
+  CustomComplianceDocument,
+  type CustomComplianceDocumentAttrs,
+  CUSTOM_COMPLIANCE_STATUS,
+} from "./CustomComplianceDocument";
+export {
+  CustomDocumentShareLink,
+  type CustomDocumentShareLinkAttrs,
+} from "./CustomDocumentShareLink";
+export {
   InsurancePolicy,
   type InsurancePolicyAttrs,
   INSURANCE_STATUS,

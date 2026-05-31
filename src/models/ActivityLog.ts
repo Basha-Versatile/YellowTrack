@@ -20,6 +20,8 @@ export const ACTIVITY_ENTITY_TYPES = [
   "challan",
   "service_record",
   "vehicle_sale",
+  "customComplianceGroup",
+  "customComplianceDocument",
 ] as const;
 
 export type ActivityEntityType = (typeof ACTIVITY_ENTITY_TYPES)[number];

@@ -365,8 +365,8 @@ export default function DriverVerifyPage() {
         </div>
         <div className="relative z-10 flex flex-col items-center">
           {/* Logo */}
-          <div className="w-16 h-16 rounded-2xl bg-white shadow-xl shadow-yellow-600/20 flex items-center justify-center mb-4">
-            <img src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" className="w-12 h-12 rounded-xl object-contain" />
+          <div className="mb-4 flex items-center justify-center">
+            <img src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" className="w-28 h-28 object-contain" />
           </div>
           {/* Brand name */}
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
@@ -743,7 +743,7 @@ export default function DriverVerifyPage() {
         {/* Footer */}
         <div className="text-center mt-8 pb-6">
           <div className="flex items-center justify-center gap-2">
-            <img src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" className="w-5 h-5 rounded object-contain" />
+            <img src="/images/logo/yellow-track-logo.svg" alt="Yellow Track" className="w-8 h-8 object-contain" />
             <p className="text-[11px] text-gray-400">Secured by <span className="font-bold text-yellow-600">Yellow</span> <span className="font-bold text-gray-500">Track</span></p>
           </div>
         </div>
