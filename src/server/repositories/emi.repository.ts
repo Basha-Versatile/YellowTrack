@@ -2,10 +2,28 @@ import "server-only";
 import { Types } from "mongoose";
 import { EMIPlan, EMIPayment, Vehicle } from "@/models";
 import {
+  ALL_TENANTS,
   type ScopedContext,
   tenantFilter,
   tenantStamp,
 } from "@/lib/auth/tenant-context";
+
+/**
+ * Build a `$match` stage that's safe inside aggregate pipelines. Mongoose
+ * skips auto-casting string IDs to ObjectId in aggregate (unlike find /
+ * countDocuments), so we cast manually here. Without this, the summary KPIs
+ * silently returned 0 even when the find-based row list showed matches.
+ */
+function aggregateTenantMatch(
+  ctx: ScopedContext,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  if (ctx.tenantId === ALL_TENANTS) return extra;
+  return {
+    tenantId: new Types.ObjectId(ctx.tenantId),
+    ...extra,
+  };
+}
 
 // ── EMIPlan ────────────────────────────────────────────────────────────────
 
@@ -182,7 +200,7 @@ export async function findHubRows(
 
 export async function countByStatus(ctx: ScopedContext) {
   const rows = await EMIPlan.aggregate([
-    { $match: tenantFilter(ctx, {}) },
+    { $match: aggregateTenantMatch(ctx) },
     { $group: { _id: "$status", count: { $sum: 1 } } },
   ]);
   const map: Record<string, number> = {};
@@ -192,7 +210,7 @@ export async function countByStatus(ctx: ScopedContext) {
 
 export async function sumMonthlyOutflow(ctx: ScopedContext) {
   const rows = await EMIPlan.aggregate([
-    { $match: tenantFilter(ctx, { status: "ACTIVE" }) },
+    { $match: aggregateTenantMatch(ctx, { status: "ACTIVE" }) },
     { $group: { _id: null, total: { $sum: "$emiAmount" } } },
   ]);
   return rows[0]?.total ?? 0;

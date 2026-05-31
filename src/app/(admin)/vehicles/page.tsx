@@ -59,9 +59,17 @@ export default function VehiclesPage() {
   const brandFilter = searchParams.get("brand") ?? "";
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  // Whole-fleet snapshot (no filters) — drives the Total/Compliant/etc. cards
-  // and the "X vehicles in your fleet" header. Refreshed on lifecycle change.
-  const [fleetVehicles, setFleetVehicles] = useState<Vehicle[]>([]);
+  // Whole-fleet stat-card numbers — driven by the dedicated /summary endpoint
+  // so we don't pull every vehicle row over the wire just to count them, and
+  // the cards aren't held hostage to the list endpoint's `limit` cap.
+  const [fleetStats, setFleetStats] = useState<{
+    total: number;
+    green: number;
+    yellow: number;
+    orange: number;
+    red: number;
+    pendingChallanAmount: number;
+  }>({ total: 0, green: 0, yellow: 0, orange: 0, red: 0, pendingChallanAmount: 0 });
   const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -106,29 +114,39 @@ export default function VehiclesPage() {
     finally { setLoading(false); setFetching(false); }
   };
 
-  // Fleet-wide snapshot for the stat cards. Refetches when the lifecycle tab
-  // changes (Active ↔ Sold) but stays stable across group/usage/status filters.
-  const fetchFleetSnapshot = async (lifecycle: "ALL" | "SOLD") => {
+  // Fleet-wide stat-card numbers. Refetches when the lifecycle tab changes
+  // (Active ↔ Sold) but stays stable across group/usage/status filters.
+  const fetchFleetStats = async (lifecycle: "ALL" | "SOLD") => {
     try {
-      const res = await vehicleAPI.getAll({
-        page: 1,
-        limit: 10000,
-        lifecycle: lifecycle === "SOLD" ? "SOLD" : undefined,
-      });
-      setFleetVehicles(res.data.data.vehicles);
-    } catch {
-      setFleetVehicles([]);
+      const res = await vehicleAPI.getFleetSummary(
+        lifecycle === "SOLD" ? "SOLD" : undefined,
+      );
+      const data = res.data?.data as
+        | {
+            total: number;
+            green: number;
+            yellow: number;
+            orange: number;
+            red: number;
+            pendingChallanAmount: number;
+          }
+        | undefined;
+      if (data) setFleetStats(data);
+    } catch (err) {
+      // Surface in dev so a broken summary endpoint doesn't silently zero
+      // the stat cards again. State is left untouched on failure.
+      console.error("[vehicles/summary] failed", err);
     }
   };
 
   useEffect(() => {
     fetchVehicles(1, { initial: true });
-    fetchFleetSnapshot(lifecycleRef.current);
+    fetchFleetStats(lifecycleRef.current);
     vehicleGroupAPI.getAll().then((res) => setGroups(res.data.data)).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetchFleetSnapshot(lifecycleTab);
+    fetchFleetStats(lifecycleTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lifecycleTab]);
 
@@ -155,13 +173,16 @@ export default function VehiclesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // Stats — sourced from the whole-fleet snapshot so they don't shrink when
-  // the user filters by group/usage/status/brand.
-  const fleetTotal = fleetVehicles.length;
-  const greenCount = fleetVehicles.filter((v) => v.overallStatus === "GREEN").length;
-  const yellowCount = fleetVehicles.filter((v) => v.overallStatus === "YELLOW").length;
-  const redCount = fleetVehicles.filter((v) => v.overallStatus === "RED").length;
-  const totalPending = fleetVehicles.reduce((s, v) => s + (v.pendingChallanAmount || 0), 0);
+  // Stats — sourced from the dedicated /summary endpoint so the cards
+  // don't shrink when the user filters by group/usage/status/brand, and
+  // don't depend on the list endpoint's `limit` cap.
+  const fleetTotal = fleetStats.total;
+  const greenCount = fleetStats.green;
+  // Combine YELLOW + ORANGE under the "Upcoming Expiry" card — same
+  // bucketing the dashboard uses for "approaching expiry".
+  const yellowCount = fleetStats.yellow + fleetStats.orange;
+  const redCount = fleetStats.red;
+  const totalPending = fleetStats.pendingChallanAmount;
 
   if (loading) return <VehiclesListSkeleton view={view} />;
 

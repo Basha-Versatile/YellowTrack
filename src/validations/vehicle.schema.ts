@@ -34,7 +34,11 @@ export const onboardVehicleSchema = z.object({
 
 export const getVehiclesQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(10),
+  // Cap kept high enough for the Vehicles page to fetch a fleet-wide
+  // snapshot in one shot for the TOTAL / COMPLIANT / EXPIRING / CRITICAL
+  // stat cards. Without this, requests at `limit: 10000` failed validation
+  // and the cards silently showed 0 even when the list had matches.
+  limit: z.coerce.number().int().positive().max(10000).default(10),
   search: z.string().optional(),
   status: z.enum(["GREEN", "YELLOW", "RED"]).optional(),
   groupId: z.string().optional(),

@@ -359,6 +359,50 @@ export async function manualOnboard(
   return vehicleRepo.findById(ctx, vehicleId);
 }
 
+/**
+ * Fleet-wide stat-card numbers for the Vehicles page. Counts every vehicle
+ * (honouring the lifecycle tab), buckets by worst-status compliance, and
+ * sums pending challan amount. Server-side aggregation only — no row data
+ * leaves the DB, so this is safe to call on big fleets without tripping
+ * the list endpoint's `limit` ceiling.
+ */
+export async function getFleetSummary(
+  ctx: ScopedContext,
+  filters: { lifecycle?: "ACTIVE" | "SOLD" } = {},
+): Promise<{
+  total: number;
+  green: number;
+  yellow: number;
+  orange: number;
+  red: number;
+  pendingChallanAmount: number;
+}> {
+  // Run findAll with a huge limit but no pagination math — repo gives us
+  // every enriched row already. For a future scale fix, swap to a single
+  // $lookup pipeline; for today's fleet sizes (10s–100s) this is fine.
+  const result = await vehicleRepo.findAll(ctx, {
+    page: 1,
+    limit: 100000,
+    lifecycle: filters.lifecycle,
+  });
+
+  const counts = { total: 0, green: 0, yellow: 0, orange: 0, red: 0 };
+  let pendingChallanAmount = 0;
+  for (const v of result.vehicles) {
+    counts.total += 1;
+    const docs = v.complianceDocuments as Array<{
+      expiryDate?: Date | string | null;
+    }>;
+    const status = getOverallStatus(docs);
+    counts[status.toLowerCase() as "green" | "yellow" | "orange" | "red"] += 1;
+    const pending = (v.challans as Array<{ amount: number; status: string }>)
+      .filter((c) => c.status === "PENDING")
+      .reduce((sum, c) => sum + c.amount, 0);
+    pendingChallanAmount += pending;
+  }
+  return { ...counts, pendingChallanAmount };
+}
+
 export async function getAllVehicles(
   ctx: ScopedContext,
   query: vehicleRepo.VehicleListQuery,

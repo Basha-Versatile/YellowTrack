@@ -436,6 +436,12 @@ export const vehicleAPI = {
     });
   },
   getStats: () => api.get("/vehicles/stats"),
+  // Fleet-wide stat-card numbers for the Vehicles page (Total / Compliant
+  // / Upcoming / Critical / Pending Fines). Server-side aggregation.
+  getFleetSummary: (lifecycle?: "ACTIVE" | "SOLD") =>
+    api.get("/vehicles/summary", {
+      params: lifecycle === "SOLD" ? { lifecycle } : undefined,
+    }),
   getCompliance: (id: string) => api.get(`/vehicles/${id}/compliance`),
   getChallans: (id: string) => api.get(`/vehicles/${id}/challans`),
   syncChallans: (id: string) => api.post(`/vehicles/${id}/challans/sync`),
