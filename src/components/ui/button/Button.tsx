@@ -9,6 +9,10 @@ interface ButtonProps {
   onClick?: () => void; // Click handler
   disabled?: boolean; // Disabled state
   className?: string; // Disabled state
+  // Defaults to "submit" to match the native <button> default. Pass
+  // "button" for plain action buttons inside <form>s (e.g. Cancel/Close)
+  // so they don't accidentally trigger form submission.
+  type?: "button" | "submit" | "reset";
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -20,6 +24,7 @@ const Button: React.FC<ButtonProps> = ({
   onClick,
   className = "",
   disabled = false,
+  type = "submit",
 }) => {
   // Size Classes
   const sizeClasses = {
@@ -37,6 +42,7 @@ const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
+      type={type}
       className={`inline-flex items-center justify-center font-medium gap-2 rounded-lg transition ${className} ${
         sizeClasses[size]
       } ${variantClasses[variant]} ${

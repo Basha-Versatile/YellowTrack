@@ -12,34 +12,78 @@ const api = axios.create({
 });
 
 // ── Token storage (access token only — refresh token is in httpOnly cookie) ──
+//
+// "Remember Me" controls where we persist auth state on the client:
+//   - persistent (Remember Me on): localStorage → survives browser/tab close,
+//     paired with a long-lived refresh cookie.
+//   - session (Remember Me off): sessionStorage → cleared on tab close, paired
+//     with a session refresh cookie.
+// A small marker in localStorage tells us which storage owns the current
+// session so a page reload reads from the right place.
+
+const PERSISTENT_FLAG_KEY = "auth:persistent";
+
+const isPersistent = (): boolean => {
+  if (typeof window === "undefined") return true;
+  // Default to persistent when no marker is set (e.g. first visit, or legacy
+  // sessions from before this flag existed).
+  return localStorage.getItem(PERSISTENT_FLAG_KEY) !== "false";
+};
+
+const authStorage = (): Storage | null => {
+  if (typeof window === "undefined") return null;
+  return isPersistent() ? localStorage : sessionStorage;
+};
+
+export const setAuthPersistent = (persistent: boolean) => {
+  if (typeof window === "undefined") return;
+  const wasPersistent = isPersistent();
+  localStorage.setItem(PERSISTENT_FLAG_KEY, persistent ? "true" : "false");
+  // When the choice flips, migrate any cached auth from the old store so the
+  // page doesn't appear logged-out mid-flight before AuthContext refills it.
+  if (wasPersistent !== persistent) {
+    const [src, dst] = persistent
+      ? [sessionStorage, localStorage]
+      : [localStorage, sessionStorage];
+    for (const key of ["accessToken", "user", "tenant"]) {
+      const v = src.getItem(key);
+      if (v !== null) {
+        dst.setItem(key, v);
+        src.removeItem(key);
+      }
+    }
+  }
+};
 
 let accessToken: string | null = null;
 
 export const setAccessToken = (token: string | null) => {
   accessToken = token;
-  if (typeof window !== "undefined") {
-    if (token) {
-      localStorage.setItem("accessToken", token);
-    } else {
-      localStorage.removeItem("accessToken");
-    }
+  const store = authStorage();
+  if (!store) return;
+  if (token) {
+    store.setItem("accessToken", token);
+  } else {
+    store.removeItem("accessToken");
   }
 };
 
 export const getAccessToken = (): string | null => {
   if (accessToken) return accessToken;
-  if (typeof window !== "undefined") {
-    accessToken = localStorage.getItem("accessToken");
-  }
+  const store = authStorage();
+  if (store) accessToken = store.getItem("accessToken");
   return accessToken;
 };
 
 export const clearTokens = () => {
   accessToken = null;
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
+  if (typeof window === "undefined") return;
+  for (const store of [localStorage, sessionStorage]) {
+    store.removeItem("accessToken");
+    store.removeItem("user");
+    store.removeItem("tenant");
   }
+  localStorage.removeItem(PERSISTENT_FLAG_KEY);
 };
 
 // ── Request interceptor: attach access token ────────────────
@@ -137,7 +181,7 @@ api.interceptors.response.use(
 
 // ── Auth ────────────────────────────────────────────────────
 export const authAPI = {
-  login: (data: { email: string; password: string }) =>
+  login: (data: { email: string; password: string; rememberMe?: boolean }) =>
     api.post("/auth/login", data),
   register: (data: { name: string; email: string; password: string }) =>
     api.post("/auth/register", data),

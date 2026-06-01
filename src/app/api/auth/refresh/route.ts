@@ -17,11 +17,20 @@ export const POST = withRoute(async ({ req }) => {
   const token = req.cookies.get(REFRESH_COOKIE_NAME)?.value;
 
   try {
-    const { user, tenant, accessToken, refreshToken, refreshTokenExpiresAt } =
-      await refreshTokens(token);
-    const res = success({ user, tenant, accessToken }, "Token refreshed");
-    setAccessCookie(res, accessToken);
-    return setRefreshCookie(res, refreshToken, refreshTokenExpiresAt);
+    const {
+      user,
+      tenant,
+      accessToken,
+      refreshToken,
+      refreshTokenExpiresAt,
+      persistent,
+    } = await refreshTokens(token);
+    const res = success(
+      { user, tenant, accessToken, persistent },
+      "Token refreshed",
+    );
+    setAccessCookie(res, accessToken, persistent);
+    return setRefreshCookie(res, refreshToken, refreshTokenExpiresAt, persistent);
   } catch (err) {
     // Always clear the bad cookies on failure (matches legacy controller behaviour)
     const status = err instanceof AppError ? err.statusCode : 500;

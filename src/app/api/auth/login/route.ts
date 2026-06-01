@@ -8,10 +8,19 @@ export const runtime = "nodejs";
 
 export const POST = withRoute(async ({ req }) => {
   const input = await parseJson(req, loginSchema);
-  const { user, tenant, accessToken, refreshToken, refreshTokenExpiresAt } =
-    await loginUser(input);
+  const {
+    user,
+    tenant,
+    accessToken,
+    refreshToken,
+    refreshTokenExpiresAt,
+    persistent,
+  } = await loginUser(input);
 
-  const res = success({ user, tenant, accessToken }, "Login successful");
-  setAccessCookie(res, accessToken);
-  return setRefreshCookie(res, refreshToken, refreshTokenExpiresAt);
+  const res = success(
+    { user, tenant, accessToken, persistent },
+    "Login successful",
+  );
+  setAccessCookie(res, accessToken, persistent);
+  return setRefreshCookie(res, refreshToken, refreshTokenExpiresAt, persistent);
 });

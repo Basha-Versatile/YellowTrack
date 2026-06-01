@@ -27,6 +27,8 @@ export type AuthResult = {
   accessToken: string;
   refreshToken: string;
   refreshTokenExpiresAt: Date;
+  /** Whether the session should survive a browser close (Remember Me). */
+  persistent: boolean;
 };
 
 async function loadPublicTenant(tenantId: string | null): Promise<PublicTenant | null> {
@@ -44,12 +46,15 @@ async function loadPublicTenant(tenantId: string | null): Promise<PublicTenant |
   };
 }
 
-async function createTokenPair(user: {
-  id: string;
-  email: string;
-  role: string;
-  tenantId: string | null;
-}): Promise<Omit<AuthResult, "user" | "tenant">> {
+async function createTokenPair(
+  user: {
+    id: string;
+    email: string;
+    role: string;
+    tenantId: string | null;
+  },
+  persistent: boolean,
+): Promise<Omit<AuthResult, "user" | "tenant">> {
   const accessToken = signAccessToken({
     id: user.id,
     email: user.email,
@@ -63,9 +68,10 @@ async function createTokenPair(user: {
     token: refreshToken,
     userId: user.id,
     expiresAt: refreshTokenExpiresAt,
+    persistent,
   });
 
-  return { accessToken, refreshToken, refreshTokenExpiresAt };
+  return { accessToken, refreshToken, refreshTokenExpiresAt, persistent };
 }
 
 export async function register(input: {
@@ -80,7 +86,8 @@ export async function register(input: {
   const doc = await createUser(input);
   const publicUser = toPublicUser(doc);
 
-  const tokens = await createTokenPair(publicUser);
+  // New accounts default to a persistent session — they just signed up.
+  const tokens = await createTokenPair(publicUser, true);
   const tenant = await loadPublicTenant(publicUser.tenantId);
   return { user: publicUser, tenant, ...tokens };
 }
@@ -88,6 +95,7 @@ export async function register(input: {
 export async function login(input: {
   email: string;
   password: string;
+  rememberMe?: boolean;
 }): Promise<AuthResult> {
   const doc = await findUserByEmail(input.email);
   if (!doc) throw new UnauthorizedError("Invalid email or password");
@@ -108,7 +116,7 @@ export async function login(input: {
   await (doc as unknown as { save: () => Promise<unknown> }).save().catch(() => undefined);
 
   const publicUser = toPublicUser(doc);
-  const tokens = await createTokenPair(publicUser);
+  const tokens = await createTokenPair(publicUser, Boolean(input.rememberMe));
 
   // Record a single "auth.login" entry in the tenant's activity log. SUPERADMIN
   // accounts have no tenantId so we can't scope the entry — skip those.
@@ -153,7 +161,10 @@ export async function refresh(refreshToken: string | undefined): Promise<AuthRes
   if (!userDoc) throw new UnauthorizedError("User not found");
 
   const publicUser = toPublicUser(userDoc);
-  const tokens = await createTokenPair(publicUser);
+  // Preserve the original "Remember Me" choice across rotation. Legacy tokens
+  // (created before the field existed) default to persistent=true.
+  const wasPersistent = (stored as { persistent?: boolean }).persistent ?? true;
+  const tokens = await createTokenPair(publicUser, wasPersistent);
   const tenant = await loadPublicTenant(publicUser.tenantId);
   return { user: publicUser, tenant, ...tokens };
 }

@@ -1,6 +1,13 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { authAPI, permissionsAPI, setAccessToken, clearTokens, tenantAPI } from "@/lib/api";
+import {
+  authAPI,
+  permissionsAPI,
+  setAccessToken,
+  setAuthPersistent,
+  clearTokens,
+  tenantAPI,
+} from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/context/ToastContext";
 
@@ -35,7 +42,7 @@ interface AuthContextType {
   hasPermission: (perm: string) => boolean;
   isLoading: boolean;
   permissionsLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
@@ -60,6 +67,41 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Mirrors the storage resolver in lib/api.ts. When "Remember Me" was off at
+// login time, auth data lives in sessionStorage (cleared on tab close);
+// otherwise it lives in localStorage.
+function authStore(): Storage | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("auth:persistent") === "false"
+    ? sessionStorage
+    : localStorage;
+}
+
+function readAuthItem(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  // Fall back to the other store on miss so we don't lose session-mode
+  // sign-ins when the persistence flag hasn't been read yet on first render.
+  return (
+    authStore()?.getItem(key) ??
+    sessionStorage.getItem(key) ??
+    localStorage.getItem(key)
+  );
+}
+
+function writeAuthItem(key: string, value: string) {
+  const store = authStore();
+  if (!store) return;
+  store.setItem(key, value);
+  // Make sure the *other* store doesn't keep a stale copy.
+  (store === localStorage ? sessionStorage : localStorage).removeItem(key);
+}
+
+function removeAuthItem(key: string) {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(key);
+  sessionStorage.removeItem(key);
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -90,12 +132,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     [permissions],
   );
 
-  // On mount: restore user + tenant from localStorage and try to refresh the access token
+  // On mount: restore user + tenant from the persistence-aware store and try
+  // to refresh the access token.
   useEffect(() => {
     const init = async () => {
-      const savedUser = localStorage.getItem("user");
-      const savedTenant = localStorage.getItem("tenant");
-      const savedToken = localStorage.getItem("accessToken");
+      const savedUser = readAuthItem("user");
+      const savedTenant = readAuthItem("tenant");
+      const savedToken = readAuthItem("accessToken");
 
       if (savedUser && savedToken) {
         setUser(JSON.parse(savedUser));
@@ -106,15 +149,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         try {
           const res = await authAPI.refresh();
-          const { user: freshUser, tenant: freshTenant, accessToken: newToken } = res.data.data;
+          const {
+            user: freshUser,
+            tenant: freshTenant,
+            accessToken: newToken,
+            persistent,
+          } = res.data.data;
+          // Refresh response tells us the server's view of the persistence
+          // mode, so the client store always matches the cookie lifetime.
+          if (typeof persistent === "boolean") setAuthPersistent(persistent);
           setAccessToken(newToken);
           setUser(freshUser);
           setTenant(freshTenant ?? null);
-          localStorage.setItem("user", JSON.stringify(freshUser));
+          writeAuthItem("user", JSON.stringify(freshUser));
           if (freshTenant) {
-            localStorage.setItem("tenant", JSON.stringify(freshTenant));
+            writeAuthItem("tenant", JSON.stringify(freshTenant));
           } else {
-            localStorage.removeItem("tenant");
+            removeAuthItem("tenant");
           }
           if (freshUser.role !== "SUPERADMIN") {
             await loadPermissions();
@@ -123,7 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           clearTokens();
           setUser(null);
           setTenant(null);
-          localStorage.removeItem("tenant");
+          removeAuthItem("tenant");
         }
       }
 
@@ -134,17 +185,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [loadPermissions]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await authAPI.login({ email, password });
+    async (email: string, password: string, rememberMe: boolean = false) => {
+      // Apply the persistence choice BEFORE any storage writes so the helpers
+      // route accessToken/user/tenant to the correct store from the start.
+      setAuthPersistent(rememberMe);
+      const res = await authAPI.login({ email, password, rememberMe });
       const { accessToken, user: newUser, tenant: newTenant } = res.data.data;
       setAccessToken(accessToken);
       setUser(newUser);
       setTenant(newTenant ?? null);
-      localStorage.setItem("user", JSON.stringify(newUser));
+      writeAuthItem("user", JSON.stringify(newUser));
       if (newTenant) {
-        localStorage.setItem("tenant", JSON.stringify(newTenant));
+        writeAuthItem("tenant", JSON.stringify(newTenant));
       } else {
-        localStorage.removeItem("tenant");
+        removeAuthItem("tenant");
       }
       if (newUser.role !== "SUPERADMIN") {
         await loadPermissions();
@@ -157,16 +211,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const register = useCallback(
     async (name: string, email: string, password: string) => {
+      // Brand-new accounts default to a persistent session.
+      setAuthPersistent(true);
       const res = await authAPI.register({ name, email, password });
       const { accessToken, user: newUser, tenant: newTenant } = res.data.data;
       setAccessToken(accessToken);
       setUser(newUser);
       setTenant(newTenant ?? null);
-      localStorage.setItem("user", JSON.stringify(newUser));
+      writeAuthItem("user", JSON.stringify(newUser));
       if (newTenant) {
-        localStorage.setItem("tenant", JSON.stringify(newTenant));
+        writeAuthItem("tenant", JSON.stringify(newTenant));
       } else {
-        localStorage.removeItem("tenant");
+        removeAuthItem("tenant");
       }
       if (newUser.role !== "SUPERADMIN") {
         await loadPermissions();
@@ -187,7 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setUser(null);
     setTenant(null);
     setPermissions(new Set());
-    localStorage.removeItem("tenant");
+    removeAuthItem("tenant");
     toast.info("Signed out", "You have been logged out successfully");
     router.push("/");
   }, [router, toast]);
@@ -202,7 +258,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setUser(null);
     setTenant(null);
     setPermissions(new Set());
-    localStorage.removeItem("tenant");
+    removeAuthItem("tenant");
     router.push("/");
   }, [router]);
 
@@ -215,7 +271,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const res = await authAPI.updateProfile(data);
       const fresh = (res.data.data as { user: User }).user;
       setUser(fresh);
-      localStorage.setItem("user", JSON.stringify(fresh));
+      writeAuthItem("user", JSON.stringify(fresh));
     },
     [],
   );
@@ -252,7 +308,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         billingEmail: fresh.billingEmail ?? null,
       };
       setTenant(slim);
-      localStorage.setItem("tenant", JSON.stringify(slim));
+      writeAuthItem("tenant", JSON.stringify(slim));
       return slim;
     },
     [],

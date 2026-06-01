@@ -14,6 +14,7 @@ export function setRefreshCookie(
   res: NextResponse,
   token: string,
   expiresAt: Date,
+  persistent = true,
 ): NextResponse {
   res.cookies.set({
     name: REFRESH_COOKIE_NAME,
@@ -22,7 +23,9 @@ export function setRefreshCookie(
     secure: env.NODE_ENV === "production",
     sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
     path: REFRESH_COOKIE_PATH,
-    expires: expiresAt,
+    // Persistent: outlives browser close until expiresAt.
+    // Non-persistent (Remember Me off): session cookie, dies on browser close.
+    ...(persistent ? { expires: expiresAt } : {}),
   });
   return res;
 }
@@ -40,7 +43,11 @@ export function clearRefreshCookie(res: NextResponse): NextResponse {
   return res;
 }
 
-export function setAccessCookie(res: NextResponse, token: string): NextResponse {
+export function setAccessCookie(
+  res: NextResponse,
+  token: string,
+  persistent = true,
+): NextResponse {
   res.cookies.set({
     name: ACCESS_COOKIE_NAME,
     value: token,
@@ -48,7 +55,7 @@ export function setAccessCookie(res: NextResponse, token: string): NextResponse 
     secure: env.NODE_ENV === "production",
     sameSite: env.NODE_ENV === "production" ? "strict" : "lax",
     path: "/",
-    maxAge: ACCESS_COOKIE_MAX_AGE_SEC,
+    ...(persistent ? { maxAge: ACCESS_COOKIE_MAX_AGE_SEC } : {}),
   });
   return res;
 }

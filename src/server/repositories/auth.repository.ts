@@ -84,6 +84,7 @@ export async function createRefreshToken(input: {
   token: string;
   userId: string;
   expiresAt: Date;
+  persistent: boolean;
 }) {
   return RefreshToken.create(input);
 }

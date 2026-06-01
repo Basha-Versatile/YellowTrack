@@ -4,6 +4,7 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 import { env } from "@/lib/env";
 import {
   BadRequestError,
+  NotFoundError,
   TooManyRequestsError,
   UnauthorizedError,
 } from "@/lib/errors";
@@ -64,15 +65,23 @@ function verifyVerifyToken(token: string): VerifyTokenPayload {
 /**
  * Step 1 — request an OTP for the given email.
  *
- * Privacy: we always return success regardless of whether the email maps to a
- * real account, so this endpoint can't be used to enumerate users. The email
- * only goes out for real accounts.
+ * Behaviour: rejects unknown emails with a 404 so the user gets a clear "no
+ * account exists with this email" message. (Standard practice is to mask
+ * existence to prevent account enumeration — we trade that off here for UX
+ * clarity per product requirement.)
  *
  * Rate limit: 60s cooldown per email between requests.
  */
 export async function requestPasswordResetOtp(rawEmail: string): Promise<void> {
   const email = normalizeEmail(rawEmail);
   if (!email) throw new BadRequestError("Email is required");
+
+  // Verify the account exists BEFORE the cooldown check. Otherwise a 60s
+  // throttle on a previous request would mask the "no such user" error.
+  const user = await User.findOne({ email }).select("_id name email").lean();
+  if (!user) {
+    throw new NotFoundError("No account exists with this email");
+  }
 
   const cooldownSince = new Date(Date.now() - RESEND_COOLDOWN_SECONDS * 1000);
   const recent = await PasswordResetOtp.findOne({
@@ -85,12 +94,6 @@ export async function requestPasswordResetOtp(rawEmail: string): Promise<void> {
     throw new TooManyRequestsError(
       `Please wait ${RESEND_COOLDOWN_SECONDS}s before requesting another code.`,
     );
-  }
-
-  const user = await User.findOne({ email }).select("_id name email").lean();
-  if (!user) {
-    // Silently do nothing — caller can't distinguish from a real send.
-    return;
   }
 
   const otp = generateOtp();

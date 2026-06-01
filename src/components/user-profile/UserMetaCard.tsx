@@ -61,6 +61,7 @@ export default function UserMetaCard() {
   };
 
   const handleSave = async () => {
+    if (saving) return;
     if (!name.trim() || name.trim().length < 2) {
       toast.error("Name must be at least 2 characters");
       return;
@@ -221,6 +222,7 @@ export default function UserMetaCard() {
             </div>
             <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
               <Button
+                type="button"
                 size="sm"
                 variant="outline"
                 onClick={closeModal}
@@ -228,7 +230,7 @@ export default function UserMetaCard() {
               >
                 Close
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={saving}>
+              <Button type="submit" size="sm" disabled={saving}>
                 {saving ? "Saving…" : "Save changes"}
               </Button>
             </div>

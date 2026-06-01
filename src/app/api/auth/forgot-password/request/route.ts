@@ -12,6 +12,5 @@ const bodySchema = z.object({
 export const POST = withRoute(async ({ req }) => {
   const { email } = await parseJson(req, bodySchema);
   await requestPasswordResetOtp(email);
-  // Always succeed — we never reveal whether the email exists.
-  return success(null, "If an account exists for that email, a code has been sent.");
+  return success(null, "A verification code has been sent to your email.");
 });
