@@ -138,7 +138,9 @@ export default async function OpenGraphImage() {
               height: 8,
               borderRadius: 8,
               background: "#FFCD09",
-              display: "inline-block",
+              // satori (the renderer behind next/og) only supports
+              // flex / block / contents / none / -webkit-box for `display`.
+              display: "block",
             }}
           />
           THEYELLOWTRACK.COM
