@@ -29,7 +29,15 @@ import { BrandPicker } from "@/components/vehicles/BrandPicker";
 import { EditVehicleModal } from "@/components/vehicles/EditVehicleModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/modal";
-import { pickValidatedFile, pickValidatedFiles } from "@/lib/file-validation";
+import { pickValidatedFile, pickValidatedFiles, IMAGE_UPLOAD_MIMES, IMAGE_ACCEPT_LABEL } from "@/lib/file-validation";
+
+// Vehicle photo gallery uploads must reject PDFs even though the global
+// default allow-list accepts them. Reused on both the inline "Add Photos"
+// button and the empty-state drop zone so the rule lives in one place.
+const VEHICLE_IMAGE_PICK_OPTS = {
+  allowedMimes: IMAGE_UPLOAD_MIMES,
+  acceptLabel: IMAGE_ACCEPT_LABEL,
+};
 
 interface ComplianceDoc {
   id: string;
@@ -1828,7 +1836,7 @@ export default function VehicleDetailPage() {
                   ) : (
                     <><Plus className="w-3 h-3" strokeWidth={2} />Add Photos</>
                   )}
-                  <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" disabled={uploadingImages} onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
+                  <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" disabled={uploadingImages} onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m), VEHICLE_IMAGE_PICK_OPTS); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
                 </label>
               </div>
             </div>
@@ -1895,7 +1903,7 @@ export default function VehicleDetailPage() {
                 <ImageIcon className="w-10 h-10 text-gray-300 dark:text-gray-600 group-hover:text-yellow-500 transition-colors" strokeWidth={1.5} />
                 <span className="text-sm text-gray-400 group-hover:text-yellow-600 font-medium mt-2">Click to upload vehicle photos</span>
                 <span className="text-[10px] text-gray-300 dark:text-gray-600 mt-0.5">JPG, PNG — up to 10 photos</span>
-                <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m)); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
+                <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m), VEHICLE_IMAGE_PICK_OPTS); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
               </label>
             )}
           </div>
@@ -2706,7 +2714,7 @@ export default function VehicleDetailPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Odometer (km)</label>
-                  <input type="number" placeholder="e.g. 45000" value={svcForm.odometerKm} onChange={(e) => setSvcForm({ ...svcForm, odometerKm: e.target.value })}
+                  <input type="number" inputMode="numeric" min={0} placeholder="e.g. 45000" value={svcForm.odometerKm} onChange={(e) => setSvcForm({ ...svcForm, odometerKm: e.target.value.replace(/[^\d]/g, "") })}
                     className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
                 </div>
                 <div>

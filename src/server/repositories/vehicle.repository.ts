@@ -313,11 +313,52 @@ export async function findByRegistrationNumber(
   ctx: ScopedContext,
   registrationNumber: string,
 ) {
+  // Explicitly exclude soft-deleted rows so re-onboarding a previously
+  // deleted vehicle works. The Vehicle schema's pre-find middleware also
+  // applies `deletedAt: null`, but we state it here too so this check can
+  // never disagree with the Vehicles list (which would manifest as
+  // "already onboarded" for a plate the user can no longer see).
   return Vehicle.findOne(
     tenantFilter(ctx, {
       registrationNumber: registrationNumber.toUpperCase(),
+      deletedAt: null,
     }),
   ).lean();
+}
+
+// Used by onboarding: when a plate has a soft-deleted row, we restore it
+// in-place instead of creating a fresh one — that way the operator gets
+// back the related compliance docs, challans, EMI plans, FASTag, service
+// history etc., which the delete service intentionally preserved.
+export async function findSoftDeletedByRegistrationNumber(
+  ctx: ScopedContext,
+  registrationNumber: string,
+) {
+  return Vehicle.findOne(
+    tenantFilter(ctx, {
+      registrationNumber: registrationNumber.toUpperCase(),
+      deletedAt: { $ne: null },
+    }),
+  )
+    // Bypass the soft-delete middleware — we explicitly want the deleted row.
+    .setOptions({ includeDeleted: true } as never)
+    .lean();
+}
+
+// Clear `deletedAt` and apply the incoming attribute patch on the same row,
+// so the original `_id` is preserved and every collection keyed by it
+// (ComplianceDocument, Challan, EMIPlan, FastagTransaction, etc.)
+// automatically re-associates without touching those tables.
+export async function restoreSoftDeleted(
+  ctx: ScopedContext,
+  vehicleId: string,
+  patch: Record<string, unknown> = {},
+) {
+  await Vehicle.updateOne(
+    tenantFilter(ctx, { _id: vehicleId }),
+    { $set: { ...patch, deletedAt: null } },
+    { includeDeleted: true } as never,
+  );
 }
 
 export async function create(

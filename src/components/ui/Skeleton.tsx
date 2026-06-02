@@ -6,6 +6,58 @@ export function Skeleton({ className = "" }: { className?: string }) {
   );
 }
 
+// ── Chart shimmer ──────────────────────────────────────────
+// Shown inside chart card slots while the ApexCharts chunk (~200KB)
+// is being fetched and parsed. `variant="bar"` mimics column charts,
+// `variant="donut"` mimics pie/donut charts. Height is tuned to the
+// dashboard's chart heights so there's no layout shift on swap.
+export function ChartSkeleton({
+  variant = "bar",
+  height = 280,
+}: {
+  variant?: "bar" | "donut";
+  height?: number;
+}) {
+  if (variant === "donut") {
+    return (
+      <div
+        className="flex flex-col items-center justify-center gap-4"
+        style={{ height }}
+      >
+        <div className="relative">
+          <div className="h-40 w-40 animate-pulse rounded-full bg-gray-200/70 dark:bg-gray-700/40" />
+          <div className="absolute inset-6 rounded-full bg-white dark:bg-gray-900" />
+        </div>
+        <div className="flex gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-3 w-12" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  // bar
+  const heights = [60, 80, 45, 95, 70, 85, 55, 75];
+  return (
+    <div className="flex flex-col gap-3" style={{ height }}>
+      <div className="flex items-end justify-between gap-2 flex-1 px-2">
+        {heights.map((h, i) => (
+          <div
+            key={i}
+            className="flex-1 animate-pulse rounded-md bg-gray-200/70 dark:bg-gray-700/40"
+            style={{ height: `${h}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between px-2">
+        {heights.map((_, i) => (
+          <Skeleton key={i} className="h-2 w-8" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Dashboard ──────────────────────────────────────────────
 export function DashboardSkeleton() {
   return (

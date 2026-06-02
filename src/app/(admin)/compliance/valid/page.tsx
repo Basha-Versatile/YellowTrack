@@ -93,8 +93,11 @@ export default function ValidComplianceDocumentsPage() {
   const [regSearch, setRegSearch] = useState("");
 
   useEffect(() => {
+    // Same fleet-coverage fix as /compliance — 100 was silently sampling and
+    // diverging from the Dashboard's full-fleet counts. See compliance/page.tsx
+    // for the longer rationale.
     vehicleAPI
-      .getAll({ limit: 100 })
+      .getAll({ limit: 10000 })
       .then((res) => setVehicles(res.data.data.vehicles))
       .catch(console.error)
       .finally(() => setLoading(false));

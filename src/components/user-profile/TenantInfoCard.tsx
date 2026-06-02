@@ -140,10 +140,23 @@ export default function TenantInfoCard() {
     ? null
     : logoPreview ?? tenant?.logoUrl ?? null;
 
+  // Live email validity — billing email is optional, so "empty" is valid;
+  // a value is only valid when it matches the standard email shape.
+  const EMAIL_RE = /^\S+@\S+\.\S+$/;
+  const billingEmailTrimmed = form.billingEmail.trim();
+  const billingEmailValid =
+    billingEmailTrimmed === "" || EMAIL_RE.test(billingEmailTrimmed);
+  const nameValid = form.name.trim().length >= 2;
+  const formInvalid = !nameValid || !billingEmailValid;
+
   const handleSave = async () => {
     if (saving) return;
-    if (!form.name.trim() || form.name.trim().length < 2) {
+    if (!nameValid) {
       toast.error("Workspace name must be at least 2 characters");
+      return;
+    }
+    if (!billingEmailValid) {
+      toast.error("Enter a valid billing email or leave it blank");
       return;
     }
     setSaving(true);
@@ -319,7 +332,21 @@ export default function TenantInfoCard() {
                     value={form.billingEmail}
                     onChange={setField("billingEmail")}
                     placeholder="billing@example.com"
+                    aria-invalid={!billingEmailValid}
+                    aria-describedby="billing-email-hint"
                   />
+                  <p
+                    id="billing-email-hint"
+                    className={`mt-1 text-[10px] leading-snug ${
+                      !billingEmailValid
+                        ? "text-red-500 dark:text-red-400"
+                        : "text-gray-400 dark:text-white/40"
+                    }`}
+                  >
+                    {!billingEmailValid
+                      ? "Enter a valid email (e.g. billing@example.com)"
+                      : "Used on invoices. Optional — leave blank to clear."}
+                  </p>
                 </FormField>
                 <FormField label="GST number">
                   <PlainInput
@@ -367,7 +394,7 @@ export default function TenantInfoCard() {
               >
                 Close
               </Button>
-              <Button type="submit" size="sm" disabled={saving}>
+              <Button type="submit" size="sm" disabled={saving || formInvalid}>
                 {saving ? "Saving…" : "Save changes"}
               </Button>
             </div>
@@ -426,11 +453,15 @@ function PlainInput({
   onChange,
   placeholder,
   type = "text",
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
   type?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }) {
   return (
     <input
@@ -438,7 +469,13 @@ function PlainInput({
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      className="h-11 w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 focus:border-yellow-400 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+      aria-invalid={ariaInvalid}
+      aria-describedby={ariaDescribedBy}
+      className={`h-11 w-full rounded-lg border bg-white px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 ${
+        ariaInvalid
+          ? "border-red-300 focus:border-red-400 focus:ring-red-400/15 dark:border-red-500/40"
+          : "border-gray-200 focus:border-yellow-400 focus:ring-yellow-400/10 dark:border-gray-700"
+      }`}
     />
   );
 }
