@@ -784,10 +784,11 @@ function VehicleExpensesContent() {
                       <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Odometer (km) <span className="text-red-500">*</span></label>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="0"
                         placeholder="e.g. 45000"
                         value={tyreOdometerKm}
-                        onChange={(e) => setTyreOdometerKm(e.target.value)}
+                        onChange={(e) => setTyreOdometerKm(e.target.value.replace(/[^\d]/g, ""))}
                         className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                       />
                     </div>

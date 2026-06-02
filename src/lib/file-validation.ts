@@ -17,6 +17,12 @@ export const ALLOWED_UPLOAD_MIMES = [
   "image/png",
 ] as const;
 
+// Images-only allow-list. Pair with `IMAGE_ACCEPT_LABEL` when calling
+// validateUploadFile / pickValidatedFiles for inputs that must reject PDFs
+// (e.g. vehicle photo galleries).
+export const IMAGE_UPLOAD_MIMES = ["image/jpeg", "image/jpg", "image/png"] as const;
+export const IMAGE_ACCEPT_LABEL = "JPG, JPEG, PNG";
+
 const ACCEPT_LABEL = "PDF, JPG, PNG";
 
 function formatBytes(n: number): string {

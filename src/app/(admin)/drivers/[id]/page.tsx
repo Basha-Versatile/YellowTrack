@@ -600,12 +600,25 @@ export default function DriverDetailPage() {
                   <button
                     disabled={togglingVerify}
                     onClick={async () => {
+                      // Unverifying re-opens the driver's profile for edits and
+                      // is destructive enough to warrant a confirm; verifying
+                      // is fine to fire directly.
+                      if (driver.adminVerified) {
+                        const ok = window.confirm(
+                          `Unverify ${driver.name}? The driver will be able to edit their profile again until you re-verify.`,
+                        );
+                        if (!ok) return;
+                      }
                       setTogglingVerify(true);
                       try {
                         await driverAPI.toggleVerification(driver.id);
                         setDriver((prev) => prev ? { ...prev, adminVerified: !prev.adminVerified } : prev);
                         toast.success(driver.adminVerified ? "Unverified" : "Verified", driver.adminVerified ? "Driver can now edit their profile" : "Driver profile locked");
-                      } catch { toast.error("Failed", "Could not toggle verification"); }
+                      } catch (err) {
+                        const msg = (err as { response?: { data?: { message?: string } } })
+                          ?.response?.data?.message ?? "Could not toggle verification";
+                        toast.error("Failed", msg);
+                      }
                       finally { setTogglingVerify(false); }
                     }}
                     className="flex items-center gap-2 cursor-pointer disabled:cursor-wait"
@@ -1205,7 +1218,7 @@ export default function DriverDetailPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone</label>
-                    <div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">+91</span><input type="tel" placeholder="9876543210" maxLength={10} value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className={`${inputClass} pl-12`} /></div>
+                    <div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">+91</span><input type="tel" inputMode="numeric" pattern="\d*" placeholder="9876543210" maxLength={10} value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} className={`${inputClass} pl-12`} /></div>
                   </div>
                   <div>
                     <label className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Blood Group</label>

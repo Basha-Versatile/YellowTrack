@@ -120,8 +120,15 @@ export default function ComplianceOverviewPage() {
   });
 
   useEffect(() => {
+    // limit=100 was silently sampling the fleet: any tenant with >100
+    // vehicles got a fraction of the docs, and the top KPI percentage
+    // diverged from the Dashboard (which counts the full fleet server-side).
+    // 10000 matches getVehiclesQuerySchema.limit.max and the fleet-summary
+    // call used elsewhere, so today's fleet sizes (10s–100s of vehicles)
+    // come back in one shot. If fleets ever cross 10000, swap this for the
+    // server-side compliance-counts endpoint instead of bumping the cap.
     vehicleAPI
-      .getAll({ limit: 100 })
+      .getAll({ limit: 10000 })
       .then((res) => setVehicles(res.data.data.vehicles))
       .catch(console.error)
       .finally(() => setLoading(false));

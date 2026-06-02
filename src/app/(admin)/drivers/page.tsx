@@ -285,7 +285,22 @@ export default function DriversPage() {
                     {driver.selfVerifiedAt ? (
                       <button
                         disabled={togglingId === driver.id}
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTogglingId(driver.id); (async () => { try { await driverAPI.toggleVerification(driver.id); setDrivers((prev) => prev.map((d) => d.id === driver.id ? { ...d, adminVerified: !d.adminVerified } : d)); toast.success(driver.adminVerified ? "Unverified" : "Verified"); } catch { toast.error("Failed"); } finally { setTogglingId(null); } })(); }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (driver.adminVerified && !window.confirm(`Unverify ${driver.name}? The driver will be able to edit their profile again until you re-verify.`)) return;
+                          setTogglingId(driver.id);
+                          (async () => {
+                            try {
+                              await driverAPI.toggleVerification(driver.id);
+                              setDrivers((prev) => prev.map((d) => d.id === driver.id ? { ...d, adminVerified: !d.adminVerified } : d));
+                              toast.success(driver.adminVerified ? "Unverified" : "Verified");
+                            } catch (err) {
+                              const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not toggle verification";
+                              toast.error("Failed", msg);
+                            } finally { setTogglingId(null); }
+                          })();
+                        }}
                         className="flex items-center gap-1.5 disabled:cursor-wait" title={driver.adminVerified ? "Verified — click to unverify" : "Unverified — click to verify"}>
                         <div className={`relative w-8 h-[18px] rounded-full transition-colors duration-300 ${togglingId === driver.id ? "bg-gray-300 dark:bg-gray-600 animate-pulse" : driver.adminVerified ? "bg-gradient-to-r from-emerald-400 to-green-500" : "bg-gray-200 dark:bg-gray-700"}`}>
                           <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all duration-300 ${togglingId === driver.id ? "left-[8px]" : driver.adminVerified ? "left-[15px]" : "left-[2px]"}`} />
@@ -377,7 +392,19 @@ export default function DriversPage() {
                   {driver.selfVerifiedAt ? (
                     <button
                       disabled={togglingId === driver.id}
-                      onClick={async (e) => { e.preventDefault(); setTogglingId(driver.id); try { await driverAPI.toggleVerification(driver.id); setDrivers((prev) => prev.map((d) => d.id === driver.id ? { ...d, adminVerified: !d.adminVerified } : d)); toast.success(driver.adminVerified ? "Unverified" : "Verified", driver.adminVerified ? "Driver can edit profile" : "Driver profile locked"); } catch { toast.error("Failed"); } finally { setTogglingId(null); } }}
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        if (driver.adminVerified && !window.confirm(`Unverify ${driver.name}? The driver will be able to edit their profile again until you re-verify.`)) return;
+                        setTogglingId(driver.id);
+                        try {
+                          await driverAPI.toggleVerification(driver.id);
+                          setDrivers((prev) => prev.map((d) => d.id === driver.id ? { ...d, adminVerified: !d.adminVerified } : d));
+                          toast.success(driver.adminVerified ? "Unverified" : "Verified", driver.adminVerified ? "Driver can edit profile" : "Driver profile locked");
+                        } catch (err) {
+                          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not toggle verification";
+                          toast.error("Failed", msg);
+                        } finally { setTogglingId(null); }
+                      }}
                       className="flex items-center gap-1.5 flex-shrink-0 disabled:cursor-wait" title={driver.adminVerified ? "Click to unverify" : "Click to verify"}>
                       <div className={`relative w-9 h-5 rounded-full transition-colors duration-300 ${togglingId === driver.id ? "bg-gray-300 dark:bg-gray-600 animate-pulse" : driver.adminVerified ? "bg-gradient-to-r from-emerald-400 to-green-500" : "bg-gray-200 dark:bg-gray-700"}`}>
                         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-300 ${togglingId === driver.id ? "left-[10px]" : driver.adminVerified ? "left-[18px]" : "left-0.5"}`} />

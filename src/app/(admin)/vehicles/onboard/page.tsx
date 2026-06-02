@@ -43,11 +43,29 @@ export default function OnboardVehiclePage() {
   // Manual mode state -- dynamic
   const [mf, setMf] = useState<Record<string, string>>({ registrationNumber: "", ownerName: "", make: "", model: "", fuelType: "Petrol", chassisNumber: "", engineNumber: "", gvw: "", seatingCapacity: "", permitType: "PASSENGER" });
   const [manualLoading, setManualLoading] = useState(false);
-  const handleMfChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setMf({ ...mf, [e.target.name]: e.target.value });
+  const handleMfChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    // Registration number must be alphanumeric only — strip spaces + symbols
+    // and uppercase so what the user sees matches what we store + submit.
+    const next =
+      name === "registrationNumber"
+        ? value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 10)
+        : value;
+    setMf({ ...mf, [name]: next });
+  };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(""); setSuccess(null);
-    if (!mf.registrationNumber || !mf.make || !mf.model) { setError("Registration number, make, and model are required"); return; }
+    // Per-field validation so the banner names exactly what's wrong instead
+    // of listing all required fields together (which previously made every
+    // missing-make / missing-model error look like a reg-number problem).
+    const reg = mf.registrationNumber?.trim() ?? "";
+    if (!reg) { setError("Registration number is required"); return; }
+    // Matches the server's manualOnboardSchema.min(4). Catching it here means
+    // the user sees a specific length hint instead of a generic 400 toast.
+    if (reg.length < 4) { setError("Registration number must be at least 4 characters"); return; }
+    if (!mf.make?.trim()) { setError("Make is required"); return; }
+    if (!mf.model?.trim()) { setError("Model is required"); return; }
     setManualLoading(true);
     try {
       const payload: Record<string, string | File | undefined> = {
@@ -57,10 +75,30 @@ export default function OnboardVehiclePage() {
         seatingCapacity: mf.seatingCapacity || undefined,
       };
       const res = await vehicleAPI.onboardManual(payload);
-      setSuccess(`${res.data.data.registrationNumber} onboarded successfully!`);
-      toast.success("Vehicle Onboarded!", `${res.data.data.registrationNumber} added to your fleet`);
-      setTimeout(() => router.push(`/vehicles/${res.data.data.id}`), 1200);
-    } catch (err: unknown) { const e = err as { response?: { data?: { message?: string } } }; setError(e.response?.data?.message || "Failed to onboard"); toast.error("Onboarding Failed", e.response?.data?.message || "Please try again"); }
+      const vehicle = res.data.data;
+      const restored = vehicle?.restored === true;
+      setSuccess(
+        restored
+          ? `${vehicle.registrationNumber} restored — previous compliance, challans, services and EMI history kept.`
+          : `${vehicle.registrationNumber} onboarded successfully!`,
+      );
+      toast.success(
+        restored ? "Vehicle Restored!" : "Vehicle Onboarded!",
+        restored
+          ? `${vehicle.registrationNumber} returned to your fleet with prior history`
+          : `${vehicle.registrationNumber} added to your fleet`,
+      );
+      setTimeout(() => router.push(`/vehicles/${vehicle.id}`), 1200);
+    } catch (err: unknown) {
+      // Zod errors come back as { message: "Validation failed", errors: ["field: detail", ...] }.
+      // Show the first specific error so "Validation failed" never reaches the user.
+      const e = err as { response?: { data?: { message?: string; errors?: string[] } } };
+      const detail = e.response?.data?.errors?.[0];
+      const fallback = e.response?.data?.message;
+      const msg = detail ?? fallback ?? "Failed to onboard";
+      setError(msg);
+      toast.error("Onboarding Failed", msg);
+    }
     finally { setManualLoading(false); }
   };
 
@@ -84,9 +122,19 @@ export default function OnboardVehiclePage() {
       const res = await vehicleAPI.onboard(trimmed, undefined, undefined, vehicleUsage);
       const vehicle = res.data.data;
       const warnings: string[] = Array.isArray(vehicle?.warnings) ? vehicle.warnings : [];
+      const restored = vehicle?.restored === true;
       setActiveStep(STEPS.length); // all done
-      setSuccess(`${vehicle.registrationNumber} — ${vehicle.make} ${vehicle.model} onboarded successfully!`);
-      toast.success("Vehicle Onboarded!", `${vehicle.registrationNumber} added to your fleet`);
+      setSuccess(
+        restored
+          ? `${vehicle.registrationNumber} restored — previous compliance, challans, services and EMI history kept.`
+          : `${vehicle.registrationNumber} — ${vehicle.make} ${vehicle.model} onboarded successfully!`,
+      );
+      toast.success(
+        restored ? "Vehicle Restored!" : "Vehicle Onboarded!",
+        restored
+          ? `${vehicle.registrationNumber} returned to your fleet with prior history`
+          : `${vehicle.registrationNumber} added to your fleet`,
+      );
       // Surface partial-save warnings so the operator knows what to follow up on
       warnings.forEach((w) => toast.warning("Heads up", w));
       setTimeout(() => router.push(`/vehicles/${vehicle.id}`), warnings.length > 0 ? 2500 : 1500);
@@ -171,7 +219,7 @@ export default function OnboardVehiclePage() {
                     Vehicle Number
                   </label>
                   <div className="relative">
-                    <input type="text" placeholder="KA 01 AB 1234" value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value.toUpperCase())} disabled={loading}
+                    <input type="text" placeholder="KA 01 AB 1234" value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 10))} maxLength={10} autoCapitalize="characters" disabled={loading}
                       className="w-full h-14 rounded-xl border-2 border-gray-200 bg-gray-50 px-5 text-xl font-mono font-black tracking-[0.25em] text-gray-900 placeholder:text-gray-300 placeholder:font-normal placeholder:tracking-normal placeholder:text-base focus:border-yellow-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:opacity-60 transition-all" />
                     {registrationNumber && !loading && (
                       <button type="button" onClick={() => setRegistrationNumber("")}
@@ -351,7 +399,10 @@ export default function OnboardVehiclePage() {
                 {/* Registration Number */}
                 <div className="mb-5 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-200 dark:border-gray-700">
                   <label className="mb-2 block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Registration Number <span className="text-red-500">*</span></label>
-                  <input type="text" name="registrationNumber" placeholder="KA 01 AB 1234" value={mf.registrationNumber} onChange={handleMfChange} className="w-full h-14 rounded-xl border-2 border-gray-300 bg-white px-5 text-xl font-mono font-black tracking-[0.25em] text-gray-900 placeholder:text-gray-300 placeholder:font-normal placeholder:tracking-normal placeholder:text-base focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-600 dark:bg-gray-900 dark:text-white transition-all" />
+                  <input type="text" name="registrationNumber" placeholder="KA 01 AB 1234" value={mf.registrationNumber} onChange={handleMfChange} maxLength={10} autoCapitalize="characters" className="w-full h-14 rounded-xl border-2 border-gray-300 bg-white px-5 text-xl font-mono font-black tracking-[0.25em] text-gray-900 placeholder:text-gray-300 placeholder:font-normal placeholder:tracking-normal placeholder:text-base focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-600 dark:bg-gray-900 dark:text-white transition-all" />
+                  <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+                    Letters and digits only · 4 to 10 characters
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

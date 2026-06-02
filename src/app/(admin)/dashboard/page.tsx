@@ -1,11 +1,11 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { vehicleAPI, driverAPI, notificationAPI } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { DashboardSkeleton } from "@/components/ui/Skeleton";
-import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, BarChart3, PieChart as PieIcon, Disc3, type LucideIcon } from "lucide-react";
+import { DashboardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
+import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, BarChart3, PieChart as PieIcon, Disc3, RefreshCw, type LucideIcon } from "lucide-react";
 import type { IconType } from "react-icons";
 import {
   SiAudi, SiBmw, SiFord, SiHonda, SiHyundai, SiKia, SiMahindra,
@@ -13,7 +13,18 @@ import {
   SiVolkswagen, SiVolvo,
 } from "react-icons/si";
 
-const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
+// Two dynamic handles for the same module so each chart slot shows a shimmer
+// shaped like its eventual chart while the ~200KB ApexCharts chunk loads.
+// Without this, the slot stayed blank for several seconds after the API
+// resolved — the exact gap users were seeing on first dashboard paint.
+const BarApexChart = dynamic(() => import("react-apexcharts"), {
+  ssr: false,
+  loading: () => <ChartSkeleton variant="bar" height={280} />,
+});
+const DonutApexChart = dynamic(() => import("react-apexcharts"), {
+  ssr: false,
+  loading: () => <ChartSkeleton variant="donut" height={260} />,
+});
 
 interface DashboardStats {
   totalVehicles: number;
@@ -62,28 +73,160 @@ const CATEGORY_COLORS_HEX: Record<string, string> = {
   invoices: "#06b6d4",
 };
 
+// Auto-refresh cadence — dashboard re-pulls every minute in the background.
+// On tab focus we always refetch immediately, so the user never sees stale
+// data when they come back from another tab where they changed something.
+const REFRESH_INTERVAL_MS = 60_000;
+
+// Date helpers for the expense-range filter.
+const ymd = (d: Date) => d.toISOString().split("T")[0];
+const startOfYear = () => ymd(new Date(new Date().getFullYear(), 0, 1));
+const today = () => ymd(new Date());
+const daysAgo = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return ymd(d);
+};
+
+// Returns null when the range is valid, otherwise a user-facing error string.
+// Caller binds this to both onChange and to the Apply gate so the same rules
+// drive the inline hint AND the disabled state.
+function validateDateRange(from: string, to: string): string | null {
+  if (!from) return "Select a 'From' date";
+  if (!to) return "Select a 'To' date";
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  if (Number.isNaN(fromDate.getTime())) return "'From' date is not a valid date";
+  if (Number.isNaN(toDate.getTime())) return "'To' date is not a valid date";
+  if (fromDate > toDate) return "'From' date must be on or before 'To' date";
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  if (toDate > endOfToday) return "'To' date can't be in the future";
+  const fiveYearsAgo = new Date();
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+  if (fromDate < fiveYearsAgo) return "'From' date can't be more than 5 years ago";
+  return null;
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
   const [expenseReport, setExpenseReport] = useState<ExpenseReport | null>(null);
   // const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  // Expense-range filter. Defaults to YTD (same as the previous hardcoded
+  // behaviour). `applied` is what's actually being shown; `dateFrom`/`dateTo`
+  // are the editing values — they only become "applied" after validation.
+  const [dateFrom, setDateFrom] = useState(startOfYear());
+  const [dateTo, setDateTo] = useState(today());
+  const [appliedRange, setAppliedRange] = useState({
+    from: startOfYear(),
+    to: today(),
+  });
+  const dateError = validateDateRange(dateFrom, dateTo);
+  // Guard so background ticks can't pile up if a fetch is already in flight.
+  const inFlight = useRef(false);
+  // Background poll reads dates via a ref so changing the filter doesn't
+  // churn the interval/visibility effect.
+  const appliedRangeRef = useRef(appliedRange);
+  useEffect(() => {
+    appliedRangeRef.current = appliedRange;
+  }, [appliedRange]);
+
+  const fetchAll = useCallback(async (mode: "initial" | "background") => {
+    if (inFlight.current && mode === "background") return;
+    inFlight.current = true;
+    if (mode === "background") setRefreshing(true);
+    const { from, to } = appliedRangeRef.current;
+    try {
+      const [s, ds, , er] = await Promise.all([
+        vehicleAPI.getStats().then((r) => r.data.data),
+        driverAPI.getStats().then((r) => r.data.data).catch(() => null),
+        notificationAPI.getUnreadCount().then((r) => r.data.data.count).catch(() => 0),
+        vehicleAPI.getExpenseReport({ from, to }).then((r) => r.data.data).catch(() => null),
+      ]);
+      setStats(s);
+      setDriverStats(ds);
+      setExpenseReport(er);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      inFlight.current = false;
+      if (mode === "initial") setLoading(false);
+      else setRefreshing(false);
+    }
+  }, []);
+
+  // Re-fetch only the expense report when the user applies a new range. KPI
+  // tiles aren't date-scoped so we don't waste a round-trip on them.
+  const applyDateRange = useCallback(async () => {
+    const err = validateDateRange(dateFrom, dateTo);
+    if (err) return;
+    if (dateFrom === appliedRange.from && dateTo === appliedRange.to) return;
+    setAppliedRange({ from: dateFrom, to: dateTo });
+    setRefreshing(true);
+    try {
+      const er = await vehicleAPI
+        .getExpenseReport({ from: dateFrom, to: dateTo })
+        .then((r) => r.data.data)
+        .catch(() => null);
+      setExpenseReport(er);
+      setLastUpdated(new Date());
+    } finally {
+      setRefreshing(false);
+    }
+  }, [dateFrom, dateTo, appliedRange]);
+
+  const setPreset = useCallback(
+    (from: string, to: string) => {
+      setDateFrom(from);
+      setDateTo(to);
+      // Apply presets immediately — they're known-valid so no confirmation.
+      if (from === appliedRange.from && to === appliedRange.to) return;
+      setAppliedRange({ from, to });
+      setRefreshing(true);
+      void vehicleAPI
+        .getExpenseReport({ from, to })
+        .then((r) => r.data.data)
+        .catch(() => null)
+        .then((er) => {
+          setExpenseReport(er);
+          setLastUpdated(new Date());
+        })
+        .finally(() => setRefreshing(false));
+    },
+    [appliedRange],
+  );
+
+  const rangeChanged =
+    dateFrom !== appliedRange.from || dateTo !== appliedRange.to;
 
   useEffect(() => {
-    // Year-to-date expense window — matches the Expenses page default.
-    const now = new Date();
-    const from = new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0];
-    const to = now.toISOString().split("T")[0];
-    Promise.all([
-      vehicleAPI.getStats().then((r) => r.data.data),
-      driverAPI.getStats().then((r) => r.data.data).catch(() => null),
-      notificationAPI.getUnreadCount().then((r) => r.data.data.count).catch(() => 0),
-      vehicleAPI.getExpenseReport({ from, to }).then((r) => r.data.data).catch(() => null),
-    ])
-      .then(([s, ds, , er]) => { setStats(s); setDriverStats(ds); setExpenseReport(er); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+    void fetchAll("initial");
+
+    // Background poll. Skip when the tab is hidden so we don't burn API
+    // budget on backgrounded windows — visibilitychange covers waking up.
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchAll("background");
+      }
+    }, REFRESH_INTERVAL_MS);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void fetchAll("background");
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [fetchAll]);
 
   if (loading) return <DashboardSkeleton />;
 
@@ -115,9 +258,26 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Dashboard</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">Fleet compliance overview at a glance</p>
+          <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5 flex items-center gap-1.5">
+            Fleet compliance overview at a glance
+            {lastUpdated && (
+              <span className="hidden sm:inline text-gray-400 dark:text-gray-500">
+                · Updated <LastUpdated at={lastUpdated} />
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void fetchAll("background")}
+            disabled={refreshing}
+            aria-label="Refresh dashboard"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed dark:border-gray-700 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10 transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">{refreshing ? "Refreshing…" : "Refresh"}</span>
+          </button>
           <Link href="/vehicles/onboard"
             className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2 text-xs font-bold text-white shadow shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all">
             <Plus className="w-3.5 h-3.5" />
@@ -237,6 +397,88 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* ── EXPENSE RANGE FILTER ── */}
+      <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="flex flex-wrap items-end gap-2.5">
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">From</span>
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || today()}
+                onChange={(e) => setDateFrom(e.target.value)}
+                aria-invalid={Boolean(dateError)}
+                aria-describedby="date-range-error"
+                className={`h-9 rounded-lg border bg-white px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 dark:bg-white/5 dark:text-white ${
+                  dateError
+                    ? "border-red-300 focus:border-red-400 focus:ring-red-400/20 dark:border-red-500/40"
+                    : "border-gray-200 focus:border-yellow-400 focus:ring-yellow-400/15 dark:border-gray-700"
+                }`}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">To</span>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom}
+                max={today()}
+                onChange={(e) => setDateTo(e.target.value)}
+                aria-invalid={Boolean(dateError)}
+                aria-describedby="date-range-error"
+                className={`h-9 rounded-lg border bg-white px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 dark:bg-white/5 dark:text-white ${
+                  dateError
+                    ? "border-red-300 focus:border-red-400 focus:ring-red-400/20 dark:border-red-500/40"
+                    : "border-gray-200 focus:border-yellow-400 focus:ring-yellow-400/15 dark:border-gray-700"
+                }`}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void applyDateRange()}
+              disabled={Boolean(dateError) || !rangeChanged || refreshing}
+              className="h-9 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 text-xs font-bold text-white shadow shadow-yellow-500/20 hover:shadow-yellow-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+            >
+              Apply
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { label: "Last 30d", from: daysAgo(30), to: today() },
+              { label: "Last 90d", from: daysAgo(90), to: today() },
+              { label: "YTD", from: startOfYear(), to: today() },
+              { label: "Last 12m", from: daysAgo(365), to: today() },
+            ].map((p) => {
+              const active = appliedRange.from === p.from && appliedRange.to === p.to;
+              return (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => setPreset(p.from, p.to)}
+                  className={`h-7 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                    active
+                      ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300"
+                      : "border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {dateError && (
+          <p
+            id="date-range-error"
+            role="alert"
+            className="mt-2 text-[11px] text-red-500 dark:text-red-400"
+          >
+            {dateError}
+          </p>
+        )}
+      </div>
+
       {/* ── EXPENSE CHARTS (moved from /vehicles/expenses) ── */}
       {expenseReport && (() => {
         const activeCategories = Object.entries(expenseReport.summary.breakdown).filter(
@@ -273,7 +515,7 @@ export default function DashboardPage() {
                 </span>
                 Monthly Expense Trend
               </h3>
-              <ReactApexChart
+              <BarApexChart
                 type="bar"
                 height={280}
                 options={{
@@ -317,7 +559,7 @@ export default function DashboardPage() {
                 </span>
                 Category Split
               </h3>
-              <ReactApexChart
+              <DonutApexChart
                 type="donut"
                 height={260}
                 options={{
@@ -788,4 +1030,24 @@ function ComplianceSection({
       </div>
     </div>
   );
+}
+
+// Renders "just now" / "12s ago" / "3m ago" and re-renders itself every 15s
+// so the label stays current without re-running the whole dashboard tree.
+function LastUpdated({ at }: { at: Date }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((t) => t + 1), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const diffSec = Math.max(0, Math.floor((Date.now() - at.getTime()) / 1000));
+  const label =
+    diffSec < 5
+      ? "just now"
+      : diffSec < 60
+        ? `${diffSec}s ago`
+        : diffSec < 3600
+          ? `${Math.floor(diffSec / 60)}m ago`
+          : `${Math.floor(diffSec / 3600)}h ago`;
+  return <span>{label}</span>;
 }

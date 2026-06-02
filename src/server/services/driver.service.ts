@@ -623,8 +623,12 @@ export async function toggleAdminVerification(ctx: ScopedContext, id: string) {
       "Driver has not submitted for verification yet — admin cannot verify until the driver self-submits via the verification link.",
     );
   }
+  // Only flip adminVerified. `selfVerifiedAt` is the timestamp of the driver's
+  // self-submission and is an immutable historical fact — wiping it on unverify
+  // used to lock out every subsequent re-verify (the guard above would fire on
+  // the second toggle because selfVerifiedAt was now null).
   const updateData = current
-    ? { adminVerified: false, selfVerifiedAt: null }
+    ? { adminVerified: false }
     : { adminVerified: true };
   return driverRepo.update(ctx, id, updateData);
 }

@@ -1,11 +1,23 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { EyeCloseIcon, EyeIcon } from "@/icons";
 import Image from "next/image";
+
+// Mirrors AuthContext's internal postLoginRoute so the auth page can route
+// an already-authenticated visitor (e.g. another tab refreshed after a sibling
+// logged in) to the same destination as a fresh login would.
+function postLoginRoute(user: {
+  role: string;
+  mustResetPassword?: boolean;
+}): string {
+  if (user.mustResetPassword) return "/reset-password";
+  if (user.role === "SUPERADMIN") return "/superadmin";
+  return "/dashboard";
+}
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -37,6 +49,7 @@ function ThemeToggle() {
 }
 
 export default function AuthPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const modeParam = searchParams.get("mode");
   const [isSignUp, setIsSignUp] = useState(modeParam === "signup");
@@ -54,7 +67,18 @@ export default function AuthPage() {
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
 
-  const { login, register } = useAuth();
+  const { user, isLoading: authLoading, login, register } = useAuth();
+
+  // Cross-tab: if another tab logged in with the same account, that tab's
+  // localStorage/cookie writes are visible here too. On mount, AuthContext
+  // re-hydrates from storage and silently refreshes — once `user` lands, we
+  // forward to the dashboard so the sign-in form never shows for an already-
+  // authenticated visitor (fixes hard-refresh-after-sibling-login).
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace(postLoginRoute(user));
+    }
+  }, [authLoading, user, router]);
 
   // Backend registerSchema enforces min(6), so every valid account password
   // is at least 6 chars. Use the same floor on login to short-circuit hopeless
@@ -174,6 +198,23 @@ export default function AuthPage() {
       </div>
     </div>
   );
+
+  // While AuthContext is still rehydrating from storage / silently refreshing,
+  // OR we have a user and are mid-redirect, suppress the sign-in form. This
+  // avoids the "login form flashes before /dashboard loads" jitter on a tab
+  // that's about to forward.
+  if (authLoading || user) {
+    return (
+      <div className="relative w-full min-h-screen overflow-hidden bg-gray-100 dark:bg-gray-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-9 w-9 rounded-full border-[3px] border-yellow-300/40 border-t-yellow-500 animate-spin" />
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-white/40">
+            {user ? "Signing you in…" : "Checking session…"}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full min-h-screen overflow-hidden bg-gray-100 dark:bg-gray-950 flex items-center justify-center">

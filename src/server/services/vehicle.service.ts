@@ -147,7 +147,7 @@ export async function onboardVehicle(
     );
   }
 
-  // 5. map + create
+  // 5. map + create (or restore)
   const vehicleData = mapSurepassToVehicle(surepassData);
   const warnings: string[] = [];
 
@@ -156,15 +156,50 @@ export async function onboardVehicle(
     warnings.push(`RC status: ${rcStatus}. Please update affected documents.`);
   }
 
-  const createdDoc = await vehicleRepo.create(ctx, {
-    registrationNumber,
-    ...vehicleData,
-    images,
-    profileImage: images[0] ?? null,
-    groupIds: resolvedGroupIds,
-    vehicleUsage: vehicleUsage ?? null,
-  });
-  const vehicleId = String(createdDoc._id);
+  // If a soft-deleted row exists for this plate, restore it in place so all
+  // related history (compliance docs, challans, EMI, FASTag, services) snaps
+  // back automatically. Otherwise create a fresh row.
+  const previouslyDeleted =
+    await vehicleRepo.findSoftDeletedByRegistrationNumber(ctx, registrationNumber);
+  let vehicleId: string;
+  let isRestore = false;
+  if (previouslyDeleted) {
+    vehicleId = String((previouslyDeleted as { _id: unknown })._id);
+    isRestore = true;
+    await vehicleRepo.restoreSoftDeleted(ctx, vehicleId, {
+      registrationNumber,
+      ...vehicleData,
+      // Preserve operator-supplied images on the new onboarding; if none
+      // provided, fall back to whatever the row had before delete.
+      images: images.length > 0
+        ? images
+        : (previouslyDeleted as { images?: string[] }).images ?? [],
+      profileImage: images[0]
+        ?? (previouslyDeleted as { profileImage?: string | null }).profileImage
+        ?? null,
+      groupIds: resolvedGroupIds,
+      vehicleUsage:
+        vehicleUsage
+          ?? (previouslyDeleted as { vehicleUsage?: string | null }).vehicleUsage
+          ?? null,
+      // The vehicle is being onboarded fresh — reset lifecycle so a SOLD
+      // status from before delete doesn't carry over and hide it from views.
+      status: "ACTIVE",
+    });
+    warnings.push(
+      "Previous data for this vehicle was restored (compliance, challans, services, EMI).",
+    );
+  } else {
+    const createdDoc = await vehicleRepo.create(ctx, {
+      registrationNumber,
+      ...vehicleData,
+      images,
+      profileImage: images[0] ?? null,
+      groupIds: resolvedGroupIds,
+      vehicleUsage: vehicleUsage ?? null,
+    });
+    vehicleId = String(createdDoc._id);
+  }
 
   // 6. QR (best-effort)
   try {
@@ -180,52 +215,57 @@ export async function onboardVehicle(
     );
   }
 
-  // 7. compliance docs — seed all 6 standard types as default cards.
-  // Surepass-returned expiry dates are pre-filled where available; the rest
-  // are empty placeholders the admin can fill or delete from the detail page.
-  try {
-    const complianceDocs = COMPLIANCE_DOC_TYPES.map((type) => {
-      const getter = SUREPASS_COMPLIANCE_DATE_MAP[type];
-      const expiryDate = getter ? getter(surepassData) : null;
-      return {
-        ...stamp,
-        vehicleId,
-        type,
-        expiryDate,
-        status: calculateComplianceStatus(expiryDate),
-        lastVerifiedAt: new Date(),
-      };
-    });
-    await complianceRepo.createMany(complianceDocs);
-  } catch (err) {
-    console.error(
-      "Failed to create compliance documents:",
-      err instanceof Error ? err.message : err,
-    );
-    warnings.push(
-      "Compliance documents could not be saved automatically. Please add them manually.",
-    );
-  }
-
-  // 8. Insurance policy (if Surepass returned data)
-  const policyNumber = surepassData.insurance_policy_number as string | undefined;
-  const insurer = surepassData.insurance_company as string | undefined;
-  if (policyNumber || insurer) {
+  // 7 & 8 are skipped on restore — compliance docs + insurance policy rows
+  // were preserved by the delete service and reattach automatically to the
+  // restored _id. Re-running them here would duplicate the cards.
+  if (!isRestore) {
+    // 7. compliance docs — seed all 6 standard types as default cards.
+    // Surepass-returned expiry dates are pre-filled where available; the rest
+    // are empty placeholders the admin can fill or delete from the detail page.
     try {
-      await InsurancePolicy.create({
-        ...stamp,
-        vehicleId,
-        policyNumber: policyNumber ?? null,
-        insurer: insurer ?? null,
-        expiryDate: toDate(surepassData.insurance_upto),
-        status: "ACTIVE",
+      const complianceDocs = COMPLIANCE_DOC_TYPES.map((type) => {
+        const getter = SUREPASS_COMPLIANCE_DATE_MAP[type];
+        const expiryDate = getter ? getter(surepassData) : null;
+        return {
+          ...stamp,
+          vehicleId,
+          type,
+          expiryDate,
+          status: calculateComplianceStatus(expiryDate),
+          lastVerifiedAt: new Date(),
+        };
       });
+      await complianceRepo.createMany(complianceDocs);
     } catch (err) {
       console.error(
-        "Failed to create insurance policy:",
+        "Failed to create compliance documents:",
         err instanceof Error ? err.message : err,
       );
-      warnings.push("Insurance policy details could not be saved.");
+      warnings.push(
+        "Compliance documents could not be saved automatically. Please add them manually.",
+      );
+    }
+
+    // 8. Insurance policy (if Surepass returned data)
+    const policyNumber = surepassData.insurance_policy_number as string | undefined;
+    const insurer = surepassData.insurance_company as string | undefined;
+    if (policyNumber || insurer) {
+      try {
+        await InsurancePolicy.create({
+          ...stamp,
+          vehicleId,
+          policyNumber: policyNumber ?? null,
+          insurer: insurer ?? null,
+          expiryDate: toDate(surepassData.insurance_upto),
+          status: "ACTIVE",
+        });
+      } catch (err) {
+        console.error(
+          "Failed to create insurance policy:",
+          err instanceof Error ? err.message : err,
+        );
+        warnings.push("Insurance policy details could not be saved.");
+      }
     }
   }
 
@@ -252,7 +292,7 @@ export async function onboardVehicle(
     }
   }
 
-  return { ...fullVehicle, warnings };
+  return { ...fullVehicle, warnings, restored: isRestore };
 }
 
 export async function manualOnboard(
@@ -297,7 +337,14 @@ export async function manualOnboard(
     );
   }
 
-  const createdDoc = await vehicleRepo.create(ctx, {
+  // Same restore policy as the auto-onboard path: if a soft-deleted row
+  // exists for this plate, reuse its _id so related collections snap back.
+  const previouslyDeleted =
+    await vehicleRepo.findSoftDeletedByRegistrationNumber(
+      ctx,
+      String(registrationNumber),
+    );
+  const vehicleAttrs = {
     registrationNumber: String(registrationNumber),
     ownerName: ownerName ?? null,
     make,
@@ -315,8 +362,30 @@ export async function manualOnboard(
     images,
     profileImage: images[0] ?? null,
     groupIds,
-  });
-  const vehicleId = String(createdDoc._id);
+  };
+  let vehicleId: string;
+  let isRestore = false;
+  if (previouslyDeleted) {
+    vehicleId = String((previouslyDeleted as { _id: unknown })._id);
+    isRestore = true;
+    await vehicleRepo.restoreSoftDeleted(ctx, vehicleId, {
+      ...vehicleAttrs,
+      // Keep the prior images if the operator didn't upload anything new on
+      // re-onboarding — same logic as the auto path.
+      images:
+        images.length > 0
+          ? images
+          : (previouslyDeleted as { images?: string[] }).images ?? [],
+      profileImage:
+        images[0]
+          ?? (previouslyDeleted as { profileImage?: string | null }).profileImage
+          ?? null,
+      status: "ACTIVE",
+    });
+  } else {
+    const createdDoc = await vehicleRepo.create(ctx, vehicleAttrs);
+    vehicleId = String(createdDoc._id);
+  }
 
   try {
     const qrCodeUrl = await generateQRCodeForVehicle(vehicleId, origin);
@@ -339,24 +408,29 @@ export async function manualOnboard(
     }
   }
 
-  try {
-    const complianceDocs = COMPLIANCE_DOC_TYPES.map((type) => ({
-      ...stamp,
-      vehicleId,
-      type,
-      expiryDate: null,
-      status: calculateComplianceStatus(null),
-      lastVerifiedAt: new Date(),
-    }));
-    await complianceRepo.createMany(complianceDocs);
-  } catch (err) {
-    console.error(
-      "Compliance doc seeding failed:",
-      err instanceof Error ? err.message : err,
-    );
+  // Skip on restore — compliance docs were preserved by the delete service
+  // and reattach via the same _id.
+  if (!isRestore) {
+    try {
+      const complianceDocs = COMPLIANCE_DOC_TYPES.map((type) => ({
+        ...stamp,
+        vehicleId,
+        type,
+        expiryDate: null,
+        status: calculateComplianceStatus(null),
+        lastVerifiedAt: new Date(),
+      }));
+      await complianceRepo.createMany(complianceDocs);
+    } catch (err) {
+      console.error(
+        "Compliance doc seeding failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
-  return vehicleRepo.findById(ctx, vehicleId);
+  const full = await vehicleRepo.findById(ctx, vehicleId);
+  return { ...full, restored: isRestore };
 }
 
 /**
