@@ -26,6 +26,7 @@ import { GiCarWheel } from "react-icons/gi";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 import { BrandPicker } from "@/components/vehicles/BrandPicker";
+import { EditVehicleModal } from "@/components/vehicles/EditVehicleModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/modal";
 import { pickValidatedFile, pickValidatedFiles } from "@/lib/file-validation";
@@ -118,6 +119,28 @@ interface Vehicle {
     notes: string | null;
   }>;
   status?: "ACTIVE" | "SOLD";
+  // Editable detail fields surfaced by the Edit modal. Stored on the
+  // Vehicle model but not previously typed in this local interface.
+  registrationDate?: string | null;
+  rcStatus?: string | null;
+  blacklistStatus?: string | null;
+  financed?: boolean | null;
+  financer?: string | null;
+  ownerNumber?: number | null;
+  registeredAt?: string | null;
+  manufacturingDate?: string | null;
+  ownerPhone?: string | null;
+  ownerAddress?: string | null;
+  fatherName?: string | null;
+  color?: string | null;
+  bodyType?: string | null;
+  vehicleCategory?: string | null;
+  normsType?: string | null;
+  cubicCapacity?: string | null;
+  cylinders?: number | null;
+  wheelbase?: number | null;
+  unladenWeight?: number | null;
+  taxMode?: string | null;
   sale?: {
     id: string;
     buyerName: string;
@@ -212,6 +235,12 @@ export default function VehicleDetailPage() {
   const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [editingBrand, setEditingBrand] = useState(false);
+  const [editingFuel, setEditingFuel] = useState(false);
+  const [fuelInput, setFuelInput] = useState("");
+  const [savingFuel, setSavingFuel] = useState(false);
+  const [editingPermit, setEditingPermit] = useState(false);
+  const [permitInput, setPermitInput] = useState("");
+  const [savingPermit, setSavingPermit] = useState(false);
   const [brandInput, setBrandInput] = useState("");
   const [savingBrand, setSavingBrand] = useState(false);
   // Inline-edit state for vehicle usage (PRIVATE / COMMERCIAL).
@@ -477,6 +506,10 @@ export default function VehicleDetailPage() {
   };
   const [uploadFor, setUploadFor] = useState<UploadCtx | null>(null);
   const [uploadDocNumber, setUploadDocNumber] = useState("");
+
+  // Full-form vehicle edit — opens the EditVehicleModal hydrated from the
+  // current vehicle. Save triggers PATCH + refetch.
+  const [editOpen, setEditOpen] = useState(false);
 
   // "Share documents" modal — pick docs to bundle into a 24h public link
   // that the recipient can view + download as a merged PDF.
@@ -1148,6 +1181,65 @@ export default function VehicleDetailPage() {
     }
   };
 
+  // Fuel-type inline edit — uses the generic updateDetails endpoint since
+  // there's no dedicated /fuel route, and that's fine: the PATCH route
+  // happily accepts a single-key body.
+  const handleFuelSave = async () => {
+    if (!vehicle) return;
+    const next = fuelInput.trim();
+    if (!next) {
+      toast.error("Fuel type required", "Fuel type cannot be empty");
+      return;
+    }
+    if (next === vehicle.fuelType) {
+      setEditingFuel(false);
+      return;
+    }
+    setSavingFuel(true);
+    try {
+      await vehicleAPI.updateDetails(vehicle.id, { fuelType: next });
+      await fetchVehicle();
+      setEditingFuel(false);
+      toast.success("Fuel type updated", `Set to ${next}`);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Could not update fuel type";
+      toast.error("Failed", msg);
+    } finally {
+      setSavingFuel(false);
+    }
+  };
+
+  // Permit-type inline edit. Empty string clears the field.
+  const handlePermitSave = async () => {
+    if (!vehicle) return;
+    const next = permitInput.trim();
+    if (next === (vehicle.permitType ?? "")) {
+      setEditingPermit(false);
+      return;
+    }
+    setSavingPermit(true);
+    try {
+      await vehicleAPI.updateDetails(vehicle.id, {
+        permitType: next || null,
+      });
+      await fetchVehicle();
+      setEditingPermit(false);
+      toast.success(
+        "Permit updated",
+        next ? `Set to ${next}` : "Permit cleared",
+      );
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Could not update permit";
+      toast.error("Failed", msg);
+    } finally {
+      setSavingPermit(false);
+    }
+  };
+
   if (loading) return <VehicleDetailSkeleton />;
 
   if (!vehicle) {
@@ -1181,13 +1273,24 @@ export default function VehicleDetailPage() {
           <div className="absolute top-1/2 right-4 w-2 h-2 rounded-full bg-white/20" />
 
           <div className="relative z-10">
-            <Link
-              href="/vehicles"
-              className="inline-flex items-center gap-1.5 text-white/70 hover:text-white text-sm mb-4 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" strokeWidth={2} />
-              Back to vehicles
-            </Link>
+            <div className="flex items-center justify-between mb-4">
+              <Link
+                href="/vehicles"
+                className="inline-flex items-center gap-1.5 text-white/70 hover:text-white text-sm transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+                Back to vehicles
+              </Link>
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 hover:bg-white/25 backdrop-blur-sm px-3 py-1.5 text-xs font-bold text-white transition-colors"
+                title="Edit vehicle details"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit details
+              </button>
+            </div>
 
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div className="flex items-center gap-4">
@@ -1485,8 +1588,134 @@ export default function VehicleDetailPage() {
                 { label: "Chassis No.", value: vehicle.chassisNumber || "—" },
                 { label: "Engine No.", value: vehicle.engineNumber || "—" },
                 { label: "GVW", value: vehicle.gvw ? `${vehicle.gvw} kg` : "—" },
-                { label: "Fuel Type", value: vehicle.fuelType },
-                { label: "Permit", value: vehicle.permitType || "—" },
+              ].map((item) => (
+                <div key={item.label} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{item.label}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1 truncate">{item.value}</p>
+                </div>
+              ))}
+
+              {/* Fuel Type tile with inline edit */}
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 relative">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    Fuel Type
+                  </p>
+                  {!editingFuel && (
+                    <button
+                      onClick={() => {
+                        setFuelInput(vehicle.fuelType || "");
+                        setEditingFuel(true);
+                      }}
+                      className="text-brand-500 hover:text-brand-600 transition-colors"
+                      title="Edit fuel type"
+                    >
+                      <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
+                {editingFuel ? (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={fuelInput}
+                      onChange={(e) => setFuelInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleFuelSave();
+                        if (e.key === "Escape") setEditingFuel(false);
+                      }}
+                      disabled={savingFuel}
+                      placeholder="Petrol / Diesel / CNG / EV"
+                      className="flex-1 h-8 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 text-xs text-gray-800 dark:text-gray-200 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/20 disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleFuelSave}
+                      disabled={savingFuel || !fuelInput.trim()}
+                      className="text-emerald-600 hover:text-emerald-700 disabled:opacity-40"
+                      title="Save"
+                    >
+                      <Check className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingFuel(false)}
+                      disabled={savingFuel}
+                      className="text-gray-400 hover:text-gray-600 disabled:opacity-40"
+                      title="Cancel"
+                    >
+                      <X className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1 truncate">
+                    {vehicle.fuelType || <span className="text-gray-400 font-normal">—</span>}
+                  </p>
+                )}
+              </div>
+
+              {/* Permit tile with inline edit */}
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 relative">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    Permit
+                  </p>
+                  {!editingPermit && (
+                    <button
+                      onClick={() => {
+                        setPermitInput(vehicle.permitType || "");
+                        setEditingPermit(true);
+                      }}
+                      className="text-brand-500 hover:text-brand-600 transition-colors"
+                      title="Edit permit"
+                    >
+                      <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
+                {editingPermit ? (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={permitInput}
+                      onChange={(e) => setPermitInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handlePermitSave();
+                        if (e.key === "Escape") setEditingPermit(false);
+                      }}
+                      disabled={savingPermit}
+                      placeholder="National / State / Goods, etc."
+                      className="flex-1 h-8 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 text-xs text-gray-800 dark:text-gray-200 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400/20 disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePermitSave}
+                      disabled={savingPermit}
+                      className="text-emerald-600 hover:text-emerald-700 disabled:opacity-40"
+                      title="Save"
+                    >
+                      <Check className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPermit(false)}
+                      disabled={savingPermit}
+                      className="text-gray-400 hover:text-gray-600 disabled:opacity-40"
+                      title="Cancel"
+                    >
+                      <X className="w-4 h-4" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1 truncate">
+                    {vehicle.permitType || <span className="text-gray-400 font-normal">—</span>}
+                  </p>
+                )}
+              </div>
+
+              {[
                 { label: "Seating", value: vehicle.seatingCapacity?.toString() || "—" },
               ].map((item) => (
                 <div key={item.label} className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
@@ -3743,6 +3972,57 @@ export default function VehicleDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Edit vehicle details — comprehensive form covering every editable
+          field, organised into sections. Save persists the delta via PATCH
+          and refreshes the page in place. */}
+      <EditVehicleModal
+        isOpen={editOpen}
+        vehicle={
+          vehicle
+            ? {
+                id: vehicle.id,
+                registrationNumber: vehicle.registrationNumber,
+                ownerName: vehicle.ownerName,
+                make: vehicle.make,
+                model: vehicle.model,
+                fuelType: vehicle.fuelType,
+                brand: vehicle.brand ?? null,
+                chassisNumber: vehicle.chassisNumber ?? null,
+                engineNumber: vehicle.engineNumber ?? null,
+                gvw: vehicle.gvw ?? null,
+                seatingCapacity: vehicle.seatingCapacity ?? null,
+                tyreCount: vehicle.tyreCount ?? null,
+                permitType: vehicle.permitType ?? null,
+                vehicleUsage: vehicle.vehicleUsage ?? null,
+                registrationDate: vehicle.registrationDate ?? null,
+                rcStatus: vehicle.rcStatus ?? null,
+                blacklistStatus: vehicle.blacklistStatus ?? null,
+                financed: vehicle.financed ?? null,
+                financer: vehicle.financer ?? null,
+                ownerNumber: vehicle.ownerNumber ?? null,
+                registeredAt: vehicle.registeredAt ?? null,
+                manufacturingDate: vehicle.manufacturingDate ?? null,
+                ownerPhone: vehicle.ownerPhone ?? null,
+                ownerAddress: vehicle.ownerAddress ?? null,
+                fatherName: vehicle.fatherName ?? null,
+                color: vehicle.color ?? null,
+                bodyType: vehicle.bodyType ?? null,
+                vehicleCategory: vehicle.vehicleCategory ?? null,
+                normsType: vehicle.normsType ?? null,
+                cubicCapacity: vehicle.cubicCapacity ?? null,
+                cylinders: vehicle.cylinders ?? null,
+                wheelbase: vehicle.wheelbase ?? null,
+                unladenWeight: vehicle.unladenWeight ?? null,
+                taxMode: vehicle.taxMode ?? null,
+              }
+            : null
+        }
+        onClose={() => setEditOpen(false)}
+        onSaved={async () => {
+          await fetchVehicle();
+        }}
+      />
 
       {/* Share documents — generate a 24h public link of the picked docs */}
       <Modal

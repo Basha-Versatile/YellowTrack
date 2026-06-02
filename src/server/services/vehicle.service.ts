@@ -474,6 +474,60 @@ export async function getVehicleById(ctx: ScopedContext, id: string) {
   };
 }
 
+/**
+ * Edit-vehicle update. Every field is optional — only what the caller
+ * supplies gets written. `null` actively clears a value, `undefined`
+ * leaves it untouched (the validation preprocesses empty strings to null
+ * for the user's convenience).
+ *
+ * Returns the freshly-enriched vehicle so the client can refresh in one
+ * round-trip instead of re-fetching.
+ */
+export async function updateVehicleDetails(
+  ctx: ScopedContext,
+  id: string,
+  input: Record<string, unknown>,
+) {
+  const existing = await vehicleRepo.findById(ctx, id);
+  if (!existing) throw new NotFoundError("Vehicle not found");
+
+  // Registration number change — re-run the duplicate check inside this
+  // tenant so we don't collide with another vehicle. Partial unique index
+  // on the model is the final safety net.
+  const incomingReg =
+    typeof input.registrationNumber === "string"
+      ? input.registrationNumber.toUpperCase().replace(/\s/g, "")
+      : undefined;
+  if (
+    incomingReg &&
+    incomingReg !== (existing as { registrationNumber?: string }).registrationNumber
+  ) {
+    const dupe = await vehicleRepo.findByRegistrationNumber(ctx, incomingReg);
+    const dupeId = dupe ? String((dupe as { _id: unknown })._id) : null;
+    if (dupe && dupeId !== id) {
+      throw new ConflictError(
+        `Vehicle ${incomingReg} is already onboarded in this workspace`,
+      );
+    }
+    input.registrationNumber = incomingReg;
+  }
+
+  // Strip undefined keys so they don't accidentally overwrite stored
+  // values via Mongoose's set semantics.
+  const patch: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input)) {
+    if (v === undefined) continue;
+    patch[k] = v;
+  }
+  if (Object.keys(patch).length === 0) {
+    // Nothing to update — return the fresh enriched view anyway.
+    return getVehicleById(ctx, id);
+  }
+
+  await vehicleRepo.update(ctx, id, patch);
+  return getVehicleById(ctx, id);
+}
+
 export async function syncChallans(
   ctx: ScopedContext,
   vehicleId: string,

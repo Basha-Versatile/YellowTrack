@@ -7,9 +7,10 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { VehiclesListSkeleton } from "@/components/ui/Skeleton";
 import Pagination from "@/components/ui/Pagination";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
-import { Plus, Truck, LayoutGrid, List, ChevronRight, User, X } from "lucide-react";
+import { Plus, Truck, LayoutGrid, List, ChevronRight, User, X, FileSpreadsheet } from "lucide-react";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
+import { ExportVehiclesModal } from "@/components/vehicles/ExportVehiclesModal";
 
 interface VehicleGroup {
   id: string;
@@ -79,6 +80,8 @@ export default function VehiclesPage() {
   const [groups, setGroups] = useState<VehicleGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setFetching] = useState(false);
+  // Custom report builder — opens the field-picker modal.
+  const [exportOpen, setExportOpen] = useState(false);
   const [view, setView] = useState<"cards" | "list">("list");
   const [hoverPhoto, setHoverPhoto] = useState<{ url: string; x: number; y: number } | null>(null);
   const searchRef = useRef(search);
@@ -209,6 +212,15 @@ export default function VehiclesPage() {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 text-xs font-bold transition-colors"
+            title="Build a customised CSV / Excel report"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Export
+          </button>
           <Link
             href="/vehicles/onboard"
             className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-500 to-brand-400 px-4 py-2 text-xs font-bold text-white shadow shadow-brand-500/25 hover:shadow-brand-500/40 transition-all"
@@ -557,6 +569,24 @@ export default function VehiclesPage() {
           <img src={hoverPhoto.url} alt="Vehicle" className="w-44 h-44 rounded-2xl object-cover shadow-2xl ring-4 ring-white dark:ring-gray-900" />
         </div>
       )}
+
+      {/* Custom report builder — picks fields, format, scope of filters,
+          then streams a CSV / XLSX download. */}
+      <ExportVehiclesModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        filters={{
+          lifecycle: lifecycleTab === "SOLD" ? "SOLD" : undefined,
+          groupId: groupFilter !== "ALL" ? groupFilter : undefined,
+          vehicleUsage: usageFilter !== "ALL" ? usageFilter : undefined,
+          status:
+            statusFilter === "GREEN" || statusFilter === "YELLOW" || statusFilter === "RED"
+              ? (statusFilter as "GREEN" | "YELLOW" | "RED")
+              : undefined,
+          brand: brandFilter || undefined,
+          search: search || undefined,
+        }}
+      />
     </div>
   );
 }

@@ -480,11 +480,74 @@ export const vehicleAPI = {
     });
   },
   getStats: () => api.get("/vehicles/stats"),
+  // Edit vehicle details — every field is optional. `null` clears a field,
+  // `undefined` leaves it alone. Server validates registration-number
+  // uniqueness inside the tenant when it changes.
+  updateDetails: (
+    id: string,
+    patch: Partial<{
+      registrationNumber: string;
+      ownerName: string | null;
+      make: string;
+      model: string;
+      fuelType: string;
+      brand: string | null;
+      chassisNumber: string | null;
+      engineNumber: string | null;
+      gvw: number | null;
+      seatingCapacity: number | null;
+      tyreCount: number | null;
+      permitType: string | null;
+      vehicleUsage: "PRIVATE" | "COMMERCIAL" | null;
+      registrationDate: string | null;
+      rcStatus: string | null;
+      blacklistStatus: string | null;
+      financed: boolean | null;
+      financer: string | null;
+      ownerNumber: number | null;
+      registeredAt: string | null;
+      manufacturingDate: string | null;
+      ownerPhone: string | null;
+      ownerAddress: string | null;
+      fatherName: string | null;
+      color: string | null;
+      bodyType: string | null;
+      vehicleCategory: string | null;
+      normsType: string | null;
+      cubicCapacity: string | null;
+      cylinders: number | null;
+      wheelbase: number | null;
+      unladenWeight: number | null;
+      taxMode: string | null;
+      groupIds: string[];
+    }>,
+  ) => api.patch(`/vehicles/${id}`, patch),
   // Fleet-wide stat-card numbers for the Vehicles page (Total / Compliant
   // / Upcoming / Critical / Pending Fines). Server-side aggregation.
   getFleetSummary: (lifecycle?: "ACTIVE" | "SOLD") =>
     api.get("/vehicles/summary", {
       params: lifecycle === "SOLD" ? { lifecycle } : undefined,
+    }),
+  // ── Customized export ─────────────────────────────────────────
+  // `listExportFields` returns the catalog of every selectable column
+  // (id + label + category) so the picker stays in sync with the server
+  // registry. `exportData` posts the user's selection and streams the
+  // file back as a Blob — caller is responsible for triggering download.
+  listExportFields: () => api.get("/vehicles/export"),
+  exportData: (input: {
+    format: "csv" | "xlsx";
+    fields: string[];
+    filters?: {
+      lifecycle?: "ACTIVE" | "SOLD";
+      groupId?: string;
+      vehicleUsage?: "PRIVATE" | "COMMERCIAL";
+      status?: "GREEN" | "YELLOW" | "RED";
+      brand?: string;
+      search?: string;
+    };
+  }) =>
+    api.post("/vehicles/export", input, {
+      responseType: "blob",
     }),
   getCompliance: (id: string) => api.get(`/vehicles/${id}/compliance`),
   getChallans: (id: string) => api.get(`/vehicles/${id}/challans`),
