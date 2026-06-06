@@ -1073,10 +1073,11 @@ function Row({ row, onOpenSchedule }: { row: EmiPlanRow; onOpenSchedule: () => v
     0,
     row.totalInstallments - row.paidInstallments,
   );
-  const totalAmount =
-    row.principalAmount && row.principalAmount > 0
-      ? row.principalAmount
-      : row.emiAmount * row.totalInstallments;
+  // "Total payable" must stay in EMI-cash terms so paid + pending = total
+  // reconciles. Earlier we fell back to principalAmount (borrowed cash,
+  // no interest) when set, which made pendingAmount > totalAmount and
+  // broke the % progress display. Principal is shown alongside as a hint.
+  const totalAmount = row.emiAmount * row.totalInstallments;
   const pendingAmount = row.emiAmount * pendingCount;
 
   return (

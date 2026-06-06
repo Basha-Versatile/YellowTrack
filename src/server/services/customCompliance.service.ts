@@ -4,6 +4,7 @@ import {
   CustomComplianceGroup,
 } from "@/models";
 import {
+  ALL_TENANTS,
   type ScopedContext,
   tenantFilter,
   tenantStamp,
@@ -13,6 +14,28 @@ import {
   calculateComplianceStatus,
   daysUntilExpiry,
 } from "./compliance.service";
+import {
+  assertCustomComplianceGroupDocCapacity,
+  getCustomComplianceGroupDocCapacity,
+} from "./quota.service";
+import { Plan, Tenant } from "@/models";
+
+// Single resolver used by listGroups/getGroup to inject the per-tenant
+// document cap onto each group payload (so the UI doesn't need to make a
+// second call per group). Defaults to 10 when the tenant has no plan or
+// the plan predates the field.
+async function resolveTenantDocLimit(tenantId: string): Promise<number> {
+  const tenant = await Tenant.findById(tenantId).select("planId").lean();
+  const planId = (tenant as { planId?: unknown } | null)?.planId;
+  if (!planId) return 10;
+  const plan = await Plan.findById(planId)
+    .select("customComplianceDocsPerGroupLimit")
+    .lean();
+  const n = (
+    plan as { customComplianceDocsPerGroupLimit?: number } | null
+  )?.customComplianceDocsPerGroupLimit;
+  return typeof n === "number" && n > 0 ? n : 10;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -62,6 +85,9 @@ export async function listGroups(ctx: ScopedContext) {
     bucket.set(key, acc);
   }
 
+  const docLimit =
+    ctx.tenantId === ALL_TENANTS ? 10 : await resolveTenantDocLimit(String(ctx.tenantId));
+
   return groups.map((g) => {
     const b = bucket.get(String(g._id)) ?? { total: 0, byStatus: {} };
     return {
@@ -74,6 +100,9 @@ export async function listGroups(ctx: ScopedContext) {
         orange: b.byStatus.ORANGE ?? 0,
         red: b.byStatus.RED ?? 0,
       },
+      // Render-side fence: the UI uses this to grey out the Add button at
+      // the limit. Server still enforces via assertCustomComplianceGroupDocCapacity.
+      docLimit,
     };
   });
 }
@@ -104,7 +133,18 @@ export async function getGroup(ctx: ScopedContext, id: string) {
     tenantFilter(ctx, { _id: id }),
   ).lean();
   if (!group) throw new NotFoundError("Group not found");
-  return group;
+  // Attach current usage + cap so the group detail page can render an
+  // "X / N documents" counter and disable Add at the limit.
+  const capacity =
+    ctx.tenantId === ALL_TENANTS
+      ? { used: 0, limit: 10 }
+      : await getCustomComplianceGroupDocCapacity(String(ctx.tenantId), id);
+  return {
+    ...group,
+    id: String((group as { _id: unknown })._id),
+    docLimit: capacity.limit,
+    docCount: capacity.used,
+  };
 }
 
 export async function updateGroup(
@@ -193,6 +233,17 @@ export async function createDocument(
   },
 ) {
   await getGroup(ctx, input.groupId);
+  // Plan-level cap on documents per group — superadmin-tunable, defaults
+  // to 10. Throws ForbiddenError when the cap is hit so the modal can
+  // surface a clean "upgrade plan or remove a doc" message. Skipped when
+  // the context is the cross-tenant superadmin sentinel (no tenant to
+  // resolve a plan against).
+  if (ctx.tenantId !== ALL_TENANTS) {
+    await assertCustomComplianceGroupDocCapacity(
+      String(ctx.tenantId),
+      input.groupId,
+    );
+  }
   const label = input.label?.trim();
   if (!label) throw new BadRequestError("Document label is required");
 

@@ -292,6 +292,20 @@ export async function onboardVehicle(
     }
   }
 
+  // Fleet size grew — re-evaluate the plan tier. Auto-applies downgrades
+  // / same-tier, queues a PENDING upgrade request for higher tiers (admin
+  // confirms via /billing). Best-effort: a missing plan tier or a wallet
+  // hiccup shouldn't block onboarding.
+  try {
+    const { runPlanFitForTenant } = await import("./billing.orchestrator");
+    await runPlanFitForTenant(String(ctx.tenantId));
+  } catch (err) {
+    console.error(
+      "[onboardVehicle] plan-fit failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   return { ...fullVehicle, warnings, restored: isRestore };
 }
 
@@ -427,6 +441,17 @@ export async function manualOnboard(
         err instanceof Error ? err.message : err,
       );
     }
+  }
+
+  // Same plan-fit re-evaluation as the Surepass onboarding path.
+  try {
+    const { runPlanFitForTenant } = await import("./billing.orchestrator");
+    await runPlanFitForTenant(String(ctx.tenantId));
+  } catch (err) {
+    console.error(
+      "[manualOnboard] plan-fit failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   const full = await vehicleRepo.findById(ctx, vehicleId);
@@ -710,6 +735,17 @@ export async function confirmVehicleDeletion(
     { isActive: false, unassignedAt: new Date() },
   );
   await VehicleDeletionOtp.deleteMany(tenantFilter(ctx, { vehicleId }));
+
+  // Fleet shrank — re-evaluate the plan. Drops to a lower tier auto-apply.
+  try {
+    const { runPlanFitForTenant } = await import("./billing.orchestrator");
+    await runPlanFitForTenant(String(ctx.tenantId));
+  } catch (err) {
+    console.error(
+      "[confirmVehicleDeletion] plan-fit failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   return { deletedVehicleId: vehicleId };
 }

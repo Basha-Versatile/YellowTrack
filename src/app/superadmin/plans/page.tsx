@@ -16,6 +16,7 @@ import {
   IndianRupee,
   Truck,
   Percent,
+  RefreshCw,
 } from "lucide-react";
 
 type Plan = {
@@ -34,6 +35,11 @@ type Plan = {
   perVehiclePerMonth?: number;
   perVehiclePerYear?: number;
   perDriverPerMonth?: number;
+  // Custom Compliance — price billed per group the tenant creates and the
+  // hard cap on documents inside any one group. Plans created before these
+  // fields existed read undefined → UI defaults to ₹30 / 10.
+  customComplianceGroupPerMonth?: number;
+  customComplianceDocsPerGroupLimit?: number;
   gstPercent?: number;
 };
 
@@ -147,13 +153,16 @@ export default function PlansPage() {
               {summary.active} active · {summary.inactive} inactive · {summary.subscribers} subscriber{summary.subscribers !== 1 ? "s" : ""}
             </p>
           </div>
-          <button
-            onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-yellow-500/30 hover:from-yellow-500 hover:to-yellow-600 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            New plan
-          </button>
+          <div className="flex items-center gap-2">
+            <BackfillPlansButton onResult={(msg) => setToast({ type: "success", message: msg })} />
+            <button
+              onClick={() => setCreating(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-yellow-500/30 hover:from-yellow-500 hover:to-yellow-600 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              New plan
+            </button>
+          </div>
         </div>
       </div>
 
@@ -461,6 +470,10 @@ function PlanEditor({
   const [perDriverPerMonth, setPerDriverPerMonth] = useState(
     String(plan?.perDriverPerMonth ?? "0"),
   );
+  const [customComplianceGroupPerMonth, setCustomComplianceGroupPerMonth] =
+    useState(String(plan?.customComplianceGroupPerMonth ?? "30"));
+  const [customComplianceDocsPerGroupLimit, setCustomComplianceDocsPerGroupLimit] =
+    useState(String(plan?.customComplianceDocsPerGroupLimit ?? "10"));
   const [gstPercent, setGstPercent] = useState(String(plan?.gstPercent ?? 18));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -480,6 +493,9 @@ function PlanEditor({
         perVehiclePerMonth: Number(perVehiclePerMonth) || 0,
         perVehiclePerYear: Number(perVehiclePerYear) || 0,
         perDriverPerMonth: Number(perDriverPerMonth) || 0,
+        customComplianceGroupPerMonth: Number(customComplianceGroupPerMonth) || 0,
+        customComplianceDocsPerGroupLimit:
+          Number(customComplianceDocsPerGroupLimit) || 10,
         gstPercent: Number(gstPercent) || 0,
       };
       if (isEditing && plan) {
@@ -611,7 +627,7 @@ function PlanEditor({
 
             <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
               <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-                Driver add-on & tax
+                Driver add-on
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Per driver / month">
@@ -621,6 +637,49 @@ function PlanEditor({
                     placeholder="30"
                   />
                 </Field>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                Custom Compliance (documents bank)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field
+                  label="Per group / month"
+                  hint="Recurring monthly charge per Custom Compliance group"
+                >
+                  <PriceInput
+                    value={customComplianceGroupPerMonth}
+                    onChange={setCustomComplianceGroupPerMonth}
+                    placeholder="30"
+                  />
+                </Field>
+                <Field
+                  label="Documents per group limit"
+                  hint="Hard cap when adding documents inside a group"
+                >
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    step="1"
+                    value={customComplianceDocsPerGroupLimit}
+                    onChange={(e) =>
+                      setCustomComplianceDocsPerGroupLimit(e.target.value)
+                    }
+                    placeholder="10"
+                    className="input font-mono"
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                Tax
+              </p>
+              <div className="grid grid-cols-2 gap-3">
                 <Field label="GST %" hint="Added on top of subtotal">
                   <div className="relative">
                     <input
@@ -827,6 +886,55 @@ function PlansSkeleton() {
         </div>
       ))}
     </div>
+  );
+}
+
+function BackfillPlansButton({ onResult }: { onResult: (msg: string) => void }) {
+  const [running, setRunning] = useState(false);
+
+  async function handleClick() {
+    if (running) return;
+    const ok = window.confirm(
+      "Re-evaluate the plan tier for every active tenant?\n\n" +
+        "- Tenants without a plan get assigned the matching tier.\n" +
+        "- Tenants on a higher tier than their fleet warrants are downgraded immediately.\n" +
+        "- Tenants whose fleet outgrew their tier get a pending upgrade request (admin must confirm).",
+    );
+    if (!ok) return;
+    setRunning(true);
+    try {
+      const res = await superadminAPI.backfillPlans();
+      const data = ((res?.data as { data?: unknown })?.data ?? {}) as {
+        tenantCount?: number;
+        upgradedAuto?: number;
+        upgradeQueued?: number;
+        errors?: Array<{ tenantId: string; message: string }>;
+      };
+      const errorCount = data.errors?.length ?? 0;
+      const msg =
+        `Processed ${data.tenantCount ?? 0} tenant(s) - ` +
+        `${data.upgradedAuto ?? 0} auto-applied, ${data.upgradeQueued ?? 0} pending confirmation` +
+        (errorCount ? `, ${errorCount} failed` : "");
+      onResult(msg);
+    } catch (err) {
+      onResult(
+        err instanceof Error ? `Backfill failed: ${err.message}` : "Backfill failed",
+      );
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={running}
+      title="Re-evaluate plan tiers for every active tenant based on their current fleet size"
+      className="inline-flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      <RefreshCw className={`w-4 h-4 ${running ? "animate-spin" : ""}`} />
+      {running ? "Backfilling..." : "Backfill plans"}
+    </button>
   );
 }
 

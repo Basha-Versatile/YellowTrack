@@ -47,6 +47,13 @@ const planSchema = new Schema(
     // Driver add-on.
     perDriverPerMonth: { type: Number, min: 0, default: 0 },
 
+    // Custom Compliance — the "documents bank" outside the per-vehicle
+    // tracker (company-level GST / licences / agreements grouped by entity).
+    // Billed per group per month (e.g. ₹30/group/month). Each group can
+    // hold at most `customComplianceDocsPerGroupLimit` documents.
+    customComplianceGroupPerMonth: { type: Number, min: 0, default: 30 },
+    customComplianceDocsPerGroupLimit: { type: Number, min: 1, max: 1000, default: 10 },
+
     // GST applied on the subtotal (percentage points, e.g. 18 = 18%).
     gstPercent: { type: Number, min: 0, max: 100, default: 18 },
   },
@@ -54,6 +61,10 @@ const planSchema = new Schema(
 );
 
 export type PlanAttrs = InferSchemaType<typeof planSchema>;
+
+if (process.env.NODE_ENV !== "production" && models.Plan) {
+  delete models.Plan;
+}
 
 export const Plan: Model<PlanAttrs> =
   (models.Plan as Model<PlanAttrs>) ?? model<PlanAttrs>("Plan", planSchema);

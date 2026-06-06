@@ -16,6 +16,12 @@ export const SUBSCRIPTION_STATUS = [
 ] as const;
 export const BILLING_CYCLES = ["MONTHLY", "YEARLY"] as const;
 export type BillingCycle = (typeof BILLING_CYCLES)[number];
+// Wallet/billing health. Drives header banners + suspension middleware:
+//   ACTIVE      — wallet positive OR recently became negative
+//   PAYMENT_DUE — wallet negative; still allowed to use the app
+//   SUSPENDED   — negative > 30 days; reads still work, writes blocked
+export const BILLING_STATUSES = ["ACTIVE", "PAYMENT_DUE", "SUSPENDED"] as const;
+export type BillingHealthStatus = (typeof BILLING_STATUSES)[number];
 
 const tenantSchema = new Schema(
   {
@@ -75,11 +81,35 @@ const tenantSchema = new Schema(
     timezone: { type: String, default: "Asia/Kolkata", trim: true },
     suspendedAt: { type: Date },
     deletedAt: { type: Date },
+
+    // ── Wallet + billing health ────────────────────────────────────────
+    // walletBalance is the source of truth for how much credit the tenant
+    // has left. Stored in rupees with 2-decimal precision (Mongo Double).
+    // New tenants are seeded with ₹1000 via wallet.service.creditWallet.
+    walletBalance: { type: Number, default: 0 },
+    // Updated on every successful monthly debit so the cron can skip
+    // already-billed-this-month tenants on re-runs.
+    lastBilledAt: { type: Date, default: null },
+    // Driven by the billing orchestrator. PAYMENT_DUE = wallet negative,
+    // SUSPENDED = negative for 30+ days (writes blocked by middleware).
+    billingStatus: {
+      type: String,
+      enum: BILLING_STATUSES,
+      default: "ACTIVE",
+      index: true,
+    },
+    // When the wallet first went negative this cycle. Cleared on positive
+    // balance. The orchestrator escalates to SUSPENDED once this is > 30d.
+    paymentDueSince: { type: Date, default: null },
   },
   { timestamps: true },
 );
 
 export type TenantAttrs = InferSchemaType<typeof tenantSchema>;
+
+if (process.env.NODE_ENV !== "production" && models.Tenant) {
+  delete models.Tenant;
+}
 
 export const Tenant: Model<TenantAttrs> =
   (models.Tenant as Model<TenantAttrs>) ??

@@ -118,6 +118,19 @@ export {
 } from "./EMIPayment";
 export { DebitAccount, type DebitAccountAttrs } from "./DebitAccount";
 export {
+  WalletTransaction,
+  type WalletTransactionAttrs,
+  WALLET_TXN_TYPES,
+  WALLET_TXN_REASONS,
+} from "./WalletTransaction";
+export {
+  PlanUpgradeRequest,
+  type PlanUpgradeRequestAttrs,
+  PLAN_UPGRADE_STATUSES,
+  PLAN_UPGRADE_REASONS,
+} from "./PlanUpgradeRequest";
+export { Invoice, type InvoiceAttrs, INVOICE_STATUSES } from "./Invoice";
+export {
   ActivityLog,
   type ActivityLogAttrs,
   type ActivityEntityType,

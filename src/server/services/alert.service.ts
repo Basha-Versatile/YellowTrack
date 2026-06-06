@@ -3,6 +3,7 @@ import type { ScopedContext } from "@/lib/auth/tenant-context";
 import { create as createNotification } from "./notification.service";
 import {
   dispatchComplianceExpiry,
+  dispatchCustomComplianceExpiry,
   dispatchDriverDocExpiry,
 } from "./alertDispatcher.service";
 import { sendWhatsApp } from "@/lib/whatsapp";
@@ -59,6 +60,7 @@ export async function triggerVehicleAlert(
   status: string,
   expiryDate: Date | string | null | undefined,
   vehicleId?: string,
+  opts: { skipEmail?: boolean } = {},
 ): Promise<void> {
   const days = expiryDate
     ? Math.ceil(
@@ -84,9 +86,10 @@ export async function triggerVehicleAlert(
     entityId: vehicleId,
   });
 
-  // Fan out to email (tenant admins). WhatsApp fan-out is handled separately
-  // for urgent / critical doc expiries via the WhatsApp adapter once wired.
-  if (vehicleId && expiryDate) {
+  // Per-doc email is skipped when the caller is the cron orchestrator —
+  // it sends one aggregated digest per tenant instead. Inline triggers
+  // (e.g. vehicle onboarding) still fan out individually.
+  if (!opts.skipEmail && vehicleId && expiryDate) {
     await safeDispatch("compliance email", () =>
       dispatchComplianceExpiry({
         ctx,
@@ -108,6 +111,7 @@ export async function triggerDriverAlert(
   status: string,
   expiryDate: Date | string | null | undefined,
   driverId?: string,
+  opts: { skipEmail?: boolean } = {},
 ): Promise<void> {
   const days = expiryDate
     ? Math.ceil(
@@ -144,8 +148,8 @@ export async function triggerDriverAlert(
     entityId: driverId,
   });
 
-  // Email fan-out to tenant admins
-  if (driverId && expiryDate) {
+  // Email fan-out — suppressed when called from the cron digest path.
+  if (!opts.skipEmail && driverId && expiryDate) {
     await safeDispatch("license email", () =>
       dispatchDriverDocExpiry({
         ctx,
@@ -172,6 +176,7 @@ export async function triggerDriverDocAlert(
   status: string,
   expiryDate: Date | string | null | undefined,
   driverId?: string,
+  opts: { skipEmail?: boolean } = {},
 ): Promise<void> {
   const days = expiryDate
     ? Math.ceil(
@@ -208,8 +213,8 @@ export async function triggerDriverDocAlert(
     entityId: driverId,
   });
 
-  // Email fan-out to tenant admins
-  if (driverId && expiryDate) {
+  // Email fan-out — suppressed when called from the cron digest path.
+  if (!opts.skipEmail && driverId && expiryDate) {
     await safeDispatch("driver doc email", () =>
       dispatchDriverDocExpiry({
         ctx,
@@ -226,6 +231,60 @@ export async function triggerDriverDocAlert(
   // Urgent / critical doc expiries also fan out to WhatsApp (stubbed until a provider is set up)
   if (severity !== "WARNING") {
     await dispatchWhatsAppToDriver(ctx, driverId, message);
+  }
+}
+
+/**
+ * Custom Compliance expiry alert. Same severity ladder as the vehicle
+ * compliance trigger but scoped to a group + free-form document label.
+ * Persists an in-app Notification AND fans out to admin email + WhatsApp.
+ */
+export async function triggerCustomComplianceAlert(
+  ctx: ScopedContext,
+  groupId: string,
+  groupName: string,
+  documentLabel: string,
+  status: string,
+  expiryDate: Date | string | null | undefined,
+  documentId?: string,
+  opts: { skipEmail?: boolean } = {},
+): Promise<void> {
+  const days = expiryDate
+    ? Math.ceil(
+        (new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      )
+    : 0;
+  const severity = status === "RED" ? "CRITICAL" : "WARNING";
+  const expiryText =
+    days <= 0 ? `expired ${Math.abs(days)} days ago` : `expires in ${days} days`;
+
+  const title =
+    status === "RED"
+      ? `${documentLabel} Expired — ${groupName}`
+      : `${documentLabel} Expiring Soon — ${groupName}`;
+  const message = `${documentLabel} in "${groupName}" ${expiryText}. Renew or upload the latest version.`;
+
+  console.log(`🚨 [${severity}] ${title}`);
+
+  await createNotification(ctx, {
+    type: "CUSTOM_COMPLIANCE_EXPIRY",
+    title,
+    message,
+    entityId: documentId,
+  });
+
+  if (!opts.skipEmail && expiryDate) {
+    await safeDispatch("custom-compliance email", () =>
+      dispatchCustomComplianceExpiry({
+        ctx,
+        groupId,
+        groupName,
+        documentLabel,
+        daysRemaining: days,
+        expiryDate,
+        appBaseUrl: appBaseUrl(),
+      }),
+    );
   }
 }
 

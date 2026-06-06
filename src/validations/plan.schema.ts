@@ -17,6 +17,14 @@ export const createPlanSchema = z
     perVehiclePerMonth: positiveNumber,
     perVehiclePerYear: positiveNumber,
     perDriverPerMonth: positiveNumber.default(0),
+    // Custom Compliance billing + per-group document cap.
+    customComplianceGroupPerMonth: positiveNumber.default(30),
+    customComplianceDocsPerGroupLimit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .default(10),
     gstPercent: z.coerce.number().min(0).max(100).default(18),
   })
   .refine(

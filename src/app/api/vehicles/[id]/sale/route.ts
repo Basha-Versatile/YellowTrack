@@ -95,6 +95,20 @@ export const POST = withRoute<{ id: string }>(
       { isActive: false, unassignedAt: new Date() },
     );
 
+    // Active fleet shrank by one — re-evaluate the plan tier in case the
+    // tenant just crossed back into a cheaper band. Best-effort.
+    try {
+      const { runPlanFitForTenant } = await import(
+        "@/server/services/billing.orchestrator"
+      );
+      await runPlanFitForTenant(String(ctx.tenantId));
+    } catch (err) {
+      console.error(
+        "[vehicle.sale] plan-fit failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+
     const regNo = (vehicle as { registrationNumber?: string }).registrationNumber ?? params.id;
     await logFromRequest(req, ctx, session, {
       action: existing ? "vehicle.sale.update" : "vehicle.sale.create",

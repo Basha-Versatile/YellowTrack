@@ -18,6 +18,8 @@ export type PlanInput = {
   perVehiclePerMonth: number;
   perVehiclePerYear: number;
   perDriverPerMonth?: number;
+  customComplianceGroupPerMonth?: number;
+  customComplianceDocsPerGroupLimit?: number;
   gstPercent?: number;
 };
 
@@ -72,6 +74,9 @@ export async function createPlan(input: PlanInput) {
     perVehiclePerMonth: input.perVehiclePerMonth,
     perVehiclePerYear: input.perVehiclePerYear,
     perDriverPerMonth: input.perDriverPerMonth ?? 0,
+    customComplianceGroupPerMonth: input.customComplianceGroupPerMonth ?? 30,
+    customComplianceDocsPerGroupLimit:
+      input.customComplianceDocsPerGroupLimit ?? 10,
     gstPercent: input.gstPercent ?? 18,
   });
 }
@@ -129,6 +134,23 @@ export async function updatePlan(id: string, input: Partial<PlanInput>) {
       throw new BadRequestError("Per-driver monthly rate cannot be negative");
     }
     patch.perDriverPerMonth = input.perDriverPerMonth;
+  }
+  if (input.customComplianceGroupPerMonth !== undefined) {
+    if (input.customComplianceGroupPerMonth < 0) {
+      throw new BadRequestError(
+        "Custom-compliance per-group monthly rate cannot be negative",
+      );
+    }
+    patch.customComplianceGroupPerMonth = input.customComplianceGroupPerMonth;
+  }
+  if (input.customComplianceDocsPerGroupLimit !== undefined) {
+    const n = input.customComplianceDocsPerGroupLimit;
+    if (!Number.isInteger(n) || n < 1 || n > 1000) {
+      throw new BadRequestError(
+        "Documents-per-group limit must be a whole number between 1 and 1000",
+      );
+    }
+    patch.customComplianceDocsPerGroupLimit = n;
   }
   if (input.gstPercent !== undefined) {
     if (input.gstPercent < 0 || input.gstPercent > 100) {

@@ -17,6 +17,7 @@ export const NOTIFICATION_TYPES = [
   "FASTAG_LOW_BALANCE",
   "SERVICE_DUE",
   "INSURANCE_EXPIRY",
+  "CUSTOM_COMPLIANCE_EXPIRY",
 ] as const;
 
 const notificationSchema = new Schema(

@@ -4,6 +4,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
+import { UpgradeConfirmationModal } from "@/components/billing/UpgradeConfirmationModal";
 import React from "react";
 import { usePathname } from "next/navigation";
 
@@ -43,6 +44,10 @@ export default function AdminLayoutClient({
         <AppHeader />
         <div className={getRouteSpecificStyles()}>{children}</div>
       </div>
+      {/* Auto-pops when an open plan-upgrade request is in BillingContext.
+          Admins get the confirm/reject dialog; non-admin users see the
+          persistent header banner instead. */}
+      <UpgradeConfirmationModal />
     </div>
   );
 }

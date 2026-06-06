@@ -28,6 +28,8 @@ type Group = {
   id: string;
   name: string;
   description: string | null;
+  docLimit: number;
+  docCount: number;
 };
 
 type Doc = {
@@ -126,13 +128,22 @@ export default function CustomComplianceGroupPage() {
         customComplianceAPI.listDocuments(groupId),
       ]);
       const g = groupRes.data?.data as
-        | { _id?: string; id?: string; name?: string; description?: string | null }
+        | {
+            _id?: string;
+            id?: string;
+            name?: string;
+            description?: string | null;
+            docLimit?: number;
+            docCount?: number;
+          }
         | undefined;
       if (g) {
         setGroup({
           id: String(g._id ?? g.id ?? groupId),
           name: g.name ?? "Group",
           description: g.description ?? null,
+          docLimit: typeof g.docLimit === "number" ? g.docLimit : 10,
+          docCount: typeof g.docCount === "number" ? g.docCount : 0,
         });
       }
       setDocs((docsRes.data?.data ?? []) as Doc[]);
@@ -350,7 +361,18 @@ export default function CustomComplianceGroupPage() {
             </p>
           )}
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {summary.total} doc{summary.total === 1 ? "" : "s"}
+            <span
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-semibold mr-1.5 ${
+                summary.total >= group.docLimit
+                  ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+                  : summary.total >= group.docLimit - 2
+                    ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                    : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+              }`}
+              title="Plan cap on documents per group"
+            >
+              {summary.total} / {group.docLimit} docs
+            </span>
             {summary.green > 0 && ` · ${summary.green} valid`}
             {summary.yellow > 0 && ` · ${summary.yellow} expiring`}
             {summary.red > 0 && ` · ${summary.red} expired`}
@@ -369,12 +391,44 @@ export default function CustomComplianceGroupPage() {
           </button>
           <button
             onClick={openNewDoc}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2.5 text-sm font-bold text-white shadow shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all"
+            disabled={summary.total >= group.docLimit}
+            title={
+              summary.total >= group.docLimit
+                ? `This group is at its ${group.docLimit}-document plan cap`
+                : undefined
+            }
+            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2.5 text-sm font-bold text-white shadow shadow-yellow-500/25 hover:shadow-yellow-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-3.5 h-3.5" /> Add document
           </button>
         </div>
       </div>
+
+      {/* Plan-cap notice — shown when at or one away from the limit, so the
+          user understands why the Add button is disabled / about to be. */}
+      {summary.total >= group.docLimit - 1 && (
+        <div
+          className={`rounded-xl border px-4 py-2.5 text-xs ${
+            summary.total >= group.docLimit
+              ? "border-red-200 bg-red-50/60 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+              : "border-amber-200 bg-amber-50/60 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+          }`}
+        >
+          {summary.total >= group.docLimit ? (
+            <>
+              <strong>Plan cap reached.</strong> This group is at the{" "}
+              {group.docLimit}-document limit. Remove a document or upgrade
+              the plan to add more.
+            </>
+          ) : (
+            <>
+              <strong>1 document left.</strong> You can add{" "}
+              {group.docLimit - summary.total} more in this group before
+              hitting the {group.docLimit}-document plan cap.
+            </>
+          )}
+        </div>
+      )}
 
       {/* Documents */}
       {docs.length === 0 ? (
@@ -385,7 +439,8 @@ export default function CustomComplianceGroupPage() {
           </p>
           <button
             onClick={openNewDoc}
-            className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-yellow-700 hover:text-yellow-800 dark:text-yellow-400"
+            disabled={summary.total >= group.docLimit}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-yellow-700 hover:text-yellow-800 dark:text-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-3.5 h-3.5" /> Add the first document
           </button>

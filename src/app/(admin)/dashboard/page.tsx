@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { vehicleAPI, driverAPI, notificationAPI } from "@/lib/api";
+import { formatINRCompact, formatINRFull } from "@/lib/currency";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DashboardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
@@ -531,7 +532,7 @@ export default function DashboardPage() {
                   },
                   yaxis: {
                     labels: {
-                      formatter: (v: number) => `₹${(v / 1000).toFixed(0)}K`,
+                      formatter: (v: number) => formatINRCompact(v),
                       style: { fontSize: "10px" },
                     },
                   },
@@ -539,8 +540,7 @@ export default function DashboardPage() {
                   legend: { position: "top", fontSize: "11px", fontWeight: 600 },
                   tooltip: {
                     y: {
-                      formatter: (v: number) =>
-                        `₹${v.toLocaleString("en-IN")}`,
+                      formatter: (v: number) => formatINRFull(v),
                     },
                     theme: "light",
                   },
@@ -582,7 +582,7 @@ export default function DashboardPage() {
                             fontSize: "11px",
                             fontWeight: "700",
                             formatter: () =>
-                              `₹${(expenseReport.summary.totalSpent / 1000).toFixed(0)}K`,
+                              formatINRCompact(expenseReport.summary.totalSpent),
                           },
                         },
                       },
@@ -590,8 +590,7 @@ export default function DashboardPage() {
                   },
                   tooltip: {
                     y: {
-                      formatter: (v: number) =>
-                        `₹${v.toLocaleString("en-IN")}`,
+                      formatter: (v: number) => formatINRFull(v),
                     },
                   },
                   dataLabels: { enabled: false },

@@ -411,6 +411,10 @@ export const superadminAPI = {
   ) => api.patch(`/superadmin/plans/${id}`, data),
   deactivatePlan: (id: string) => api.delete(`/superadmin/plans/${id}`),
   reactivatePlan: (id: string) => api.post(`/superadmin/plans/${id}`),
+  // Re-run the plan-fit evaluator across every active tenant. Used after
+  // tier prices are changed or to retroactively assign plans to tenants
+  // that pre-date the auto-assignment logic.
+  backfillPlans: () => api.post("/superadmin/plans/backfill"),
 
   // Tenant subscription actions
   getTenantQuota: (tenantId: string) =>
@@ -854,6 +858,22 @@ export const complianceAPI = {
   // download.
   createShare: (vehicleId: string, complianceDocIds: string[]) =>
     api.post(`/compliance/share`, { vehicleId, complianceDocIds }),
+};
+
+// ── Billing (wallet + plan + upgrades) ────────────────────────────────────
+// Header badge + /billing page both pull from these. Test-credit is admin-
+// only; gateway integration lands in the wallet/credit route later.
+export const billingAPI = {
+  getOverview: () => api.get("/billing/me"),
+  listTransactions: (params?: { limit?: number; before?: string }) =>
+    api.get("/billing/transactions", { params }),
+  rechargeTest: (amount: number) =>
+    api.post("/billing/wallet/credit", { amount, mode: "test" }),
+  decideUpgrade: (id: string, decision: "APPROVED" | "REJECTED") =>
+    api.post(`/billing/upgrade/${id}/decide`, { decision }),
+  listInvoices: (params?: { limit?: number }) =>
+    api.get("/billing/invoices", { params }),
+  invoicePdfUrl: (id: string) => `${API_BASE_URL}/billing/invoices/${id}/pdf`,
 };
 
 // ── Custom Compliance ─────────────────────────────────────────────────────

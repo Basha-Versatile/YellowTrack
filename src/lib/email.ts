@@ -11,12 +11,19 @@ import { env } from "./env";
  * switch to Resend / SendGrid / SES by replacing `getTransporter()` only.
  */
 
+export type EmailAttachment = {
+  filename: string;
+  content: Buffer | string;
+  contentType?: string;
+};
+
 export type Email = {
   to: string | string[];
   subject: string;
   text: string;
   html?: string;
   replyTo?: string;
+  attachments?: EmailAttachment[];
 };
 
 export type EmailResult = {
@@ -78,6 +85,7 @@ export async function sendEmail(email: Email): Promise<EmailResult> {
       text: email.text,
       html: email.html ?? wrapPlainAsHtml(email.text),
       replyTo,
+      attachments: email.attachments,
     });
     return { sent: true, provider: "smtp", messageId: info.messageId };
   } catch (err) {
@@ -407,6 +415,296 @@ export function complianceExpiredEmail(input: {
   };
 }
 
+// ── Compliance digest (single email, aggregated counts) ───────────────────
+// Sent ONCE per tenant per cron run instead of one email per expiring doc.
+// Items are bucketed by "days until expiry" milestone (7 / 3 / 0 / -1) so
+// admins see the most urgent first.
+
+export type ComplianceDigestItem = {
+  kind: "vehicle" | "driver_license" | "driver_doc" | "custom_compliance";
+  label: string; // e.g. "Insurance — KA01AB1234" or "DL — Anil Kumar"
+  daysRemaining: number; // 7 | 3 | 0 | -1
+  expiryDate: string; // ISO
+  link: string; // deep-link to the vehicle / driver / group
+};
+
+const BUCKET_HEADERS: Array<{
+  match: (d: number) => boolean;
+  title: string;
+  color: string;
+}> = [
+  {
+    match: (d) => d <= -1,
+    title: "Expired yesterday",
+    color: "#991B1B",
+  },
+  { match: (d) => d === 0, title: "Expires today", color: "#DC2626" },
+  { match: (d) => d === 3, title: "Expires in 3 days", color: "#D97706" },
+  { match: (d) => d === 7, title: "Expires in 7 days", color: "#0EA5E9" },
+];
+
+export function complianceDigestEmail(input: {
+  adminEmails: string[];
+  tenantName: string;
+  items: ComplianceDigestItem[];
+  appBaseUrl: string;
+}): Email {
+  const total = input.items.length;
+  const expiredCount = input.items.filter((i) => i.daysRemaining <= 0).length;
+  const upcomingCount = total - expiredCount;
+
+  // Group items into milestone buckets, preserving order: expired → today →
+  // 3d → 7d. Within each bucket, sort alphabetically by label.
+  const buckets = BUCKET_HEADERS.map((b) => ({
+    ...b,
+    items: input.items
+      .filter((i) => b.match(i.daysRemaining))
+      .sort((a, c) => a.label.localeCompare(c.label)),
+  })).filter((b) => b.items.length > 0);
+
+  const dateLabel = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+  const textLines: string[] = [
+    `${input.tenantName} — compliance summary`,
+    "",
+    `${expiredCount} expired / today, ${upcomingCount} expiring within a week.`,
+    "",
+  ];
+  for (const b of buckets) {
+    textLines.push(`— ${b.title} (${b.items.length}) —`);
+    for (const i of b.items) {
+      textLines.push(`  • ${i.label} (expires ${dateLabel(i.expiryDate)})`);
+    }
+    textLines.push("");
+  }
+  textLines.push(`Open dashboard: ${input.appBaseUrl}/dashboard`);
+  textLines.push("");
+  textLines.push("— Yellow Track");
+
+  const bucketsHtml = buckets
+    .map(
+      (b) => `
+      <div style="margin-top:14px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:${b.color}">
+          ${escapeHtml(b.title)} · ${b.items.length}
+        </div>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+               style="border-collapse:collapse;margin-top:6px">
+          ${b.items
+            .map(
+              (i) => `
+            <tr>
+              <td style="padding:6px 0;border-bottom:1px solid #F3F4F6;font-size:13px;color:#111827">
+                <a href="${escapeHtml(i.link)}" style="color:#111827;text-decoration:none">${escapeHtml(i.label)}</a>
+              </td>
+              <td style="padding:6px 0;border-bottom:1px solid #F3F4F6;font-size:12px;color:#6B7280;text-align:right;white-space:nowrap">
+                ${escapeHtml(dateLabel(i.expiryDate))}
+              </td>
+            </tr>`,
+            )
+            .join("")}
+        </table>
+      </div>`,
+    )
+    .join("");
+
+  const bodyHtml = `
+    <p style="margin:0 0 10px">
+      <strong>${escapeHtml(input.tenantName)}</strong> — compliance summary for today.
+    </p>
+    <div style="display:block;padding:10px 12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;color:#92400E;font-size:13px">
+      <strong>${expiredCount}</strong> expired or expiring today &nbsp;·&nbsp;
+      <strong>${upcomingCount}</strong> expiring within a week
+    </div>
+    ${bucketsHtml}
+    <p style="color:#6B7280;font-size:12px;margin-top:18px">
+      You're receiving the daily compliance summary instead of individual alerts.
+      Open the dashboard to renew before downtime.
+    </p>`;
+
+  const subject =
+    expiredCount > 0
+      ? `[ACTION] ${expiredCount} compliance doc${expiredCount === 1 ? "" : "s"} expired/today · ${upcomingCount} upcoming`
+      : `${upcomingCount} compliance doc${upcomingCount === 1 ? "" : "s"} expiring soon — ${input.tenantName}`;
+
+  return {
+    to: input.adminEmails,
+    subject,
+    text: textLines.join("\n"),
+    html: html(
+      "Compliance summary",
+      bodyHtml,
+      `${input.appBaseUrl}/dashboard`,
+      "Open dashboard",
+    ),
+  };
+}
+
+// ── Monthly invoice (PDF attached) ─────────────────────────────────────────
+// Sent on the 30th of each month immediately after the wallet debit. The
+// caller attaches the PDF via the `attachments` field on the returned
+// envelope; this template only builds the body.
+
+export function invoicePaidEmail(input: {
+  adminEmails: string[];
+  tenantName: string;
+  invoiceNumber: string;
+  periodStart: string; // ISO
+  periodEnd: string; // ISO
+  planName: string | null;
+  total: number;
+  billingUrl: string;
+}): Email {
+  const period = `${new Date(input.periodStart).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  })} – ${new Date(input.periodEnd).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })}`;
+  const totalLabel = `₹${input.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const planLabel = input.planName ?? "—";
+
+  const text = [
+    `Hi ${input.tenantName} team,`,
+    "",
+    `Your Yellow Track invoice ${input.invoiceNumber} for ${period} has been generated and settled from your wallet.`,
+    "",
+    `Plan: ${planLabel}`,
+    `Amount: ${totalLabel}`,
+    "",
+    `The PDF invoice is attached to this email. You can also access past invoices any time at ${input.billingUrl}.`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+
+  const bodyHtml = `
+    <p>Your Yellow Track invoice <strong>${escapeHtml(input.invoiceNumber)}</strong> for
+       <strong>${escapeHtml(period)}</strong> has been generated and
+       <strong style="color:#059669">settled from your wallet</strong>.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"
+           style="width:100%;margin:14px 0;border-collapse:collapse;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden">
+      <tr style="background:#F9FAFB">
+        <td style="padding:10px 14px;font-size:12px;color:#6B7280;width:35%">Plan</td>
+        <td style="padding:10px 14px;font-size:13px;color:#111827;font-weight:600">${escapeHtml(planLabel)}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;font-size:12px;color:#6B7280;border-top:1px solid #F3F4F6">Period</td>
+        <td style="padding:10px 14px;font-size:13px;color:#111827;border-top:1px solid #F3F4F6">${escapeHtml(period)}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;font-size:12px;color:#6B7280;border-top:1px solid #F3F4F6">Total paid</td>
+        <td style="padding:10px 14px;font-size:14px;color:#111827;font-weight:800;border-top:1px solid #F3F4F6">${escapeHtml(totalLabel)}</td>
+      </tr>
+    </table>
+    <p style="color:#6B7280;font-size:12px">
+      The full PDF invoice is attached. Past invoices are available any time on your billing page.
+    </p>`;
+
+  return {
+    to: input.adminEmails,
+    subject: `Invoice ${input.invoiceNumber} · ${totalLabel} · ${input.tenantName}`,
+    text,
+    html: html(
+      "Invoice generated & paid",
+      bodyHtml,
+      input.billingUrl,
+      "Open billing",
+    ),
+  };
+}
+
+// ── Custom Compliance (documents bank) ────────────────────────────────────
+// Same expiring / expired pair as the vehicle compliance pattern above, but
+// scoped to a group + free-form document label instead of vehicle reg + type.
+
+export function customComplianceExpiryEmail(input: {
+  adminEmails: string[];
+  groupName: string;
+  documentLabel: string;
+  daysRemaining: number;
+  expiryDate: string; // ISO date
+  groupUrl: string;
+}): Email {
+  const dateLabel = new Date(input.expiryDate).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const text = [
+    `${input.documentLabel} in "${input.groupName}" expires in ${input.daysRemaining} days (on ${dateLabel}).`,
+    "",
+    `Open the group: ${input.groupUrl}`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p><strong>${escapeHtml(input.documentLabel)}</strong> in
+       <strong>${escapeHtml(input.groupName)}</strong> expires in
+       <strong style="color:${input.daysRemaining <= 7 ? "#DC2626" : "#D97706"}">${input.daysRemaining} day${input.daysRemaining === 1 ? "" : "s"}</strong>
+       <span style="color:#6B7280">(on ${dateLabel})</span>.</p>
+    <p style="color:#6B7280;font-size:13px">Renew or replace the document before it expires to keep your records current.</p>`;
+  return {
+    to: input.adminEmails,
+    subject: `${input.documentLabel} expires in ${input.daysRemaining}d — ${input.groupName}`,
+    text,
+    html: html(
+      `${input.documentLabel} expiring soon`,
+      bodyHtml,
+      input.groupUrl,
+      "Open group",
+    ),
+  };
+}
+
+export function customComplianceExpiredEmail(input: {
+  adminEmails: string[];
+  groupName: string;
+  documentLabel: string;
+  expiryDate: string;
+  groupUrl: string;
+}): Email {
+  const dateLabel = new Date(input.expiryDate).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const text = [
+    `${input.documentLabel} in "${input.groupName}" HAS EXPIRED (expired on ${dateLabel}).`,
+    "",
+    "Renew or upload the latest version to keep your records compliant.",
+    "",
+    `Open the group: ${input.groupUrl}`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p><strong>${escapeHtml(input.documentLabel)}</strong> in
+       <strong>${escapeHtml(input.groupName)}</strong>
+       <strong style="color:#DC2626">has expired</strong>
+       <span style="color:#6B7280">(expired on ${dateLabel})</span>.</p>
+    <p style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;padding:10px 12px;border-radius:8px;font-size:13px">
+      Renew or upload the latest version to keep your records compliant.
+    </p>`;
+  return {
+    to: input.adminEmails,
+    subject: `EXPIRED: ${input.documentLabel} — ${input.groupName}`,
+    text,
+    html: html(
+      `${input.documentLabel} expired`,
+      bodyHtml,
+      input.groupUrl,
+      "Open group",
+    ),
+  };
+}
+
 export function emiDueEmail(input: {
   adminEmails: string[];
   vehicleRegNo: string;
@@ -652,4 +950,140 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+// ── Wallet + plan-upgrade emails ───────────────────────────────────────────
+
+export function walletLowEmail(input: {
+  adminEmails: string[];
+  tenantName: string;
+  balance: number;
+  rechargeUrl: string;
+}): Email {
+  const negative = input.balance < 0;
+  const balanceStr = `₹${Math.abs(input.balance).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+  const subject = negative
+    ? `Wallet overdrawn — ${input.tenantName}`
+    : `Wallet running low — ${input.tenantName}`;
+  const text = [
+    `Hi,`,
+    "",
+    negative
+      ? `Your Yellow Track wallet is overdrawn by ${balanceStr}. To keep using the platform without interruption, please top up soon — accounts that stay overdrawn for 30 days are placed in read-only mode.`
+      : `Your Yellow Track wallet balance is now ${balanceStr}. Top up now to avoid any disruption when next month's bill runs.`,
+    "",
+    `Recharge: ${input.rechargeUrl}`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p>Your Yellow Track wallet for
+       <strong>${escapeHtml(input.tenantName)}</strong> is
+       ${negative ? `<strong style="color:#DC2626">overdrawn by ${balanceStr}</strong>` : `down to <strong style="color:#D97706">${balanceStr}</strong>`}.</p>
+    <p style="${negative ? "background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;" : "background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;"}padding:10px 12px;border-radius:8px;font-size:13px">
+      ${negative
+        ? "Accounts overdrawn for 30 days are placed in read-only mode. Recharge soon to keep writing changes."
+        : "Top up now so next month's auto-debit doesn't push you into the red."}
+    </p>`;
+  return {
+    to: input.adminEmails,
+    subject,
+    text,
+    html: html(
+      negative ? "Wallet overdrawn" : "Wallet running low",
+      bodyHtml,
+      input.rechargeUrl,
+      "Recharge wallet",
+    ),
+  };
+}
+
+export function planUpgradePendingEmail(input: {
+  adminEmails: string[];
+  tenantName: string;
+  fromPlanName: string | null;
+  toPlanName: string;
+  vehicleCount: number;
+  newMonthlyEstimate: number;
+  decideUrl: string;
+  expiresAt: string;
+}): Email {
+  const expires = new Date(input.expiresAt).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const estStr = `₹${input.newMonthlyEstimate.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+  const text = [
+    `Hi,`,
+    "",
+    `Your ${input.tenantName} fleet has grown to ${input.vehicleCount} vehicles, which puts you on a higher Yellow Track plan tier.`,
+    "",
+    `  From: ${input.fromPlanName ?? "(no plan)"}`,
+    `  To:   ${input.toPlanName}`,
+    `  Next bill (estimate): ${estStr}`,
+    `  Decide before:       ${expires}`,
+    "",
+    `Review and confirm: ${input.decideUrl}`,
+    "",
+    "If you don't confirm by the deadline above, the request will expire and the system will recheck on the next plan-fit run.",
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p>Your <strong>${escapeHtml(input.tenantName)}</strong> fleet has grown to
+       <strong>${input.vehicleCount} vehicles</strong>, which puts you on a higher Yellow Track plan tier.</p>
+    <table cellpadding="6" cellspacing="0" style="background:#F9FAFB;border:1px solid ${BORDER};border-radius:8px;font-size:13px;margin:12px 0">
+      <tr><td style="color:#6B7280">From</td><td><strong>${escapeHtml(input.fromPlanName ?? "(no plan)")}</strong></td></tr>
+      <tr><td style="color:#6B7280">To</td><td><strong>${escapeHtml(input.toPlanName)}</strong></td></tr>
+      <tr><td style="color:#6B7280">Next bill (estimate)</td><td><strong>${estStr}</strong></td></tr>
+      <tr><td style="color:#6B7280">Decide before</td><td>${expires}</td></tr>
+    </table>
+    <p style="color:#6B7280;font-size:12px">If you don't confirm by the deadline above, the request will expire and the system will recheck on the next plan-fit run.</p>`;
+  return {
+    to: input.adminEmails,
+    subject: `Action needed: plan upgrade to ${input.toPlanName} — ${input.tenantName}`,
+    text,
+    html: html(
+      `Plan upgrade pending — ${escapeHtml(input.toPlanName)}`,
+      bodyHtml,
+      input.decideUrl,
+      "Review upgrade",
+    ),
+  };
+}
+
+export function planUpgradedEmail(input: {
+  adminEmails: string[];
+  tenantName: string;
+  toPlanName: string;
+  newMonthlyEstimate: number;
+  billingUrl: string;
+}): Email {
+  const estStr = `₹${input.newMonthlyEstimate.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+  const text = [
+    `Hi,`,
+    "",
+    `Your ${input.tenantName} workspace is now on the ${input.toPlanName} plan.`,
+    `Next monthly bill (estimate): ${estStr}.`,
+    "",
+    `Manage billing: ${input.billingUrl}`,
+    "",
+    "— Yellow Track",
+  ].join("\n");
+  const bodyHtml = `
+    <p>Your <strong>${escapeHtml(input.tenantName)}</strong> workspace is now on the
+       <strong>${escapeHtml(input.toPlanName)}</strong> plan.</p>
+    <p>Next monthly bill (estimate): <strong>${estStr}</strong>.</p>`;
+  return {
+    to: input.adminEmails,
+    subject: `Plan upgraded to ${input.toPlanName} — ${input.tenantName}`,
+    text,
+    html: html(
+      `Plan upgraded to ${escapeHtml(input.toPlanName)}`,
+      bodyHtml,
+      input.billingUrl,
+      "Manage billing",
+    ),
+  };
 }

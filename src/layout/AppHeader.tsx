@@ -2,6 +2,10 @@
 import { ThemeToggleButton } from "@/components/common/ThemeToggleButton";
 import NotificationDropdown from "@/components/header/NotificationDropdown";
 import UserDropdown from "@/components/header/UserDropdown";
+import {
+  WalletPlanBadge,
+  BillingStatusBanner,
+} from "@/components/header/WalletPlanBadge";
 import { useSidebar } from "@/context/SidebarContext";
 
 import Link from "next/link";
@@ -109,6 +113,10 @@ const AppHeader: React.FC = () => {
           } items-center justify-between w-full gap-4 px-5 py-4 lg:flex shadow-theme-md lg:justify-end lg:px-0 lg:shadow-none`}
         >
           <div className="flex items-center gap-2 2xsm:gap-3">
+            {/* Plan + wallet pill — links to /billing, doubles as the
+                "recharge" entry point. Hidden for SUPERADMIN. */}
+            <WalletPlanBadge />
+
             {/* <!-- Dark Mode Toggler --> */}
             <ThemeToggleButton />
             {/* <!-- Dark Mode Toggler --> */}
@@ -120,6 +128,9 @@ const AppHeader: React.FC = () => {
           <UserDropdown />
         </div>
       </div>
+      {/* Persistent banner — only renders when there's something to act on
+          (payment due, suspension, pending upgrade). */}
+      <BillingStatusBanner />
     </header>
   );
 };

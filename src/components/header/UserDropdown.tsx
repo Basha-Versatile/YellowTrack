@@ -1,12 +1,16 @@
 "use client";
 import React, { useState } from "react";
+import Link from "next/link";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { useAuth } from "@/context/AuthContext";
+import { useBilling } from "@/context/BillingContext";
+import { Crown } from "lucide-react";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { overview } = useBilling();
 
   const initials = user?.name
     ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
@@ -89,6 +93,42 @@ export default function UserDropdown() {
             </span>
           )}
         </div>
+
+        {/* Current plan tile — pulled from BillingContext so it stays in
+            sync with the header badge. Links to /billing. Hidden for
+            SUPERADMIN sessions (no tenant scope) and while the overview
+            is still loading on first paint. */}
+        {overview && (
+          <Link
+            href="/billing"
+            onClick={closeDropdown}
+            className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/30 px-2.5 py-2 hover:bg-yellow-50/60 dark:hover:bg-yellow-500/10 transition-colors"
+          >
+            <span className="flex-shrink-0 w-7 h-7 rounded-md bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 flex items-center justify-center">
+              <Crown className="w-3.5 h-3.5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 leading-none">
+                Current plan
+              </p>
+              <p className="mt-0.5 text-xs font-bold text-gray-900 dark:text-white truncate">
+                {overview.plan?.name ?? "No plan"}
+                {overview.plan && (
+                  <span className="ml-1 font-normal text-gray-400">
+                    ({overview.plan.fleetSizeMin}
+                    {overview.plan.fleetSizeMax !== null
+                      ? `–${overview.plan.fleetSizeMax}`
+                      : "+"}
+                    )
+                  </span>
+                )}
+              </p>
+            </div>
+            <span className="text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
+              Manage →
+            </span>
+          </Link>
+        )}
 
         <ul className="flex flex-col gap-1 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800">
           <li>

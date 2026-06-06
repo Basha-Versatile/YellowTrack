@@ -174,15 +174,15 @@ export default function VehicleEmiPanel({
     ? Math.round((activePlan.paidInstallments / activePlan.totalInstallments) * 100)
     : 0;
 
-  // Loan summary — prefer real per-payment numbers when we have the schedule
-  // loaded; fall back to (emiAmount × totalInstallments) for the total when
-  // principalAmount isn't set.
+  // Loan summary — everything in EMI-cash terms so paid + pending = total
+  // always reconciles. Earlier we mixed principalAmount (borrowed cash,
+  // no interest) with EMI cash (includes interest), which produced a
+  // "% remaining" > 100% whenever the principal was recorded. Principal
+  // is surfaced separately as a hint, not the running total.
   const summary = useMemo(() => {
-    if (!activePlan) return { totalAmount: 0, pendingAmount: 0, pendingCount: 0 };
-    const totalAmount =
-      activePlan.principalAmount && activePlan.principalAmount > 0
-        ? activePlan.principalAmount
-        : activePlan.emiAmount * activePlan.totalInstallments;
+    if (!activePlan)
+      return { totalAmount: 0, paidAmount: 0, pendingAmount: 0, pendingCount: 0 };
+    const totalAmount = activePlan.emiAmount * activePlan.totalInstallments;
     if (payments.length > 0) {
       const pendingRows = payments.filter(
         (p) => p.status !== "PAID" && p.status !== "SKIPPED",
@@ -191,8 +191,12 @@ export default function VehicleEmiPanel({
         (s, p) => s + p.amount + (p.lateFee ?? 0),
         0,
       );
+      const paidAmount = payments
+        .filter((p) => p.status === "PAID")
+        .reduce((s, p) => s + (p.paidAmount ?? p.amount) + (p.lateFee ?? 0), 0);
       return {
         totalAmount,
+        paidAmount,
         pendingAmount,
         pendingCount: pendingRows.length,
       };
@@ -202,6 +206,7 @@ export default function VehicleEmiPanel({
       activePlan.totalInstallments - activePlan.paidInstallments;
     return {
       totalAmount,
+      paidAmount: activePlan.emiAmount * activePlan.paidInstallments,
       pendingAmount: activePlan.emiAmount * pendingCount,
       pendingCount,
     };
@@ -475,11 +480,11 @@ export default function VehicleEmiPanel({
           {/* Loan summary — total / pending / count */}
           <div className="grid grid-cols-1 2xsm:grid-cols-3 gap-3 mb-5">
             <SummaryTile
-              label="Total amount"
+              label="Total payable"
               value={formatINR(summary.totalAmount)}
               hint={
                 activePlan.principalAmount && activePlan.principalAmount > 0
-                  ? "Principal"
+                  ? `Principal ${formatINR(activePlan.principalAmount)} · ${activePlan.totalInstallments} × ${formatINR(activePlan.emiAmount)}`
                   : `${activePlan.totalInstallments} × ${formatINR(activePlan.emiAmount)}`
               }
               tone="default"
@@ -489,7 +494,7 @@ export default function VehicleEmiPanel({
               value={formatINR(summary.pendingAmount)}
               hint={
                 summary.totalAmount > 0
-                  ? `${Math.round((summary.pendingAmount / summary.totalAmount) * 100)}% remaining`
+                  ? `${Math.round((summary.pendingAmount / summary.totalAmount) * 100)}% remaining · paid ${formatINR(summary.paidAmount)}`
                   : "—"
               }
               tone={summary.pendingAmount > 0 ? "amber" : "default"}

@@ -62,6 +62,20 @@ function translateError(err: unknown): NextResponse {
   return errorResponse("Internal server error", 500);
 }
 
+// Write methods are blocked when the tenant's billing health is SUSPENDED.
+// GET / HEAD / OPTIONS go through unconditionally so the user can still
+// view their data, recharge the wallet, and decide pending upgrades.
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+// Endpoints that must work even when SUSPENDED, so the user has a way out
+// (recharge, decide upgrades, sign out, fetch billing state). Match by
+// `req.nextUrl.pathname` prefix.
+const SUSPENSION_EXEMPT_PREFIXES = [
+  "/api/auth/",
+  "/api/billing/",
+  "/api/cron/",
+];
+
 export function withRoute<TParams = Record<string, string>>(
   handler: Handler<TParams>,
   opts: HandlerOptions = {},
@@ -83,6 +97,31 @@ export function withRoute<TParams = Record<string, string>>(
         if (!session) throw new UnauthorizedError();
         if (roles && roles.length > 0 && !roles.includes(session.role)) {
           throw new ForbiddenError();
+        }
+      }
+
+      // Suspension gate. Tenants in SUSPENDED billing status are read-only
+      // until they recharge — block any non-GET request that isn't in the
+      // exempt list (auth, billing, cron). Superadmin sessions skip the
+      // check because they're cross-tenant.
+      if (session && session.role !== "SUPERADMIN" && session.tenantId) {
+        const method = req.method?.toUpperCase() ?? "GET";
+        const path = req.nextUrl?.pathname ?? "";
+        const exempt = SUSPENSION_EXEMPT_PREFIXES.some((p) => path.startsWith(p));
+        if (WRITE_METHODS.has(method) && !exempt) {
+          // Lazy import keeps the auth-handler ESM-light and avoids a
+          // tenant model dep when this code runs in pre-render contexts.
+          const { Tenant } = await import("@/models");
+          const tenant = await Tenant.findById(session.tenantId)
+            .select("billingStatus")
+            .lean();
+          const status =
+            (tenant as { billingStatus?: string } | null)?.billingStatus ?? "ACTIVE";
+          if (status === "SUSPENDED") {
+            throw new ForbiddenError(
+              "Your workspace is suspended due to an unpaid wallet balance. Top up to resume making changes.",
+            );
+          }
         }
       }
 

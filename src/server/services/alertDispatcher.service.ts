@@ -6,6 +6,10 @@ import {
   type Email,
   complianceExpiryEmail,
   complianceExpiredEmail,
+  complianceDigestEmail,
+  type ComplianceDigestItem,
+  customComplianceExpiryEmail,
+  customComplianceExpiredEmail,
   emiDueEmail,
   saleInvoiceEmail,
   driverVerifyLinkEmail,
@@ -46,6 +50,23 @@ async function getTenantAdminEmails(tenantId: string | null): Promise<string[]> 
     if (billing) return [billing];
   }
   return Array.from(new Set(emails));
+}
+
+/** Same shape as getTenantAdminEmails but for phone numbers — used to fan
+ *  WhatsApp alerts out to every admin in the tenant. Returns deduped list. */
+async function getTenantAdminPhones(tenantId: string | null): Promise<string[]> {
+  if (!tenantId) return [];
+  const admins = await User.find({
+    tenantId,
+    role: "ADMIN",
+    isActive: { $ne: false },
+  })
+    .select("phone")
+    .lean();
+  const phones = admins
+    .map((u) => (u as { phone?: string }).phone)
+    .filter((p): p is string => Boolean(p && p.trim().length > 0));
+  return Array.from(new Set(phones));
 }
 
 async function logEmail(
@@ -215,6 +236,116 @@ export async function dispatchComplianceExpiry(input: {
       vehicleId: input.vehicleId,
     },
   );
+}
+
+/**
+ * Custom Compliance expiry — same template/dispatch pattern as the vehicle
+ * compliance flow, but addressed to a documents-bank group + label rather
+ * than a vehicle reg + doc type.
+ */
+export async function dispatchCustomComplianceExpiry(input: {
+  ctx: ScopedContext;
+  groupId: string;
+  groupName: string;
+  documentLabel: string;
+  daysRemaining: number;
+  expiryDate: Date | string;
+  appBaseUrl: string;
+}): Promise<void> {
+  const tenantId = String(input.ctx.tenantId);
+  const adminEmails = await getTenantAdminEmails(tenantId);
+  if (adminEmails.length === 0) return;
+
+  const groupUrl = `${input.appBaseUrl}/custom-compliance/${input.groupId}`;
+  const expiryStr =
+    typeof input.expiryDate === "string"
+      ? input.expiryDate
+      : input.expiryDate.toISOString();
+
+  const tpl =
+    input.daysRemaining <= 0
+      ? customComplianceExpiredEmail({
+          adminEmails,
+          groupName: input.groupName,
+          documentLabel: input.documentLabel,
+          expiryDate: expiryStr,
+          groupUrl,
+        })
+      : customComplianceExpiryEmail({
+          adminEmails,
+          groupName: input.groupName,
+          documentLabel: input.documentLabel,
+          daysRemaining: input.daysRemaining,
+          expiryDate: expiryStr,
+          groupUrl,
+        });
+
+  const result = await sendEmail(tpl);
+  await logEmail(
+    tenantId,
+    input.daysRemaining <= 0
+      ? "custom_compliance_expired"
+      : "custom_compliance_expiry_alert",
+    tpl,
+    result,
+    {
+      groupId: input.groupId,
+      groupName: input.groupName,
+      documentLabel: input.documentLabel,
+      daysRemaining: input.daysRemaining,
+    },
+  );
+
+  // WhatsApp fan-out for the tenant admins. Best-effort — provider may be
+  // a no-op stub depending on env config. Mirrors the urgent-license fan-out
+  // pattern in alert.service.ts.
+  const adminPhones = await getTenantAdminPhones(tenantId);
+  if (adminPhones.length > 0) {
+    const body =
+      input.daysRemaining <= 0
+        ? `[Yellow Track] ${input.documentLabel} in "${input.groupName}" has expired. Open: ${groupUrl}`
+        : `[Yellow Track] ${input.documentLabel} in "${input.groupName}" expires in ${input.daysRemaining}d. Open: ${groupUrl}`;
+    for (const phone of adminPhones) {
+      try {
+        const normalized = phone.startsWith("+") ? phone : `+91${phone}`;
+        await sendWhatsApp({ to: normalized, bodyPreview: body });
+      } catch (err) {
+        console.error(
+          "[customCompliance] WhatsApp dispatch failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * One aggregated email per tenant per cron run, replacing the per-document
+ * fan-out that the orchestrator used to do daily. Caller filters items
+ * down to the milestone offsets (7 / 3 / 0 / -1 days) — this function just
+ * delivers and logs.
+ */
+export async function dispatchComplianceDigest(input: {
+  ctx: ScopedContext;
+  tenantName: string;
+  items: ComplianceDigestItem[];
+  appBaseUrl: string;
+}): Promise<void> {
+  if (input.items.length === 0) return;
+  const tenantId = String(input.ctx.tenantId);
+  const adminEmails = await getTenantAdminEmails(tenantId);
+  if (adminEmails.length === 0) return;
+  const tpl = complianceDigestEmail({
+    adminEmails,
+    tenantName: input.tenantName,
+    items: input.items,
+    appBaseUrl: input.appBaseUrl,
+  });
+  const result = await sendEmail(tpl);
+  await logEmail(tenantId, "compliance_digest", tpl, result, {
+    itemCount: input.items.length,
+    expiredOrToday: input.items.filter((i) => i.daysRemaining <= 0).length,
+  });
 }
 
 export async function dispatchEmiDue(input: {

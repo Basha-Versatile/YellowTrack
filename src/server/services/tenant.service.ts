@@ -197,6 +197,32 @@ export async function provisionTenant(input: CreateTenantInput) {
     );
   }
 
+  // 6. Signup wallet credit (₹1000). Idempotent so retries can't double-credit.
+  //    Best-effort — provisioning shouldn't fail if the wallet write hiccups;
+  //    the cron can backfill missed bonuses on next run if we add that path.
+  try {
+    const { grantSignupBonus } = await import("./wallet.service");
+    await grantSignupBonus(String(tenant._id));
+  } catch (err) {
+    console.error(
+      "[provisionTenant] signup wallet credit failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // 7. Assign initial plan based on current fleet size (0 vehicles → Select
+  //    band 0–50). Best-effort so a missing plan tier doesn't block signup;
+  //    the daily cron will pick it up if this slips.
+  try {
+    const { runPlanFitForTenant } = await import("./billing.orchestrator");
+    await runPlanFitForTenant(String(tenant._id));
+  } catch (err) {
+    console.error(
+      "[provisionTenant] plan-fit on signup failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   return {
     tenant: await tenantRepo.findById(String(tenant._id)),
     admin: {
