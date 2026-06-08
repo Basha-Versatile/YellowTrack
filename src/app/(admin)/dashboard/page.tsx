@@ -109,6 +109,11 @@ function validateDateRange(from: string, to: string): string | null {
   return null;
 }
 
+// TEMP gate — see the "EXPENSE CHARTS TEMPORARILY HIDDEN" block below.
+// Typed `boolean` (not the literal `true`) so TS narrowing on the
+// `!HIDE_EXPENSE_CHARTS && expenseReport && ...` chain still works.
+const HIDE_EXPENSE_CHARTS: boolean = true;
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null);
@@ -480,8 +485,14 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── EXPENSE CHARTS (moved from /vehicles/expenses) ── */}
-      {expenseReport && (() => {
+      {/* ── EXPENSE CHARTS TEMPORARILY HIDDEN ──
+           Monthly Expense Trend + Category Split are gated off while the
+           EMI source-of-truth migration is in flight. Legacy auto-created
+           Expense{category:"EMI"} rows from the historic Pay-All bug were
+           inflating the donut/bar to ~₹37L. Restore by flipping
+           HIDE_EXPENSE_CHARTS to false (declared near the top of this
+           component) and removing this note. */}
+      {!HIDE_EXPENSE_CHARTS && expenseReport && (() => {
         const activeCategories = Object.entries(expenseReport.summary.breakdown).filter(
           ([, v]) => (v as number) > 0,
         );

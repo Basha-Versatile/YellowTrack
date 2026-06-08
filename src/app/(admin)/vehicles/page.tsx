@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { vehicleAPI, vehicleGroupAPI } from "@/lib/api";
 import Badge from "@/components/ui/badge/Badge";
 import Link from "next/link";
@@ -7,10 +7,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { VehiclesListSkeleton } from "@/components/ui/Skeleton";
 import Pagination from "@/components/ui/Pagination";
 import { getVehicleTypeIcon } from "@/components/icons/VehicleTypeIcons";
-import { Plus, Truck, LayoutGrid, List, ChevronRight, User, X, FileSpreadsheet } from "lucide-react";
+import { Plus, Truck, LayoutGrid, List, ChevronRight, User, X, FileSpreadsheet, CheckSquare, Square, Tag } from "lucide-react";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 import { ExportVehiclesModal } from "@/components/vehicles/ExportVehiclesModal";
+import { BrandPicker } from "@/components/vehicles/BrandPicker";
+import { useToast } from "@/context/ToastContext";
 
 interface VehicleGroup {
   id: string;
@@ -84,6 +86,18 @@ export default function VehiclesPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [view, setView] = useState<"cards" | "list">("list");
   const [hoverPhoto, setHoverPhoto] = useState<{ url: string; x: number; y: number } | null>(null);
+
+  // Bulk-assign-brand state. Visible only when the brand filter is the
+  // "__none__" sentinel (Unbranded view). Selection lives in a Set keyed by
+  // vehicle id; we wipe it whenever the filter or page changes so the
+  // counter never claims selections that have scrolled off-screen.
+  const toast = useToast();
+  const isUnbrandedView = brandFilter === "__none__";
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBrand, setBulkBrand] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const BULK_CONFIRM_THRESHOLD = 500;
   const searchRef = useRef(search);
   const filterRef = useRef(statusFilter);
   const groupRef = useRef(groupFilter);
@@ -165,6 +179,102 @@ export default function VehiclesPage() {
     next.delete("brand");
     const qs = next.toString();
     router.replace(qs ? `/vehicles?${qs}` : "/vehicles");
+  };
+
+  // ── Bulk-assign-brand helpers ──────────────────────────────────────
+  // Drop the selection whenever the user leaves the Unbranded view, paginates,
+  // or changes any filter that swaps the on-screen rows. Avoids stale picks.
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setBulkBrand(null);
+  }, [brandFilter, statusFilter, groupFilter, usageFilter, lifecycleTab, search, pagination.page]);
+
+  const visibleSelectedCount = useMemo(
+    () => vehicles.reduce((n, v) => n + (selectedIds.has(v.id) ? 1 : 0), 0),
+    [vehicles, selectedIds],
+  );
+  const allVisibleSelected =
+    vehicles.length > 0 && visibleSelectedCount === vehicles.length;
+
+  const toggleSelection = (vehicleId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(vehicleId)) next.delete(vehicleId);
+      else next.add(vehicleId);
+      return next;
+    });
+  };
+
+  const toggleAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const v of vehicles) next.delete(v.id);
+      } else {
+        for (const v of vehicles) next.add(v.id);
+      }
+      return next;
+    });
+  };
+
+  const requestBulkAssign = () => {
+    if (!bulkBrand) {
+      toast.warning("Pick a brand", "Choose a brand from the dropdown first.");
+      return;
+    }
+    if (selectedIds.size === 0) {
+      toast.warning("No vehicles selected", "Tick the vehicles you want to assign.");
+      return;
+    }
+    if (selectedIds.size > BULK_CONFIRM_THRESHOLD) {
+      setConfirmOpen(true);
+      return;
+    }
+    void runBulkAssign();
+  };
+
+  const runBulkAssign = async () => {
+    if (!bulkBrand || selectedIds.size === 0) return;
+    setBulkLoading(true);
+    setConfirmOpen(false);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await vehicleAPI.bulkAssignBrand(ids, bulkBrand);
+      const data = (res.data as { data?: { matched: number; modified: number; skipped: number } })?.data;
+      const modified = data?.modified ?? 0;
+      const skipped = data?.skipped ?? 0;
+      if (modified > 0) {
+        const skipMsg =
+          skipped > 0
+            ? ` ${skipped} vehicle${skipped === 1 ? "" : "s"} ${skipped === 1 ? "was" : "were"} skipped because ${skipped === 1 ? "it was" : "they were"} already branded.`
+            : "";
+        toast.success(
+          "Brands assigned",
+          `Assigned ${bulkBrand} to ${modified} vehicle${modified === 1 ? "" : "s"} successfully.${skipMsg}`,
+        );
+      } else {
+        toast.info(
+          "No changes",
+          skipped > 0
+            ? `All ${skipped} selected vehicle${skipped === 1 ? "" : "s"} ${skipped === 1 ? "was" : "were"} already branded — nothing to update.`
+            : "No vehicles were updated.",
+        );
+      }
+      setSelectedIds(new Set());
+      setBulkBrand(null);
+      await fetchVehicles(pagination.page);
+      fetchFleetStats(lifecycleTab);
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string; errors?: string[] } } })
+          ?.response?.data?.errors?.[0] ??
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ??
+        "Could not assign brand to the selected vehicles.";
+      toast.error("Bulk assignment failed", msg);
+    } finally {
+      setBulkLoading(false);
+    }
   };
 
   // Debounce live search so every keystroke doesn't hit the API
@@ -268,6 +378,61 @@ export default function VehiclesPage() {
         </div>
       )}
 
+      {/* Bulk-assign toolbar — only visible on the Unbranded view per spec.
+          Reuses the BrandPicker so type-new-brand / pending-approval flow
+          works identically to the single-vehicle edit. Picker stays mounted
+          even when there are no selections so the operator can choose the
+          brand first, then tick rows. */}
+      {isUnbrandedView && vehicles.length > 0 && (
+        <div className="rounded-xl border border-yellow-200/80 bg-gradient-to-r from-yellow-50 to-amber-50 p-3 dark:border-yellow-500/30 dark:from-yellow-500/10 dark:to-amber-500/10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-[240px]">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-yellow-800 dark:text-yellow-300 mb-1.5 flex items-center gap-1.5">
+                  <Tag className="w-3 h-3" />
+                  Bulk assign brand
+                </label>
+                <BrandPicker
+                  value={bulkBrand}
+                  onChange={(name) => setBulkBrand(name)}
+                  placeholder="Pick a brand"
+                  disabled={bulkLoading}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={toggleAllOnPage}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-yellow-300/70 bg-white px-3 text-xs font-semibold text-yellow-800 hover:bg-yellow-50 dark:border-yellow-500/30 dark:bg-yellow-500/10 dark:text-yellow-300 dark:hover:bg-yellow-500/20 transition-colors"
+              >
+                {allVisibleSelected ? (
+                  <CheckSquare className="w-3.5 h-3.5" />
+                ) : (
+                  <Square className="w-3.5 h-3.5" />
+                )}
+                {allVisibleSelected ? "Deselect all on page" : "Select all on page"}
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-yellow-900 dark:text-yellow-200">
+                Selected:{" "}
+                <span className="font-mono font-black text-yellow-700 dark:text-yellow-300">
+                  {selectedIds.size}
+                </span>{" "}
+                vehicle{selectedIds.size === 1 ? "" : "s"}
+              </span>
+              <button
+                type="button"
+                onClick={requestBulkAssign}
+                disabled={!bulkBrand || selectedIds.size === 0 || bulkLoading}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 text-xs font-bold text-white shadow shadow-yellow-500/30 hover:shadow-yellow-500/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+              >
+                {bulkLoading ? "Assigning…" : "Assign Brand"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Group Filter */}
       {groups.length > 0 && (
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
@@ -353,8 +518,40 @@ export default function VehiclesPage() {
               <Link
                 key={v.id}
                 href={`/vehicles/${v.id}`}
-                className={`group rounded-2xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden hover:shadow-xl ${shadowClr} transition-all duration-300`}
+                className={`group relative rounded-2xl border bg-white dark:bg-white/[0.02] overflow-hidden hover:shadow-xl ${shadowClr} transition-all duration-300 ${
+                  selectedIds.has(v.id)
+                    ? "border-yellow-400/80 ring-2 ring-yellow-400/20"
+                    : "border-gray-200/80 dark:border-gray-800"
+                }`}
               >
+                {/* Bulk-select checkbox — Unbranded view only. Pinned to the
+                    top-left corner; stops propagation so the card link still
+                    navigates when the rest of the card is clicked. */}
+                {isUnbrandedView && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleSelection(v.id);
+                    }}
+                    aria-label={
+                      selectedIds.has(v.id)
+                        ? `Deselect ${v.registrationNumber}`
+                        : `Select ${v.registrationNumber}`
+                    }
+                    className={`absolute left-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-md border-2 transition-colors ${
+                      selectedIds.has(v.id)
+                        ? "border-yellow-500 bg-yellow-500 text-white"
+                        : "border-gray-300 bg-white hover:border-yellow-400 dark:border-gray-600 dark:bg-gray-800"
+                    }`}
+                  >
+                    {selectedIds.has(v.id) && (
+                      <CheckSquare className="w-3.5 h-3.5" strokeWidth={3} />
+                    )}
+                  </button>
+                )}
+
                 {/* Top gradient bar */}
                 <div className={`h-1.5 bg-gradient-to-r ${grad}`} />
 
@@ -463,8 +660,40 @@ export default function VehiclesPage() {
               <Link
                 key={v.id}
                 href={`/vehicles/${v.id}`}
-                className="group flex items-center gap-4 p-4 rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] hover:shadow-lg hover:shadow-gray-200/50 dark:hover:shadow-none transition-all"
+                className={`group flex items-center gap-4 p-4 rounded-xl border bg-white dark:bg-white/[0.02] hover:shadow-lg hover:shadow-gray-200/50 dark:hover:shadow-none transition-all ${
+                  selectedIds.has(v.id)
+                    ? "border-yellow-400/80 ring-2 ring-yellow-400/20"
+                    : "border-gray-200/80 dark:border-gray-800"
+                }`}
               >
+                {/* Bulk-select checkbox — Unbranded view only. Stops the
+                    click from bubbling so the row's <Link> navigation
+                    only fires when the operator clicks outside the box. */}
+                {isUnbrandedView && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleSelection(v.id);
+                    }}
+                    aria-label={
+                      selectedIds.has(v.id)
+                        ? `Deselect ${v.registrationNumber}`
+                        : `Select ${v.registrationNumber}`
+                    }
+                    className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+                      selectedIds.has(v.id)
+                        ? "border-yellow-500 bg-yellow-500 text-white"
+                        : "border-gray-300 bg-white hover:border-yellow-400 dark:border-gray-600 dark:bg-gray-800"
+                    }`}
+                  >
+                    {selectedIds.has(v.id) && (
+                      <CheckSquare className="w-3 h-3" strokeWidth={3} />
+                    )}
+                  </button>
+                )}
+
                 {/* Status indicator */}
                 <div className={`w-1 h-12 rounded-full bg-gradient-to-b ${grad} flex-shrink-0`} />
 
@@ -587,6 +816,61 @@ export default function VehiclesPage() {
           search: search || undefined,
         }}
       />
+
+      {/* Bulk-assign confirmation — fires only when the operator selects
+          more than BULK_CONFIRM_THRESHOLD vehicles in a single Assign click. */}
+      {confirmOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-yellow-400 to-amber-500 px-5 py-4 text-white">
+              <h3 className="text-sm font-bold uppercase tracking-wider">
+                Confirm large bulk assignment
+              </h3>
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                aria-label="Close"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-white/80 hover:bg-white/15 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-gray-800 dark:text-gray-200">
+                You are about to assign{" "}
+                <span className="font-bold text-yellow-700 dark:text-yellow-300">
+                  {bulkBrand}
+                </span>{" "}
+                to{" "}
+                <span className="font-mono font-black">
+                  {selectedIds.size.toLocaleString("en-IN")}
+                </span>{" "}
+                vehicles. Do you want to continue?
+              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                Vehicles that have already been branded by another operator
+                in the meantime will be skipped, not overwritten.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 rounded-b-2xl border-t border-gray-100 bg-gray-50 px-5 py-3 dark:border-gray-800 dark:bg-gray-900/60">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void runBulkAssign()}
+                className="rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-2 text-xs font-bold text-white shadow shadow-yellow-500/30 hover:shadow-yellow-500/50"
+              >
+                Continue with {selectedIds.size.toLocaleString("en-IN")} vehicles
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

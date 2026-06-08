@@ -459,6 +459,31 @@ export async function manualOnboard(
 }
 
 /**
+ * Bulk-assign a brand to many vehicles in one shot. Power-user shortcut for
+ * the "Unbranded" filter on the Vehicles list — the operator picks N rows
+ * + a brand and clicks Assign once instead of opening each vehicle.
+ *
+ * Race policy (per product spec): only update rows that are STILL
+ * unbranded when the write runs. If another operator branded one of the
+ * selected vehicles between the operator's page load and Assign click,
+ * we skip it instead of clobbering their write. The skipped count is
+ * surfaced to the UI so it can render
+ *   "Assigned Tata to 48 vehicles. 2 were skipped because they were
+ *    already branded."
+ *
+ * Tenant-scoped at the repo layer via `tenantFilter`. Soft-deleted rows
+ * are filtered by the Vehicle schema's pre-find middleware (defence in
+ * depth — the bulk update also runs through Mongoose, not raw driver).
+ */
+export async function bulkAssignBrand(
+  ctx: ScopedContext,
+  vehicleIds: string[],
+  brand: string,
+): Promise<{ matched: number; modified: number; skipped: number }> {
+  return vehicleRepo.bulkSetBrandWhenUnbranded(ctx, vehicleIds, brand);
+}
+
+/**
  * Fleet-wide stat-card numbers for the Vehicles page. Counts every vehicle
  * (honouring the lifecycle tab), buckets by worst-status compliance, and
  * sums pending challan amount. Server-side aggregation only — no row data

@@ -34,15 +34,24 @@ export type AuthResult = {
 async function loadPublicTenant(tenantId: string | null): Promise<PublicTenant | null> {
   if (!tenantId) return null;
   const t = await Tenant.findById(tenantId)
-    .select("name slug logoUrl billingEmail")
+    .select("name slug logoUrl billingEmail features")
     .lean();
   if (!t) return null;
+  // Coerce the Mongoose subdoc to a plain `{ key: boolean }` map. Unset
+  // flags fall through as undefined and consumers default them to false
+  // via isFeatureEnabled — no need for an explicit allow-list here.
+  const rawFeatures = (t as { features?: Record<string, unknown> }).features ?? {};
+  const features: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(rawFeatures)) {
+    features[k] = Boolean(v);
+  }
   return {
     id: String((t as { _id: unknown })._id),
     name: (t as { name?: string }).name ?? "",
     slug: (t as { slug?: string }).slug ?? "",
     logoUrl: (t as { logoUrl?: string | null }).logoUrl ?? null,
     billingEmail: (t as { billingEmail?: string | null }).billingEmail ?? null,
+    features,
   };
 }
 

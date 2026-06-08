@@ -469,20 +469,11 @@ function VehicleExpensesContent() {
             <Plus className="w-4 h-4" />
             Log Expense
           </button>
-          <button
-            disabled={!vehicleId}
-            onClick={() => {
-              if (!vehicleId) return;
-              setExpVehicleId(vehicleId);
-              setExpForm((prev) => ({ ...prev, category: "INVOICE", title: prev.title || "Vehicle Invoice" }));
-              setShowModal(true);
-            }}
-            title={vehicleId ? "Add an invoice for the selected vehicle" : "Pick a vehicle from the filter to add its invoice"}
-            className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:disabled:text-gray-500 disabled:cursor-not-allowed px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all"
-          >
-            <FileText className="w-4 h-4" />
-            Add Invoice
-          </button>
+          {/* "Add Invoice" button retired together with the INVOICE
+              category. Vendor invoices are now filed under the closest
+              concrete category via Log Expense. Legacy INVOICE Expense
+              rows stay in the DB but no longer surface in the dashboard
+              report. */}
           <div className="relative">
             <button onClick={() => setShowDownload(!showDownload)}
               className="inline-flex items-center gap-2 rounded-xl border-2 border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
@@ -643,15 +634,25 @@ function VehicleExpensesContent() {
                   <tbody className="divide-y divide-gray-100/50 dark:divide-gray-800/50">
                     {getFilteredExpenses().map((exp, i) => {
                       const c = CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.misc;
-                      const drilldownHref = exp.source === "SERVICE" && exp.vehicleId
-                        ? `/vehicles/services/${exp.vehicleId}`
-                        : null;
+                      // Service rows drill into service history; EMI rows
+                      // (sourced from EMIPayment) drill into the EMI hub so
+                      // the operator edits installments where they live, not
+                      // through the Expense modal.
+                      let drilldownHref: string | null = null;
+                      let drilldownTitle: string | undefined;
+                      if (exp.source === "SERVICE" && exp.vehicleId) {
+                        drilldownHref = `/vehicles/services/${exp.vehicleId}`;
+                        drilldownTitle = "Open service history for this vehicle";
+                      } else if (exp.source === "EMI_PAYMENT" && exp.vehicleId) {
+                        drilldownHref = `/vehicles/${exp.vehicleId}/emi`;
+                        drilldownTitle = "Open EMI hub for this vehicle";
+                      }
                       return (
                         <tr
                           key={i}
                           onClick={drilldownHref ? () => router.push(drilldownHref) : undefined}
                           className={`hover:bg-white/50 dark:hover:bg-gray-800/30 transition-colors ${drilldownHref ? "cursor-pointer" : ""}`}
-                          title={drilldownHref ? "Open service history for this vehicle" : undefined}
+                          title={drilldownTitle}
                         >
                           <td className="px-5 py-3.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">{new Date(exp.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td>
                           <td className="px-5 py-3.5 whitespace-nowrap">
@@ -760,8 +761,11 @@ function VehicleExpensesContent() {
                       <option value="TYRE_REPLACEMENT">Tyre Replacement</option>
                       <option value="FASTAG">FASTag</option>
                       <option value="CHALLAN">Challans</option>
-                      <option value="EMI">EMI</option>
-                      <option value="INVOICE">Invoice</option>
+                      {/* EMI and INVOICE intentionally removed.
+                          EMI is managed in the EMI hub (EMIPlan +
+                          EMIPayment). INVOICE was retired — operators
+                          file vendor invoices under the appropriate
+                          concrete category. */}
                     </select>
                   </div>
                 </div>

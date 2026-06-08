@@ -136,6 +136,12 @@ export type CreateEmiPlanInput = {
   // singular field is kept as a fallback pointer to the first file.
   scheduleDocumentUrl?: string | null;
   scheduleDocumentUrls?: string[] | null;
+  // Optional downpayment for tracking-only purposes. Does NOT alter EMI
+  // math. If amount > 0, date becomes required and the service auto-creates
+  // an EMIPayment with installmentNumber 0 — PAID if the date is in the
+  // past, SCHEDULED if future.
+  downpaymentAmount?: number | null;
+  downpaymentDate?: string | Date | null;
 };
 
 function validateCreateInput(input: CreateEmiPlanInput) {
@@ -158,6 +164,25 @@ function validateCreateInput(input: CreateEmiPlanInput) {
   const sd = new Date(input.startDate);
   if (Number.isNaN(sd.getTime()))
     throw new BadRequestError("Invalid start date");
+
+  // Downpayment policy: blank/0 → skip. Positive → date is mandatory and
+  // must be a valid date. Past, current, and future dates are all
+  // acceptable (the service decides PAID vs SCHEDULED based on this).
+  const dp = Number(input.downpaymentAmount ?? 0) || 0;
+  if (dp < 0) {
+    throw new BadRequestError("Downpayment amount cannot be negative");
+  }
+  if (dp > 0) {
+    if (!input.downpaymentDate) {
+      throw new BadRequestError(
+        "Downpayment date is required when a downpayment amount is provided",
+      );
+    }
+    const dpd = new Date(input.downpaymentDate);
+    if (Number.isNaN(dpd.getTime())) {
+      throw new BadRequestError("Invalid downpayment date");
+    }
+  }
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -218,6 +243,10 @@ export async function createEmiPlan(
       (input.scheduleDocumentUrls && input.scheduleDocumentUrls[0]) ??
       null,
     scheduleDocumentUrls: input.scheduleDocumentUrls ?? [],
+    downpaymentAmount: Number(input.downpaymentAmount ?? 0) || 0,
+    downpaymentDate: input.downpaymentDate
+      ? new Date(input.downpaymentDate)
+      : null,
     createdBy,
   });
 
@@ -255,6 +284,36 @@ export async function createEmiPlan(
       ...row,
     })),
   );
+
+  // Auto-create EMIPayment#0 for the downpayment. Installment number 0 is
+  // reserved for the downpayment so the regular schedule stays intact
+  // (installments 1..N for the actual EMI payments). The row mirrors
+  // markPaymentPaid's shape so the existing read paths (dashboard donut,
+  // Vehicles Expenses page, EMI hub timeline) all pick it up without
+  // special-casing.
+  const dpAmount = Number(input.downpaymentAmount ?? 0) || 0;
+  if (dpAmount > 0 && input.downpaymentDate) {
+    const dpDate = new Date(input.downpaymentDate);
+    const isFuture = dpDate.getTime() > Date.now();
+    await emiRepo.insertManyPayments(ctx, [
+      {
+        emiPlanId: plan._id,
+        vehicleId: input.vehicleId,
+        installmentNumber: 0,
+        scheduledDate: dpDate,
+        amount: dpAmount,
+        status: isFuture ? "SCHEDULED" : "PAID",
+        paidDate: isFuture ? null : dpDate,
+        paidAmount: isFuture ? null : dpAmount,
+      },
+    ]);
+    // NOTE on `paidInstallments`: we DON'T bump it for the downpayment.
+    // `paidInstallments` tracks regular EMI installments (1..N) so that
+    // `paidInstallments >= totalInstallments` correctly triggers auto-close
+    // when the LAST installment is paid. The downpayment is a separate
+    // concept — it shows in spend reports + the EMI calendar but doesn't
+    // shorten the schedule.
+  }
 
   await refreshNextDueDate(ctx, String(plan._id));
   return emiRepo.findPlanById(ctx, String(plan._id));

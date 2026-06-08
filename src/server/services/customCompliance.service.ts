@@ -20,6 +20,33 @@ import {
 } from "./quota.service";
 import { Plan, Tenant } from "@/models";
 
+/**
+ * Strip secret fields off the lock subdoc before sending to the client.
+ * The UI only needs to know whether the lock is on (to render the badge
+ * + decide whether to show the lock screen) — everything else stays on
+ * the server. `passwordHash` is a bcrypt hash so leaking it is low-impact,
+ * but withholding it is the right default. `recentFailures` and
+ * `blockedUntil` are internal mechanics.
+ *
+ * `unlockedBy` is also stripped — it includes other users' grants and has
+ * no business reaching the wire.
+ */
+function sanitiseGroupForClient<T extends Record<string, unknown>>(g: T): T {
+  const sanitised = { ...g } as Record<string, unknown>;
+  const lock = sanitised.lock as Record<string, unknown> | null | undefined;
+  if (lock) {
+    sanitised.lock = {
+      enabled: Boolean(lock.enabled),
+      // Recovery email is safe to expose — UI shows it as "Reset link will
+      // be sent to xx@yy" on the unlock screen.
+      recoveryEmail: lock.recoveryEmail ?? null,
+      setAt: lock.setAt ?? null,
+    };
+  }
+  delete sanitised.unlockedBy;
+  return sanitised as T;
+}
+
 // Single resolver used by listGroups/getGroup to inject the per-tenant
 // document cap onto each group payload (so the UI doesn't need to make a
 // second call per group). Defaults to 10 when the tenant has no plan or
@@ -90,7 +117,7 @@ export async function listGroups(ctx: ScopedContext) {
 
   return groups.map((g) => {
     const b = bucket.get(String(g._id)) ?? { total: 0, byStatus: {} };
-    return {
+    return sanitiseGroupForClient({
       ...g,
       id: String(g._id),
       _count: {
@@ -103,7 +130,7 @@ export async function listGroups(ctx: ScopedContext) {
       // Render-side fence: the UI uses this to grey out the Add button at
       // the limit. Server still enforces via assertCustomComplianceGroupDocCapacity.
       docLimit,
-    };
+    });
   });
 }
 
@@ -139,12 +166,12 @@ export async function getGroup(ctx: ScopedContext, id: string) {
     ctx.tenantId === ALL_TENANTS
       ? { used: 0, limit: 10 }
       : await getCustomComplianceGroupDocCapacity(String(ctx.tenantId), id);
-  return {
+  return sanitiseGroupForClient({
     ...group,
     id: String((group as { _id: unknown })._id),
     docLimit: capacity.limit,
     docCount: capacity.used,
-  };
+  });
 }
 
 export async function updateGroup(

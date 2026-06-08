@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Clock,
   Tag,
+  Activity,
 } from "lucide-react";
 
 type Brand = {
@@ -35,6 +36,32 @@ type Brand = {
 
 type StatusFilter = "ALL" | "APPROVED" | "PENDING" | "REJECTED";
 
+type AuditResult = {
+  query: { name: string; caseSensitive: boolean };
+  brandMasterRows: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    status: "APPROVED" | "PENDING" | "REJECTED";
+    createdAt: string | null;
+    logoUrl: string | null;
+    iconKey: string | null;
+  }>;
+  vehicleStats: {
+    totalAffected: number;
+    perBrandValue: Array<{ brand: string; count: number }>;
+    perTenant: Array<{ tenantId: string | null; tenantName: string | null; count: number }>;
+    samples: Array<{
+      id: string;
+      registrationNumber: string;
+      brand: string;
+      tenantId: string | null;
+      make: string | null;
+      model: string | null;
+    }>;
+  };
+};
+
 const STATUS_TINT: Record<Brand["status"], string> = {
   APPROVED: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
   PENDING: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
@@ -50,6 +77,11 @@ export default function VehicleBrandsMastersPage() {
   const [creating, setCreating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Brand | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  // Audit modal — opens when the operator clicks the "Audit usage" button
+  // on a row. Read-only: surfaces the per-tenant vehicle count + a sample
+  // of affected vehicles so the operator can decide whether to migrate
+  // before deleting the master row.
+  const [auditing, setAuditing] = useState<{ brand: Brand; result: AuditResult | null; loading: boolean; error: string | null } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -131,6 +163,26 @@ export default function VehicleBrandsMastersPage() {
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         "Delete failed";
       setToast({ type: "error", message: msg });
+    }
+  };
+
+  const handleAudit = async (b: Brand) => {
+    setAuditing({ brand: b, result: null, loading: true, error: null });
+    try {
+      // Case-insensitive on purpose — typos like "as", "As", "AS" should
+      // all surface in one shot when the operator audits "AS".
+      const res = await superadminVehicleBrandAPI.auditName(b.name, false);
+      setAuditing({
+        brand: b,
+        result: res.data.data as AuditResult,
+        loading: false,
+        error: null,
+      });
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Audit failed";
+      setAuditing({ brand: b, result: null, loading: false, error: msg });
     }
   };
 
@@ -272,6 +324,13 @@ export default function VehicleBrandsMastersPage() {
                     </>
                   )}
                   <button
+                    onClick={() => handleAudit(b)}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-yellow-700 hover:bg-yellow-50 dark:hover:text-yellow-300 dark:hover:bg-yellow-500/10"
+                    title="Audit usage — how many vehicles use this brand?"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                  </button>
+                  <button
                     onClick={() => setEditing(b)}
                     className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:hover:text-white dark:hover:bg-gray-800"
                     title="Edit"
@@ -314,6 +373,16 @@ export default function VehicleBrandsMastersPage() {
           brand={pendingDelete}
           onClose={() => setPendingDelete(null)}
           onConfirm={() => handleDelete(pendingDelete)}
+        />
+      )}
+
+      {auditing && (
+        <AuditUsageModal
+          brandName={auditing.brand.name}
+          loading={auditing.loading}
+          error={auditing.error}
+          result={auditing.result}
+          onClose={() => setAuditing(null)}
         />
       )}
 
@@ -626,5 +695,199 @@ function Field({
       {children}
       {hint && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">{hint}</p>}
     </label>
+  );
+}
+
+function AuditUsageModal({
+  brandName,
+  loading,
+  error,
+  result,
+  onClose,
+}: {
+  brandName: string;
+  loading: boolean;
+  error: string | null;
+  result: AuditResult | null;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[100001] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div
+        className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 max-h-[88vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-yellow-400 to-amber-500 px-5 py-4 text-white sticky top-0">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            <h3 className="text-sm font-bold uppercase tracking-wider">
+              Audit usage · {brandName}
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-white/80 hover:bg-white/15 hover:text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {loading && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Clock className="w-4 h-4 animate-spin" />
+              Counting vehicles…
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <>
+              {/* Headline number */}
+              <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-yellow-50 to-amber-50 p-4 dark:border-gray-700 dark:from-yellow-500/10 dark:to-amber-500/10">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-yellow-800 dark:text-yellow-300">
+                  Vehicles currently using this brand
+                </p>
+                <p className="mt-2 text-3xl font-black text-yellow-700 dark:text-yellow-300">
+                  {result.vehicleStats.totalAffected.toLocaleString("en-IN")}
+                </p>
+                <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
+                  {result.vehicleStats.totalAffected === 0
+                    ? "Safe to delete the master row — no migration needed."
+                    : `Migration to Unbranded would update ${result.vehicleStats.totalAffected.toLocaleString("en-IN")} vehicle${result.vehicleStats.totalAffected === 1 ? "" : "s"} across ${result.vehicleStats.perTenant.length} tenant${result.vehicleStats.perTenant.length === 1 ? "" : "s"}.`}
+                </p>
+              </div>
+
+              {/* Brand master rows */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                  Brand master rows matching &ldquo;{brandName}&rdquo; (case-insensitive)
+                </p>
+                {result.brandMasterRows.length === 0 ? (
+                  <p className="text-xs text-gray-400">No master row found.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {result.brandMasterRows.map((b) => (
+                      <li
+                        key={b.id}
+                        className="flex items-center justify-between rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs dark:border-gray-800 dark:bg-gray-800/50"
+                      >
+                        <span>
+                          <span className="font-bold text-gray-900 dark:text-white">
+                            {b.name}
+                          </span>{" "}
+                          <span className="text-gray-400">/ {b.slug}</span>
+                        </span>
+                        <span
+                          className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${STATUS_TINT[b.status]}`}
+                        >
+                          {b.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Per-tenant breakdown */}
+              {result.vehicleStats.perTenant.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                    Per-tenant breakdown
+                  </p>
+                  <ul className="divide-y divide-gray-100 dark:divide-gray-800 rounded-md border border-gray-100 dark:border-gray-800">
+                    {result.vehicleStats.perTenant.map((t, i) => (
+                      <li
+                        key={t.tenantId ?? `unscoped-${i}`}
+                        className="flex items-center justify-between px-3 py-1.5 text-xs"
+                      >
+                        <span className="text-gray-700 dark:text-gray-300">
+                          {t.tenantName ?? t.tenantId ?? "(unscoped)"}
+                        </span>
+                        <span className="font-mono font-bold text-gray-900 dark:text-white">
+                          {t.count.toLocaleString("en-IN")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Brand-value variants */}
+              {result.vehicleStats.perBrandValue.length > 1 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                    Brand-string variants in DB
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {result.vehicleStats.perBrandValue.map((v) => (
+                      <span
+                        key={v.brand}
+                        className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-mono dark:border-gray-700 dark:bg-gray-800"
+                      >
+                        &ldquo;{v.brand}&rdquo;{" "}
+                        <span className="text-gray-400">× {v.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sample vehicles */}
+              {result.vehicleStats.samples.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
+                    Sample affected vehicles ({result.vehicleStats.samples.length} of {result.vehicleStats.totalAffected})
+                  </p>
+                  <div className="rounded-md border border-gray-100 dark:border-gray-800 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 dark:bg-gray-800/60">
+                        <tr className="text-[10px] uppercase tracking-wider text-gray-500">
+                          <th className="px-3 py-2 text-left">Reg #</th>
+                          <th className="px-3 py-2 text-left">Make / Model</th>
+                          <th className="px-3 py-2 text-left">Brand (raw)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {result.vehicleStats.samples.map((v) => (
+                          <tr key={v.id}>
+                            <td className="px-3 py-1.5 font-mono">
+                              {v.registrationNumber}
+                            </td>
+                            <td className="px-3 py-1.5 text-gray-600 dark:text-gray-400">
+                              {[v.make, v.model].filter(Boolean).join(" ") || "—"}
+                            </td>
+                            <td className="px-3 py-1.5 font-mono text-yellow-700 dark:text-yellow-300">
+                              {v.brand}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 rounded-b-2xl border-t border-gray-100 bg-gray-50 px-5 py-3 dark:border-gray-800 dark:bg-gray-900/60 sticky bottom-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

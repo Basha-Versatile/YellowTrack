@@ -37,7 +37,9 @@ const emiPaymentSchema = new Schema(
       index: true,
     },
 
-    installmentNumber: { type: Number, required: true, min: 1 },
+    // 0 = downpayment (settled or scheduled at plan creation), 1..N = the
+    // regular EMI installments.
+    installmentNumber: { type: Number, required: true, min: 0 },
     scheduledDate: { type: Date, required: true, index: true },
     amount: { type: Number, required: true, min: 0 },
 

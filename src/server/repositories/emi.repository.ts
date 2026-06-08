@@ -154,6 +154,9 @@ export async function findNextScheduledPayment(
   return EMIPayment.findOne(
     tenantFilter(ctx, {
       emiPlanId,
+      // Exclude the downpayment (installmentNumber 0) — it's tracked
+      // separately. "Next due" should always point at the next actual EMI.
+      installmentNumber: { $gt: 0 },
       status: { $in: ["SCHEDULED", "OVERDUE", "BOUNCED"] },
     }),
   )

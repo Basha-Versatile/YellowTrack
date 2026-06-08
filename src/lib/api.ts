@@ -366,6 +366,46 @@ export const superadminAPI = {
   suspendTenant: (id: string) => api.post(`/superadmin/tenants/${id}/suspend`),
   resumeTenant: (id: string) => api.delete(`/superadmin/tenants/${id}/suspend`),
   deleteTenant: (id: string) => api.delete(`/superadmin/tenants/${id}`),
+
+  // ── Per-tenant feature flags ─────────────────────────────────────
+  getTenantFeatures: (tenantId: string) =>
+    api.get(`/superadmin/tenants/${tenantId}/features`),
+  setTenantFeature: (tenantId: string, key: string, enabled: boolean) =>
+    api.patch(`/superadmin/tenants/${tenantId}/features`, { key, enabled }),
+
+  // ── Wallet (superadmin only — routes through wallet.service so the
+  //    WalletTransaction audit row is written on every change) ─────────
+  getTenantWallet: (tenantId: string) =>
+    api.get(`/superadmin/tenants/${tenantId}/wallet`),
+  creditTenantWallet: (
+    tenantId: string,
+    body: {
+      amount: number;
+      reason: "adjustment" | "refund" | "recharge";
+      notes?: string;
+    },
+  ) => api.post(`/superadmin/tenants/${tenantId}/wallet/credit`, body),
+  debitTenantWallet: (
+    tenantId: string,
+    body: {
+      amount: number;
+      reason: "adjustment";
+      notes?: string;
+      allowNegative?: boolean;
+    },
+  ) => api.post(`/superadmin/tenants/${tenantId}/wallet/debit`, body),
+  listTenantWalletTransactions: (
+    tenantId: string,
+    params?: {
+      limit?: number;
+      before?: string;
+      from?: string;
+      to?: string;
+      reason?: "signup_bonus" | "monthly_bill" | "recharge" | "refund" | "adjustment";
+      type?: "CREDIT" | "DEBIT";
+    },
+  ) =>
+    api.get(`/superadmin/tenants/${tenantId}/wallet/transactions`, { params }),
   listVehicles: (params?: {
     tenantId?: string;
     page?: number;
@@ -448,6 +488,14 @@ export const vehicleAPI = {
     lifecycle?: "ACTIVE" | "SOLD";
     brand?: string;
   }) => api.get("/vehicles", { params }),
+  bulkAssignBrand: (vehicleIds: string[], brand: string) =>
+    api.patch<
+      | {
+          success: true;
+          message: string;
+          data: { matched: number; modified: number; skipped: number };
+        }
+    >("/vehicles/bulk-brand", { vehicleIds, brand }),
   getSale: (vehicleId: string) => api.get(`/vehicles/${vehicleId}/sale`),
   markSold: (vehicleId: string, formData: FormData) =>
     api.post(`/vehicles/${vehicleId}/sale`, formData, {
@@ -756,6 +804,14 @@ export const superadminVehicleBrandAPI = {
   approve: (id: string) => api.post(`/superadmin/vehicle-brands/${id}/approve`),
   reject: (id: string, reason?: string) =>
     api.post(`/superadmin/vehicle-brands/${id}/reject`, { reason: reason ?? "" }),
+  // Read-only audit. Pre-flight for "is brand X actually in use across the
+  // fleet?" investigations (e.g. the AS-cleanup workflow). Returns the
+  // brand-master rows + per-tenant vehicle counts + samples. Does not
+  // mutate anything.
+  auditName: (name: string, caseSensitive = false) =>
+    api.get("/superadmin/vehicle-brands/audit-name", {
+      params: { name, caseSensitive: caseSensitive ? "true" : "false" },
+    }),
 };
 
 export const activityLogAPI = {
@@ -953,6 +1009,32 @@ export const customComplianceAPI = {
   // curated share. Returns { token, url, expiresAt }.
   createShare: (input: { groupId?: string; documentIds?: string[] }) =>
     api.post(`/custom-compliance/share`, input),
+
+  // ── Folder lock ──────────────────────────────────────────────────
+  getLockStatus: (groupId: string) =>
+    api.get(`/custom-compliance/groups/${groupId}/lock`),
+  enableLock: (
+    groupId: string,
+    data: { email: string; password: string; confirmPassword: string },
+  ) => api.post(`/custom-compliance/groups/${groupId}/lock`, data),
+  removeLock: (groupId: string, password: string) =>
+    api.delete(`/custom-compliance/groups/${groupId}/lock`, {
+      data: { password },
+    }),
+  unlock: (groupId: string, password: string) =>
+    api.post(`/custom-compliance/groups/${groupId}/lock/verify`, { password }),
+  relock: (groupId: string) =>
+    api.post(`/custom-compliance/groups/${groupId}/lock/relock`),
+  requestLockReset: (groupId: string) =>
+    api.post(`/custom-compliance/groups/${groupId}/lock/reset/request`),
+  verifyLockReset: (
+    groupId: string,
+    data: { otp: string; newPassword: string; confirmPassword: string },
+  ) =>
+    api.post(
+      `/custom-compliance/groups/${groupId}/lock/reset/verify`,
+      data,
+    ),
 };
 
 // ── Insurance ──────────────────────────────────────────────
@@ -1084,6 +1166,11 @@ export const emiAPI = {
       // pass one file.
       scheduleDocument?: File | null;
       scheduleDocuments?: File[] | null;
+      // Optional downpayment, tracking-only. If amount > 0, date is
+      // required (the server validates and 400s otherwise). Past/today
+      // dates create a PAID EMIPayment#0; future dates create SCHEDULED.
+      downpaymentAmount?: number;
+      downpaymentDate?: string;
     },
   ) => {
     // Always multipart so the optional schedule file flows through alongside
@@ -1112,6 +1199,12 @@ export const emiAPI = {
       for (const f of data.scheduleDocuments) fd.append("scheduleDocument", f);
     }
     if (data.scheduleDocument) fd.append("scheduleDocument", data.scheduleDocument);
+    if (data.downpaymentAmount != null && data.downpaymentAmount > 0) {
+      fd.append("downpaymentAmount", String(data.downpaymentAmount));
+    }
+    if (data.downpaymentDate) {
+      fd.append("downpaymentDate", data.downpaymentDate);
+    }
     return api.post(`/vehicles/${vehicleId}/emi`, fd, {
       headers: { "Content-Type": "multipart/form-data" },
     });

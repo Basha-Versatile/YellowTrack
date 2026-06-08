@@ -51,6 +51,25 @@ export const POST = withRoute<{ id: string }>(
     if (!category || !title || !amount || !expenseDate) {
       throw new BadRequestError("Category, title, amount, and date are required");
     }
+    // EMI is recorded through the EMI hub (EMIPlan + EMIPayment), not the
+    // ledger. Reject manual creation at the API boundary so the
+    // dashboard/Vehicles Expenses totals stay reconciled with the EMI hub.
+    // Existing legacy EMI Expense rows keep working — only NEW EMI inserts
+    // are blocked.
+    if (category === "EMI") {
+      throw new BadRequestError(
+        "EMI expenses are managed in the EMI hub. Create or update the EMI plan and mark the installment as paid there.",
+      );
+    }
+    // INVOICE category was retired — operators should file under the
+    // appropriate concrete category (SERVICE / COMPLIANCE / FASTAG /
+    // CHALLAN). Existing INVOICE rows stay queryable but no new ones are
+    // accepted at the API boundary.
+    if (category === "INVOICE") {
+      throw new BadRequestError(
+        "The Invoice category has been retired. Log this expense under the most appropriate category instead (Service, Compliance, FASTag, or Challan).",
+      );
+    }
     const parsedAmount = parseFloat(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
       throw new BadRequestError("Amount must be a non-negative number");

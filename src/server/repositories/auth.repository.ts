@@ -49,13 +49,16 @@ export function toPublicUser(user: unknown): PublicUser {
 }
 
 /** Minimal tenant payload included in auth responses so the sidebar can show
- *  the workspace identity (logo + name + billing email) without a second fetch. */
+ *  the workspace identity (logo + name + billing email) without a second fetch.
+ *  Now also carries the per-tenant `features` flag map — kept slim
+ *  (booleans only, no metadata) so AuthContext can cache it across sessions. */
 export type PublicTenant = {
   id: string;
   name: string;
   slug: string;
   logoUrl: string | null;
   billingEmail: string | null;
+  features: Record<string, boolean>;
 };
 
 export async function findUserByEmail(email: string) {

@@ -54,6 +54,15 @@ const emiPlanSchema = new Schema(
     totalInstallments: { type: Number, required: true, min: 1, max: 600 },
     paidInstallments: { type: Number, default: 0, min: 0 },
 
+    // Downpayment paid up-front when the loan was originated. Tracking-only —
+    // does NOT change EMI math (the operator enters the financed amount as
+    // `principalAmount` / `emiAmount` separately). When present + dated in
+    // the past, the service auto-creates an EMIPayment with installmentNumber
+    // 0 so the spend lands in the historical expense bucket for that month;
+    // when dated in the future the auto-created payment is SCHEDULED.
+    downpaymentAmount: { type: Number, default: 0, min: 0 },
+    downpaymentDate: { type: Date, default: null },
+
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     dueDayOfMonth: { type: Number, required: true, min: 1, max: 31 },

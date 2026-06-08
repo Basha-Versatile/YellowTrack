@@ -101,6 +101,21 @@ const tenantSchema = new Schema(
     // When the wallet first went negative this cycle. Cleared on positive
     // balance. The orchestrator escalates to SUSPENDED once this is > 30d.
     paymentDueSince: { type: Date, default: null },
+
+    // ── Per-tenant feature flags ──────────────────────────────────────
+    // Sparse boolean map managed by superadmin. New keys are added here
+    // (as required Boolean defaults) AND in the FEATURE_FLAGS allow-list
+    // in src/lib/feature-flags.ts. Default is always OFF so an unset
+    // tenant doesn't accidentally see a half-built feature.
+    //
+    // Sidebar / UI gates read this via AuthContext.tenant.features.
+    // Superadmin flips it via PATCH /superadmin/tenants/[id]/features.
+    features: {
+      // Placeholder for the new section below Custom Compliance. Actual
+      // section content lands in a follow-up PR once the business flow
+      // is shared; the flag itself can be flipped on per-tenant today.
+      customComplianceExtraSection: { type: Boolean, default: false },
+    },
   },
   { timestamps: true },
 );

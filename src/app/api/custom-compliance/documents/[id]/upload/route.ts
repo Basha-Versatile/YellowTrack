@@ -8,6 +8,7 @@ import {
   appendDocumentFiles,
   removeDocumentFile,
 } from "@/server/services/customCompliance.service";
+import { requireGroupUnlockedByDocument } from "@/server/services/customComplianceLock.service";
 import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
@@ -19,6 +20,7 @@ export const runtime = "nodejs";
 export const POST = withRoute<{ id: string }>(async ({ req, params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlockedByDocument(ctx, params.id, session.id);
   const { files } = await parseMultipart(req);
   const uploaded = manyFiles(files, "document").map((f) => f.url);
   const doc = await appendDocumentFiles(ctx, params.id, uploaded);
@@ -38,6 +40,7 @@ const removeSchema = z.object({ url: z.string().min(1) });
 export const DELETE = withRoute<{ id: string }>(async ({ req, params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlockedByDocument(ctx, params.id, session.id);
   const { url } = await parseJson(req, removeSchema);
   const doc = await removeDocumentFile(ctx, params.id, url);
   await logFromRequest(req, ctx, session, {

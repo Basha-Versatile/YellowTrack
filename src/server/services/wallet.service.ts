@@ -1,4 +1,5 @@
 import "server-only";
+import { Types } from "mongoose";
 import { Tenant, WalletTransaction } from "@/models";
 import { BadRequestError, NotFoundError } from "@/lib/errors";
 
@@ -125,11 +126,27 @@ export async function getWalletBalance(tenantId: string): Promise<number> {
 
 export async function listTransactions(
   tenantId: string,
-  opts: { limit?: number; before?: Date } = {},
+  opts: {
+    limit?: number;
+    before?: Date;
+    // Optional filters used by the superadmin wallet console. Tenant-side
+    // callers (/api/billing/transactions) keep the lean signature.
+    from?: Date;
+    to?: Date;
+    reason?: WalletReason;
+    type?: "CREDIT" | "DEBIT";
+  } = {},
 ): Promise<WalletTxnRow[]> {
   const limit = Math.min(Math.max(opts.limit ?? 30, 1), 200);
   const filter: Record<string, unknown> = { tenantId };
-  if (opts.before) filter.createdAt = { $lt: opts.before };
+  // Range filters compose: `before` (cursor for pagination) + from/to.
+  const createdAt: Record<string, unknown> = {};
+  if (opts.before) createdAt.$lt = opts.before;
+  if (opts.from) createdAt.$gte = opts.from;
+  if (opts.to) createdAt.$lte = opts.to;
+  if (Object.keys(createdAt).length > 0) filter.createdAt = createdAt;
+  if (opts.reason) filter.reason = opts.reason;
+  if (opts.type) filter.type = opts.type;
   const rows = await WalletTransaction.find(filter)
     .sort({ createdAt: -1 })
     .limit(limit)
@@ -156,6 +173,39 @@ export async function listTransactions(
       createdAt: row.createdAt.toISOString(),
     };
   });
+}
+
+/**
+ * All-time totals for a tenant — used by the superadmin wallet overview tile
+ * row. Cheap aggregate; runs in tens of ms on a fully-grown ledger because
+ * `tenantId` is indexed and the projection is just two numeric sums.
+ */
+export async function getWalletTotals(
+  tenantId: string,
+): Promise<{ credits: number; debits: number; txnCount: number }> {
+  const rows = await WalletTransaction.aggregate<{
+    _id: "CREDIT" | "DEBIT";
+    total: number;
+    count: number;
+  }>([
+    { $match: { tenantId: new Types.ObjectId(tenantId) } },
+    {
+      $group: {
+        _id: "$type",
+        total: { $sum: "$amount" },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  let credits = 0;
+  let debits = 0;
+  let txnCount = 0;
+  for (const r of rows) {
+    if (r._id === "CREDIT") credits = r.total;
+    else if (r._id === "DEBIT") debits = r.total;
+    txnCount += r.count;
+  }
+  return { credits, debits, txnCount };
 }
 
 /**

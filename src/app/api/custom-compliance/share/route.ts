@@ -4,6 +4,10 @@ import { z } from "zod";
 import { tenantOf } from "@/lib/auth/tenant-context";
 import { BadRequestError, UnauthorizedError } from "@/lib/errors";
 import { createCustomShareLink } from "@/server/services/customComplianceShare.service";
+import {
+  requireGroupUnlocked,
+  requireGroupUnlockedByDocument,
+} from "@/server/services/customComplianceLock.service";
 import { getRequestOrigin } from "@/lib/request-origin";
 import { logFromRequest } from "@/server/services/activityLog.service";
 
@@ -26,6 +30,20 @@ export const POST = withRoute(async ({ req, session }) => {
   const input = await parseJson(req, bodySchema);
   if (!input.groupId && !input.documentIds) {
     throw new BadRequestError("Nothing selected to share");
+  }
+  // Per product spec: creating NEW share links requires the folder to be
+  // unlocked. Existing share links (issued before lock was enabled) are
+  // public-token-gated and continue to work.
+  if (input.groupId) {
+    await requireGroupUnlocked(ctx, input.groupId, session.id);
+  } else if (input.documentIds && input.documentIds.length > 0) {
+    // Document-list shares — gate on the parent group of the first doc
+    // (service refuses cross-group lists anyway, so one check is enough).
+    await requireGroupUnlockedByDocument(
+      ctx,
+      input.documentIds[0],
+      session.id,
+    );
   }
   const result = await createCustomShareLink(ctx, {
     groupId: input.groupId,

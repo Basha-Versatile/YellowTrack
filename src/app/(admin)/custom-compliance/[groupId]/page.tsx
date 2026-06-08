@@ -18,11 +18,28 @@ import {
   AlertTriangle,
   Calendar,
   FolderArchive,
+  Lock,
+  LockOpen,
+  KeyRound,
 } from "lucide-react";
 import { customComplianceAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  FolderLockSetupModal,
+  FolderUnlockScreen,
+  FolderForgotPasswordModal,
+  FolderRemoveLockModal,
+} from "@/components/custom-compliance/FolderLockModals";
+
+type LockStatus = {
+  enabled: boolean;
+  recoveryEmail: string | null;
+  unlockedUntil: string | null;
+  blockedUntil: string | null;
+  setAt: string | null;
+};
 
 type Group = {
   id: string;
@@ -119,6 +136,44 @@ export default function CustomComplianceGroupPage() {
   } | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
+  // ── Folder lock state ──────────────────────────────────────────
+  const [lockStatus, setLockStatus] = useState<LockStatus | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [remainingMs, setRemainingMs] = useState(0);
+
+  const loadLockStatus = useCallback(async () => {
+    if (!groupId) return;
+    try {
+      const res = await customComplianceAPI.getLockStatus(groupId);
+      setLockStatus(res.data?.data as LockStatus);
+    } catch {
+      // Non-fatal — leave previous state. UI still renders content if it had any.
+    }
+  }, [groupId]);
+
+  // Tick the unlock-remaining countdown every second so the operator can
+  // see how much time they have left before the folder re-locks itself.
+  useEffect(() => {
+    if (!lockStatus?.unlockedUntil) {
+      setRemainingMs(0);
+      return;
+    }
+    const tick = () => {
+      const ms = new Date(lockStatus.unlockedUntil!).getTime() - Date.now();
+      setRemainingMs(Math.max(0, ms));
+      if (ms <= 0) {
+        // Unlock just expired — refresh status to flip the page back to the
+        // lock screen on the next render.
+        void loadLockStatus();
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [lockStatus?.unlockedUntil, loadLockStatus]);
+
   const load = useCallback(async () => {
     if (!groupId) return;
     setLoading(true);
@@ -157,7 +212,8 @@ export default function CustomComplianceGroupPage() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    void loadLockStatus();
+  }, [load, loadLockStatus]);
 
   const summary = useMemo(() => {
     const counts = { total: docs.length, green: 0, yellow: 0, red: 0 };
@@ -339,6 +395,42 @@ export default function CustomComplianceGroupPage() {
     );
   }
 
+  // Locked + no active unlock grant for this user → show the lock screen
+  // instead of the folder content. The screen is fed the folder name +
+  // recovery email (already on lockStatus) and calls back into the page
+  // when the user successfully unlocks or completes a reset.
+  const isLocked =
+    Boolean(lockStatus?.enabled) && !lockStatus?.unlockedUntil;
+
+  if (isLocked && lockStatus) {
+    return (
+      <>
+        <FolderUnlockScreen
+          groupId={group.id}
+          folderName={group.name}
+          recoveryEmail={lockStatus.recoveryEmail}
+          blockedUntil={lockStatus.blockedUntil}
+          onUnlocked={async () => {
+            await loadLockStatus();
+          }}
+          onForgot={() => setForgotOpen(true)}
+        />
+        {forgotOpen && (
+          <FolderForgotPasswordModal
+            groupId={group.id}
+            folderName={group.name}
+            recoveryEmail={lockStatus.recoveryEmail}
+            onClose={() => setForgotOpen(false)}
+            onDone={async () => {
+              setForgotOpen(false);
+              await loadLockStatus();
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <Link
@@ -348,6 +440,24 @@ export default function CustomComplianceGroupPage() {
         <ArrowLeft className="w-3.5 h-3.5" />
         Back to groups
       </Link>
+
+      {/* Lock controls — visible inline so the operator can always
+          enable / re-lock / disable without digging into a menu. */}
+      <LockControls
+        lockStatus={lockStatus}
+        remainingMs={remainingMs}
+        onOpenSetup={() => setSetupOpen(true)}
+        onOpenRemove={() => setRemoveOpen(true)}
+        onRelock={async () => {
+          try {
+            await customComplianceAPI.relock(group.id);
+            toast.info("Folder re-locked");
+            await loadLockStatus();
+          } catch {
+            toast.error("Re-lock failed");
+          }
+        }}
+      />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -824,6 +934,120 @@ export default function CustomComplianceGroupPage() {
         onConfirm={handleDocDelete}
         onCancel={() => !deleting && setConfirmDeleteDoc(null)}
       />
+
+      {/* Folder lock — setup, forgot, remove. Unlock screen is rendered
+          via the early return above when isLocked. */}
+      {setupOpen && (
+        <FolderLockSetupModal
+          groupId={group.id}
+          folderName={group.name}
+          onClose={() => setSetupOpen(false)}
+          onDone={async () => {
+            setSetupOpen(false);
+            toast.success("Folder locked", `"${group.name}" is now password-protected.`);
+            await loadLockStatus();
+          }}
+        />
+      )}
+      {forgotOpen && lockStatus && (
+        <FolderForgotPasswordModal
+          groupId={group.id}
+          folderName={group.name}
+          recoveryEmail={lockStatus.recoveryEmail}
+          onClose={() => setForgotOpen(false)}
+          onDone={async () => {
+            setForgotOpen(false);
+            await loadLockStatus();
+          }}
+        />
+      )}
+      {removeOpen && (
+        <FolderRemoveLockModal
+          groupId={group.id}
+          folderName={group.name}
+          onClose={() => setRemoveOpen(false)}
+          onDone={async () => {
+            setRemoveOpen(false);
+            toast.success("Lock removed", `"${group.name}" is no longer password-protected.`);
+            await loadLockStatus();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Inline header strip for lock controls ──────────────────────────────
+
+function LockControls({
+  lockStatus,
+  remainingMs,
+  onOpenSetup,
+  onOpenRemove,
+  onRelock,
+}: {
+  lockStatus: LockStatus | null;
+  remainingMs: number;
+  onOpenSetup: () => void;
+  onOpenRemove: () => void;
+  onRelock: () => void;
+}) {
+  if (!lockStatus) return null;
+  // Not locked at all — show a single CTA.
+  if (!lockStatus.enabled) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200/80 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/40">
+        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+          <LockOpen className="w-3.5 h-3.5" />
+          This folder is unlocked. Add a password to restrict access for
+          other workspace users.
+        </div>
+        <button
+          type="button"
+          onClick={onOpenSetup}
+          className="inline-flex items-center gap-1.5 rounded-md border border-yellow-200 bg-white px-3 py-1.5 text-[11px] font-bold text-yellow-700 hover:bg-yellow-50 dark:border-yellow-500/30 dark:bg-yellow-500/5 dark:text-yellow-300 dark:hover:bg-yellow-500/15"
+        >
+          <Lock className="w-3 h-3" />
+          Lock folder
+        </button>
+      </div>
+    );
+  }
+  // Locked AND I'm currently unlocked — show countdown + re-lock + disable.
+  const totalSec = Math.floor(remainingMs / 1000);
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-yellow-200/80 bg-gradient-to-r from-yellow-50 to-amber-50 px-3 py-2 dark:border-yellow-500/30 dark:from-yellow-500/10 dark:to-amber-500/10">
+      <div className="flex items-center gap-2 text-xs text-yellow-800 dark:text-yellow-300">
+        <Lock className="w-3.5 h-3.5" />
+        <span className="font-semibold">Unlocked</span>
+        <span className="text-yellow-700/80 dark:text-yellow-400/70">·</span>
+        <span className="font-mono font-bold">
+          {String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}
+        </span>
+        <span className="text-yellow-700/80 dark:text-yellow-400/70">
+          remaining
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onRelock}
+          className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        >
+          <Lock className="w-3 h-3" />
+          Re-lock now
+        </button>
+        <button
+          type="button"
+          onClick={onOpenRemove}
+          className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:bg-red-500/5 dark:text-red-300 dark:hover:bg-red-500/15"
+        >
+          <KeyRound className="w-3 h-3" />
+          Disable lock
+        </button>
+      </div>
     </div>
   );
 }

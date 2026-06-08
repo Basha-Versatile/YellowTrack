@@ -361,6 +361,59 @@ export async function restoreSoftDeleted(
   );
 }
 
+/**
+ * Bulk-assign a brand to multiple vehicles, but ONLY to rows that are still
+ * unbranded at write time. This is the race-safe variant: if another
+ * operator branded one of the vehicles between page load and Assign click,
+ * we skip it instead of clobbering their write.
+ *
+ * The "unbranded" matcher mirrors the `__none__` sentinel used by the
+ * Vehicles list filter (brand missing, null, or empty string) so the
+ * write-side rule agrees with the read-side rule by construction.
+ *
+ * Returns:
+ *   - `matched`     — how many of the requested IDs are valid tenant-scoped
+ *                     vehicles (regardless of brand state).
+ *   - `modified`    — how many were actually updated (i.e. were unbranded).
+ *   - `skipped`     — `matched − modified`. UI uses this for the
+ *                     "X vehicles were skipped because they were already
+ *                     branded" message.
+ *
+ * Soft-deleted rows are auto-excluded by the schema's pre-find middleware,
+ * so a Pay-All-style mistake on the bulk endpoint can't resurrect them.
+ */
+export async function bulkSetBrandWhenUnbranded(
+  ctx: ScopedContext,
+  vehicleIds: string[],
+  brand: string,
+): Promise<{ matched: number; modified: number; skipped: number }> {
+  if (vehicleIds.length === 0) {
+    return { matched: 0, modified: 0, skipped: 0 };
+  }
+  // Total tenant-scoped vehicles among the requested IDs (used to compute
+  // skipped = matched − modified after the conditional updateMany).
+  const matched = await Vehicle.countDocuments(
+    tenantFilter(ctx, { _id: { $in: vehicleIds } }),
+  );
+  const res = await Vehicle.updateMany(
+    tenantFilter(ctx, {
+      _id: { $in: vehicleIds },
+      $or: [
+        { brand: null },
+        { brand: "" },
+        { brand: { $exists: false } },
+      ],
+    }),
+    { $set: { brand } },
+  );
+  const modified = res.modifiedCount ?? 0;
+  return {
+    matched,
+    modified,
+    skipped: Math.max(0, matched - modified),
+  };
+}
+
 export async function create(
   ctx: ScopedContext,
   data: Record<string, unknown>,

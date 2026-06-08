@@ -14,6 +14,7 @@ import {
   X,
   Pencil,
   Trash2,
+  Lock,
 } from "lucide-react";
 import { customComplianceAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
@@ -33,6 +34,7 @@ type Group = {
     red: number;
   };
   createdAt?: string;
+  lock?: { enabled: boolean; recoveryEmail: string | null; setAt: string | null } | null;
 };
 
 type GroupFormState = {
@@ -362,9 +364,19 @@ function GroupCard({
           href={`/custom-compliance/${group.id}`}
           className="flex-1 min-w-0"
         >
-          <p className="text-base font-bold text-gray-900 dark:text-white truncate group-hover:text-yellow-600 dark:group-hover:text-yellow-400 transition-colors">
-            {group.name}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-base font-bold text-gray-900 dark:text-white truncate group-hover:text-yellow-600 dark:group-hover:text-yellow-400 transition-colors">
+              {group.name}
+            </p>
+            {group.lock?.enabled && (
+              <span
+                title="Folder is locked"
+                className="inline-flex items-center justify-center flex-shrink-0 w-5 h-5 rounded-md bg-yellow-100 dark:bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+              >
+                <Lock className="w-3 h-3" />
+              </span>
+            )}
+          </div>
           {group.description ? (
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
               {group.description}

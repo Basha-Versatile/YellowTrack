@@ -1,6 +1,6 @@
 import { withRoute } from "@/lib/api-handler";
 import { success } from "@/lib/http";
-import { NotFoundError } from "@/lib/errors";
+import { BadRequestError, NotFoundError } from "@/lib/errors";
 import { Expense, TyreReplacement } from "@/models";
 import { parseMultipart, manyFiles } from "@/lib/upload";
 import { tenantOf, tenantFilter } from "@/lib/auth/tenant-context";
@@ -25,7 +25,26 @@ export const PUT = withRoute<{ id: string; expenseId: string }>(
     const update: Record<string, unknown> = {
       proofUrls: replace ? newProofs : [...existingProofs, ...newProofs],
     };
-    if (val("category")) update.category = val("category");
+    if (val("category")) {
+      // Same rule as POST — EMI lives in the EMI hub. Block both fresh
+      // assignments to EMI and edits that would move an existing non-EMI
+      // row INTO the EMI bucket. Existing legacy EMI rows can still be
+      // edited (e.g. typo fixes) but their category can't be re-set to EMI
+      // (it already IS EMI; no-op) and they can't be moved to anything else
+      // without going through this guard — which only fires when the new
+      // value is EMI.
+      if (val("category") === "EMI") {
+        throw new BadRequestError(
+          "EMI expenses are managed in the EMI hub. Update the EMI plan and mark the installment as paid there.",
+        );
+      }
+      if (val("category") === "INVOICE") {
+        throw new BadRequestError(
+          "The Invoice category has been retired. Re-classify under Service / Compliance / FASTag / Challan instead.",
+        );
+      }
+      update.category = val("category");
+    }
     if (val("title")) update.title = val("title");
     if (val("amount")) update.amount = parseFloat(val("amount")!);
     if (val("expenseDate")) update.expenseDate = new Date(val("expenseDate")!);

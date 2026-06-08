@@ -8,6 +8,7 @@ import {
   getDocument,
   updateDocument,
 } from "@/server/services/customCompliance.service";
+import { requireGroupUnlockedByDocument } from "@/server/services/customComplianceLock.service";
 import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ const updateSchema = z.object({
 export const GET = withRoute<{ id: string }>(async ({ params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlockedByDocument(ctx, params.id, session.id);
   const doc = await getDocument(ctx, params.id);
   return success(doc, "Document");
 }, { auth: true });
@@ -31,6 +33,7 @@ export const GET = withRoute<{ id: string }>(async ({ params, session }) => {
 export const PATCH = withRoute<{ id: string }>(async ({ req, params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlockedByDocument(ctx, params.id, session.id);
   const input = await parseJson(req, updateSchema);
   const before = await getDocument(ctx, params.id);
   const doc = await updateDocument(ctx, params.id, input);
@@ -57,6 +60,7 @@ export const PATCH = withRoute<{ id: string }>(async ({ req, params, session }) 
 export const DELETE = withRoute<{ id: string }>(async ({ req, params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlockedByDocument(ctx, params.id, session.id);
   const before = await getDocument(ctx, params.id);
   const result = await deleteDocument(ctx, params.id);
   await logFromRequest(req, ctx, session, {

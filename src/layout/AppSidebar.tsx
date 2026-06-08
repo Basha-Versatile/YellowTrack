@@ -33,6 +33,9 @@ type NavItem = {
   path?: string;
   new?: boolean;
   perm?: string;
+  /** Optional per-tenant feature flag gate. Item only renders when the
+   *  tenant has the flag enabled (via superadmin → Features). */
+  featureFlag?: import("@/lib/feature-flags").FeatureFlagKey;
   subItems?: NavSubItem[];
 };
 
@@ -75,6 +78,16 @@ const navItems: NavItem[] = [
     // Reuses the existing compliance read gate — anyone who can see vehicle
     // compliance can see the documents bank too.
     perm: "compliance:read",
+  },
+  {
+    // Placeholder for the new section below Custom Compliance. Path TBD
+    // once the section is implemented; the entry stays hidden until a
+    // superadmin enables `customComplianceExtraSection` on the tenant.
+    icon: <FolderArchive className="h-5 w-5" />,
+    name: "Custom Compliance · Extra",
+    path: "/custom-compliance/extra",
+    perm: "compliance:read",
+    featureFlag: "customComplianceExtraSection",
   },
   {
     icon: <UsersRound className="h-5 w-5" />,
@@ -129,11 +142,18 @@ const AppSidebar: React.FC = () => {
   const pathname = usePathname();
   const expanded = isExpanded || isHovered || isMobileOpen;
 
-  // Filter nav items by the current user's permissions.
+  // Filter nav items by the current user's permissions + per-tenant
+  // feature flags.
   //   - Admin gets every permission via defaultPermissionsForRole("ADMIN").
   //   - Items with no `perm` (e.g. Dashboard, Feedback) are always visible.
+  //   - Items with `featureFlag` hide unless the tenant has that flag on.
+  //     Flags default to false at the model layer so a missing flag map
+  //     keeps the item hidden — which is the correct safe default.
   //   - Parent items hide entirely when ALL their sub-items are hidden.
+  const tenantFeatures = tenant?.features ?? {};
   const visibleNavItems = React.useMemo(() => {
+    const featurePasses = (nav: NavItem) =>
+      !nav.featureFlag || Boolean(tenantFeatures[nav.featureFlag]);
     return navItems
       .map((nav) => {
         if (nav.subItems) {
@@ -141,13 +161,15 @@ const AppSidebar: React.FC = () => {
             (s) => !s.perm || hasPermission(s.perm),
           );
           if (visibleSubs.length === 0) return null;
+          if (!featurePasses(nav)) return null;
           return { ...nav, subItems: visibleSubs };
         }
         if (nav.perm && !hasPermission(nav.perm)) return null;
+        if (!featurePasses(nav)) return null;
         return nav;
       })
       .filter((n): n is NavItem => n !== null);
-  }, [hasPermission]);
+  }, [hasPermission, tenantFeatures]);
 
   const renderMenuItems = (
     navItems: NavItem[],

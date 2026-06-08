@@ -8,6 +8,7 @@ import {
   getGroup,
   updateGroup,
 } from "@/server/services/customCompliance.service";
+import { requireGroupUnlocked } from "@/server/services/customComplianceLock.service";
 import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
@@ -28,6 +29,7 @@ export const GET = withRoute<{ id: string }>(async ({ params, session }) => {
 export const PATCH = withRoute<{ id: string }>(async ({ req, params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlocked(ctx, params.id, session.id);
   const input = await parseJson(req, updateSchema);
   const before = await getGroup(ctx, params.id);
   const group = await updateGroup(ctx, params.id, input);
@@ -52,6 +54,7 @@ export const PATCH = withRoute<{ id: string }>(async ({ req, params, session }) 
 export const DELETE = withRoute<{ id: string }>(async ({ req, params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlocked(ctx, params.id, session.id);
   const before = await getGroup(ctx, params.id);
   const result = await deleteGroup(ctx, params.id);
   await logFromRequest(req, ctx, session, {

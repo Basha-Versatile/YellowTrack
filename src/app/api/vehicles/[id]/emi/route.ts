@@ -33,6 +33,13 @@ const createSchema = z.object({
   notes: z.string().max(500).nullable().optional(),
   scheduleDocumentUrl: z.string().min(1).nullable().optional(),
   scheduleDocumentUrls: z.array(z.string().min(1)).optional(),
+  // Optional downpayment captured at plan create time. Tracking-only —
+  // does NOT alter EMI math. When amount > 0, date becomes required (the
+  // pre-service validation throws BadRequestError otherwise). When date is
+  // in the past, the service creates a PAID EMIPayment with installment
+  // number 0 so the spend lands in historical reporting buckets.
+  downpaymentAmount: z.coerce.number().min(0).optional(),
+  downpaymentDate: z.string().nullable().optional(),
 });
 
 export const GET = withRoute<{ id: string }>(
@@ -84,6 +91,8 @@ export const POST = withRoute<{ id: string }>(
         notes: firstString(fields, "notes") || null,
         scheduleDocumentUrl: scheduleUrls[0] ?? null,
         scheduleDocumentUrls: scheduleUrls,
+        downpaymentAmount: firstString(fields, "downpaymentAmount") || undefined,
+        downpaymentDate: firstString(fields, "downpaymentDate") || null,
       });
     } else {
       input = await parseJson(req, createSchema);

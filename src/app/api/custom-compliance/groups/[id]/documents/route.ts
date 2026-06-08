@@ -8,6 +8,7 @@ import {
   createDocument,
   listDocuments,
 } from "@/server/services/customCompliance.service";
+import { requireGroupUnlocked } from "@/server/services/customComplianceLock.service";
 import { logFromRequest } from "@/server/services/activityLog.service";
 
 export const runtime = "nodejs";
@@ -25,6 +26,7 @@ const createSchema = z.object({
 export const GET = withRoute<{ id: string }>(async ({ params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlocked(ctx, params.id, session.id);
   const docs = await listDocuments(ctx, params.id);
   return success(docs, "Documents in group");
 }, { auth: true });
@@ -36,6 +38,7 @@ export const GET = withRoute<{ id: string }>(async ({ params, session }) => {
 export const POST = withRoute<{ id: string }>(async ({ req, params, session }) => {
   if (!session) throw new UnauthorizedError();
   const ctx = tenantOf(session);
+  await requireGroupUnlocked(ctx, params.id, session.id);
   const { fields, files } = await parseMultipart(req);
   const uploaded = manyFiles(files, "document").map((f) => f.url);
 

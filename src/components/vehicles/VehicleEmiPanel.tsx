@@ -1095,6 +1095,11 @@ function InlineCreateEmiModal({
       : new Date().toISOString().slice(0, 10),
     dueDayOfMonth: editPlan ? String(editPlan.dueDayOfMonth) : "5",
     notes: editPlan?.notes ?? "",
+    // Downpayment is create-time-only. Edit mode shows blank inputs and the
+    // submit handler intentionally ignores them when isEdit (V1 scope —
+    // retroactive downpayment edit is a follow-up).
+    downpaymentAmount: "",
+    downpaymentDate: "",
   }));
 
   // Amortization-sheet file management. In create mode `pendingFiles` is
@@ -1156,9 +1161,25 @@ function InlineCreateEmiModal({
     }
   };
 
+  // Live downpayment validation — date becomes required the moment a
+  // positive amount is typed. Shown inline below the date field.
+  const dpAmtNum = Number(form.downpaymentAmount);
+  const dpAmtValid =
+    !form.downpaymentAmount || (Number.isFinite(dpAmtNum) && dpAmtNum >= 0);
+  const dpDateRequired = dpAmtNum > 0;
+  const dpDateMissing = dpDateRequired && !form.downpaymentDate;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!isEdit && !dpAmtValid) {
+      setError("Downpayment amount must be zero or positive");
+      return;
+    }
+    if (!isEdit && dpDateMissing) {
+      setError("Downpayment date is required when an amount is provided");
+      return;
+    }
     setSaving(true);
     try {
       if (isEdit && editPlan) {
@@ -1191,6 +1212,11 @@ function InlineCreateEmiModal({
           dueDayOfMonth: Number(form.dueDayOfMonth),
           notes: form.notes.trim() || null,
           scheduleDocuments: pendingFiles.length > 0 ? pendingFiles : null,
+          downpaymentAmount: dpAmtNum > 0 ? dpAmtNum : undefined,
+          downpaymentDate:
+            dpAmtNum > 0 && form.downpaymentDate
+              ? form.downpaymentDate
+              : undefined,
         });
       }
       await onCreated();
@@ -1344,6 +1370,55 @@ function InlineCreateEmiModal({
                 />
               </Tile>
             </div>
+            {/* Downpayment — create-time only. Hidden on edit per V1 scope. */}
+            {!isEdit && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Tile label="Downpayment paid (₹)">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step="any"
+                    className="input"
+                    value={form.downpaymentAmount}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        downpaymentAmount: e.target.value.replace(/[^\d.]/g, ""),
+                      })
+                    }
+                    placeholder="0 (skip)"
+                  />
+                </Tile>
+                <Tile label="Date of downpayment">
+                  <input
+                    type="date"
+                    className={`input ${dpDateMissing ? "border-red-300 focus:border-red-400" : ""}`}
+                    value={form.downpaymentDate}
+                    onChange={(e) =>
+                      setForm({ ...form, downpaymentDate: e.target.value })
+                    }
+                    disabled={!dpDateRequired}
+                  />
+                  <p
+                    className={`mt-1 text-[10px] leading-snug ${
+                      dpDateMissing
+                        ? "text-red-500"
+                        : "text-gray-400 dark:text-white/40"
+                    }`}
+                  >
+                    {dpDateMissing
+                      ? "Required when a downpayment amount is set"
+                      : dpAmtNum > 0
+                        ? new Date(form.downpaymentDate || Date.now()).getTime() >
+                          Date.now()
+                          ? "Future date — will be recorded as a scheduled downpayment."
+                          : "Past/today date — will appear in Expenses for that month."
+                        : "Leave both blank to skip the downpayment."}
+                  </p>
+                </Tile>
+              </div>
+            )}
             <Tile label="Notes">
               <textarea
                 className="input min-h-[60px] py-2"

@@ -3,6 +3,7 @@ import { success } from "@/lib/http";
 import mongoose from "mongoose";
 import {
   Challan,
+  EMIPayment,
   Expense,
   FastagTransaction,
   InsurancePolicy,
@@ -23,7 +24,7 @@ type ExpenseCategoryKey =
   | "invoices";
 
 type UnifiedExpense = {
-  source: "CHALLAN" | "SERVICE" | "INSURANCE" | "TOLL" | "EXPENSE";
+  source: "CHALLAN" | "SERVICE" | "INSURANCE" | "TOLL" | "EXPENSE" | "EMI_PAYMENT";
   date: Date | string;
   vehicleId: string | null;
   vehicle: unknown;
@@ -48,45 +49,62 @@ export const GET = withRoute(
 
     const vehicleFilter = vehicleId ? { vehicleId } : {};
 
-    const [challans, services, insurance, tolls, expenses, allVehicles] =
-      await Promise.all([
-        Challan.find(
-          tenantFilter(ctx, {
-            ...vehicleFilter,
-            status: "PAID",
-            paidAt: { $gte: dateFrom, $lte: dateTo },
-          }),
-        ).lean(),
-        ServiceRecord.find(
-          tenantFilter(ctx, {
-            ...vehicleFilter,
-            status: "COMPLETED",
-            serviceDate: { $gte: dateFrom, $lte: dateTo },
-          }),
-        ).lean(),
-        InsurancePolicy.find(
-          tenantFilter(ctx, {
-            ...vehicleFilter,
-            paidAmount: { $gt: 0 },
-            createdAt: { $gte: dateFrom, $lte: dateTo },
-          }),
-        ).lean(),
-        FastagTransaction.find(
-          tenantFilter(ctx, {
-            type: "TOLL",
-            createdAt: { $gte: dateFrom, $lte: dateTo },
-          }),
-        ).lean(),
-        Expense.find(
-          tenantFilter(ctx, {
-            ...vehicleFilter,
-            expenseDate: { $gte: dateFrom, $lte: dateTo },
-          }),
-        ).lean(),
-        Vehicle.find(tenantFilter(ctx))
-          .select("_id registrationNumber ownerName make model")
-          .lean(),
-      ]);
+    const [
+      challans,
+      services,
+      insurance,
+      tolls,
+      expenses,
+      emiPayments,
+      allVehicles,
+    ] = await Promise.all([
+      Challan.find(
+        tenantFilter(ctx, {
+          ...vehicleFilter,
+          status: "PAID",
+          paidAt: { $gte: dateFrom, $lte: dateTo },
+        }),
+      ).lean(),
+      ServiceRecord.find(
+        tenantFilter(ctx, {
+          ...vehicleFilter,
+          status: "COMPLETED",
+          serviceDate: { $gte: dateFrom, $lte: dateTo },
+        }),
+      ).lean(),
+      InsurancePolicy.find(
+        tenantFilter(ctx, {
+          ...vehicleFilter,
+          paidAmount: { $gt: 0 },
+          createdAt: { $gte: dateFrom, $lte: dateTo },
+        }),
+      ).lean(),
+      FastagTransaction.find(
+        tenantFilter(ctx, {
+          type: "TOLL",
+          createdAt: { $gte: dateFrom, $lte: dateTo },
+        }),
+      ).lean(),
+      Expense.find(
+        tenantFilter(ctx, {
+          ...vehicleFilter,
+          expenseDate: { $gte: dateFrom, $lte: dateTo },
+        }),
+      ).lean(),
+      // EMI is sourced exclusively from EMIPayment now — same architectural
+      // pattern as Challan/Service/Insurance/FastagTransaction. Filter to
+      // payments the operator has actually marked paid (or partially paid).
+      EMIPayment.find(
+        tenantFilter(ctx, {
+          ...vehicleFilter,
+          status: { $in: ["PAID", "PARTIAL"] },
+          paidDate: { $gte: dateFrom, $lte: dateTo },
+        }),
+      ).lean(),
+      Vehicle.find(tenantFilter(ctx))
+        .select("_id registrationNumber ownerName make model")
+        .lean(),
+    ]);
 
     const vehicleById = new Map(
       allVehicles.map((v) => [String(v._id), {
@@ -182,12 +200,22 @@ export const GET = withRoute(
     // Manual expense entries map directly to one of the four buckets.
     // Total expense = base amount + optional handling charges.
     for (const e of expenses) {
+      // EMI is sourced from EMIPayment now (single source of truth, same as
+      // Challan/Service/Insurance/FastagTransaction). Legacy manual EMI
+      // Expense rows stay in the DB for audit but are ignored here so the
+      // dashboard / Vehicles Expenses totals always reconcile with the EMI
+      // hub. The Log-Expense UI also drops EMI from its picker.
+      if (e.category === "EMI") continue;
+      // INVOICE category was retired. Legacy rows stay queryable via the
+      // raw DB for audit, but no longer surface in the expense report so
+      // they don't inflate any bucket. Operators file new vendor invoices
+      // under Service/Compliance/FASTag/Challan as appropriate.
+      if (e.category === "INVOICE") continue;
+
       const catKey: ExpenseCategoryKey =
         e.category === "CHALLAN" ? "challans" :
         e.category === "SERVICE" ? "services" :
         e.category === "FASTAG" ? "fastag" :
-        e.category === "EMI" ? "emi" :
-        e.category === "INVOICE" ? "invoices" :
         "compliance"; // COMPLIANCE + any legacy values fall back here
       const handling = Number(e.handlingCharges ?? 0) || 0;
       const total = (e.amount ?? 0) + handling;
@@ -202,6 +230,37 @@ export const GET = withRoute(
         handlingCharges: handling,
         proofUrls: ((e.proofUrls as string[] | undefined) ?? []).slice(),
         category: catKey,
+      });
+    }
+
+    // EMI payments — single source of truth for the EMI bucket.
+    // Mirrors the per-row treatment used for Challan/Service/Insurance/Toll
+    // so dashboard totals match the EMI hub's Outflow figures exactly.
+    for (const p of emiPayments) {
+      const row = p as {
+        vehicleId: unknown;
+        paidDate?: Date | null;
+        scheduledDate: Date;
+        paidAmount?: number | null;
+        lateFee?: number | null;
+        proofUrl?: string | null;
+        installmentNumber: number;
+      };
+      const paid = Number(row.paidAmount ?? 0) || 0;
+      const lateFee = Number(row.lateFee ?? 0) || 0;
+      const total = paid + lateFee;
+      if (total <= 0) continue;
+      breakdown.emi += total;
+      allExpenses.push({
+        source: "EMI_PAYMENT",
+        date: row.paidDate ?? row.scheduledDate,
+        vehicleId: String(row.vehicleId),
+        vehicle: vehicleById.get(String(row.vehicleId)) ?? null,
+        title: `EMI #${row.installmentNumber}`,
+        amount: paid,
+        handlingCharges: lateFee,
+        proofUrls: row.proofUrl ? [row.proofUrl] : [],
+        category: "emi",
       });
     }
 

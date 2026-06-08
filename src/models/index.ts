@@ -57,6 +57,10 @@ export {
   type CustomComplianceGroupAttrs,
 } from "./CustomComplianceGroup";
 export {
+  CustomComplianceLockOtp,
+  type CustomComplianceLockOtpAttrs,
+} from "./CustomComplianceLockOtp";
+export {
   CustomComplianceDocument,
   type CustomComplianceDocumentAttrs,
   CUSTOM_COMPLIANCE_STATUS,

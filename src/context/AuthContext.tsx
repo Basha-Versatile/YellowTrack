@@ -27,6 +27,10 @@ interface Tenant {
   slug: string;
   logoUrl: string | null;
   billingEmail: string | null;
+  // Per-tenant feature flag map. Sparse — flags default to false when
+  // unset. Consumers should read via `isFeatureEnabled(tenant?.features,
+  // key)` to keep the default-off contract enforced.
+  features: Record<string, boolean>;
 }
 
 function postLoginRoute(user: User): string {
@@ -299,19 +303,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       };
       // Sidebar / header read these four fields from the AuthContext tenant
       // cache. Keep the cached slim view in sync so logo + name updates show
-      // up instantly without a page reload.
+      // up instantly without a page reload. Preserve `features` from the
+      // existing cached tenant — tenantAPI.updateMine returns workspace
+      // details only and doesn't refetch the feature map.
       const slim: Tenant = {
         id: fresh.id,
         name: fresh.name,
         slug: fresh.slug,
         logoUrl: fresh.logoUrl ?? null,
         billingEmail: fresh.billingEmail ?? null,
+        features: tenant?.features ?? {},
       };
       setTenant(slim);
       writeAuthItem("tenant", JSON.stringify(slim));
       return slim;
     },
-    [],
+    // `tenant` is read above to preserve `features` across updates — keep
+    // the dep so we always carry the latest flag map forward.
+    [tenant],
   );
 
   return (
