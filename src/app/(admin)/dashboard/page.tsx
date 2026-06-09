@@ -6,6 +6,7 @@ import { formatINRCompact, formatINRFull } from "@/lib/currency";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DashboardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
+import DatePicker from "@/components/ui/DatePicker";
 import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, BarChart3, PieChart as PieIcon, Disc3, RefreshCw, type LucideIcon } from "lucide-react";
 import type { IconType } from "react-icons";
 import {
@@ -108,11 +109,6 @@ function validateDateRange(from: string, to: string): string | null {
   if (fromDate < fiveYearsAgo) return "'From' date can't be more than 5 years ago";
   return null;
 }
-
-// TEMP gate — see the "EXPENSE CHARTS TEMPORARILY HIDDEN" block below.
-// Typed `boolean` (not the literal `true`) so TS narrowing on the
-// `!HIDE_EXPENSE_CHARTS && expenseReport && ...` chain still works.
-const HIDE_EXPENSE_CHARTS: boolean = true;
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -407,44 +403,36 @@ export default function DashboardPage() {
       <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="flex flex-wrap items-end gap-2.5">
-            <label className="flex flex-col gap-1">
+            {/* Flatpickr-backed pickers — match the calendar UX used on the
+                Vehicles → Expenses filter so users get the same picker app-wide.
+                Native <input type="date"> gave inconsistent UI across browsers.
+                Fixed wrapper width sits just wide enough for "DD Mmm YYYY" +
+                the icon so the text and icon stay visually close (the input
+                inside is w-full and would otherwise stretch). */}
+            <div className="flex flex-col gap-1 w-[170px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">From</span>
-              <input
-                type="date"
+              <DatePicker
                 value={dateFrom}
-                max={dateTo || today()}
-                onChange={(e) => setDateFrom(e.target.value)}
-                aria-invalid={Boolean(dateError)}
-                aria-describedby="date-range-error"
-                className={`h-9 rounded-lg border bg-white px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 dark:bg-white/5 dark:text-white ${
-                  dateError
-                    ? "border-red-300 focus:border-red-400 focus:ring-red-400/20 dark:border-red-500/40"
-                    : "border-gray-200 focus:border-yellow-400 focus:ring-yellow-400/15 dark:border-gray-700"
-                }`}
+                onChange={setDateFrom}
+                maxDate={dateTo || today()}
+                placeholder="Pick a date"
               />
-            </label>
-            <label className="flex flex-col gap-1">
+            </div>
+            <div className="flex flex-col gap-1 w-[170px]">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">To</span>
-              <input
-                type="date"
+              <DatePicker
                 value={dateTo}
-                min={dateFrom}
-                max={today()}
-                onChange={(e) => setDateTo(e.target.value)}
-                aria-invalid={Boolean(dateError)}
-                aria-describedby="date-range-error"
-                className={`h-9 rounded-lg border bg-white px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 dark:bg-white/5 dark:text-white ${
-                  dateError
-                    ? "border-red-300 focus:border-red-400 focus:ring-red-400/20 dark:border-red-500/40"
-                    : "border-gray-200 focus:border-yellow-400 focus:ring-yellow-400/15 dark:border-gray-700"
-                }`}
+                onChange={setDateTo}
+                minDate={dateFrom}
+                maxDate={today()}
+                placeholder="Pick a date"
               />
-            </label>
+            </div>
             <button
               type="button"
               onClick={() => void applyDateRange()}
               disabled={Boolean(dateError) || !rangeChanged || refreshing}
-              className="h-9 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 text-xs font-bold text-white shadow shadow-yellow-500/20 hover:shadow-yellow-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+              className="h-11 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 px-5 text-sm font-bold text-white shadow shadow-yellow-500/20 hover:shadow-yellow-500/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
             >
               Apply
             </button>
@@ -485,14 +473,8 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── EXPENSE CHARTS TEMPORARILY HIDDEN ──
-           Monthly Expense Trend + Category Split are gated off while the
-           EMI source-of-truth migration is in flight. Legacy auto-created
-           Expense{category:"EMI"} rows from the historic Pay-All bug were
-           inflating the donut/bar to ~₹37L. Restore by flipping
-           HIDE_EXPENSE_CHARTS to false (declared near the top of this
-           component) and removing this note. */}
-      {!HIDE_EXPENSE_CHARTS && expenseReport && (() => {
+      {/* ── EXPENSE CHARTS (moved from /vehicles/expenses) ── */}
+      {expenseReport && (() => {
         const activeCategories = Object.entries(expenseReport.summary.breakdown).filter(
           ([, v]) => (v as number) > 0,
         );

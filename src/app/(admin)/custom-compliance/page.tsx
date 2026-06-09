@@ -20,6 +20,7 @@ import { customComplianceAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { FolderLockSetupModal } from "@/components/custom-compliance/FolderLockModals";
 
 type Group = {
   id: string;
@@ -52,6 +53,9 @@ export default function CustomCompliancePage() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Group | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Lock-from-list target — when set, the FolderLockSetupModal mounts for
+  // this group without the operator needing to open it first.
+  const [lockingGroup, setLockingGroup] = useState<Group | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -236,6 +240,7 @@ export default function CustomCompliancePage() {
               group={g}
               onEdit={() => openEdit(g)}
               onDelete={() => setConfirmDelete(g)}
+              onLock={() => setLockingGroup(g)}
             />
           ))}
         </div>
@@ -340,6 +345,21 @@ export default function CustomCompliancePage() {
         onConfirm={handleDelete}
         onCancel={() => !deleting && setConfirmDelete(null)}
       />
+
+      {/* Lock-from-list — same setup modal the detail page uses, just
+          triggered from the card without making the user enter the folder. */}
+      {lockingGroup && (
+        <FolderLockSetupModal
+          groupId={lockingGroup.id}
+          folderName={lockingGroup.name}
+          onClose={() => setLockingGroup(null)}
+          onDone={async () => {
+            setLockingGroup(null);
+            toast.success("Folder locked", lockingGroup.name);
+            await load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -350,10 +370,13 @@ function GroupCard({
   group,
   onEdit,
   onDelete,
+  onLock,
 }: {
   group: Group;
   onEdit: () => void;
   onDelete: () => void;
+  /** Opens the FolderLockSetupModal for this group from the list view. */
+  onLock: () => void;
 }) {
   const { documents, green, yellow, orange, red } = group._count;
   const expiring = yellow + orange;
@@ -386,19 +409,34 @@ function GroupCard({
           )}
         </Link>
         <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Edit / Delete are server-blocked while the folder is locked
+              (requireGroupUnlocked guards both routes). Reflect that in the
+              UI so the operator doesn't open a form just to hit a 403. */}
+          {!group.lock?.enabled && (
+            <button
+              type="button"
+              onClick={onLock}
+              className="w-7 h-7 rounded-lg text-gray-400 hover:text-yellow-700 hover:bg-yellow-50 dark:hover:bg-yellow-500/10 flex items-center justify-center"
+              title="Lock this folder"
+            >
+              <Lock className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={onEdit}
-            className="w-7 h-7 rounded-lg text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-500/10 flex items-center justify-center"
-            title="Edit"
+            disabled={group.lock?.enabled}
+            className="w-7 h-7 rounded-lg text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-500/10 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+            title={group.lock?.enabled ? "Unlock the folder to edit" : "Edit"}
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
             onClick={onDelete}
-            className="w-7 h-7 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center justify-center"
-            title="Delete"
+            disabled={group.lock?.enabled}
+            className="w-7 h-7 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+            title={group.lock?.enabled ? "Unlock the folder to delete" : "Delete"}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

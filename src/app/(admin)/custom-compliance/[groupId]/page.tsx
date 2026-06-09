@@ -178,10 +178,10 @@ export default function CustomComplianceGroupPage() {
     if (!groupId) return;
     setLoading(true);
     try {
-      const [groupRes, docsRes] = await Promise.all([
-        customComplianceAPI.getGroup(groupId),
-        customComplianceAPI.listDocuments(groupId),
-      ]);
+      // Group metadata is always readable (the GET route doesn't enforce the
+      // folder lock — locked groups still need a name + recovery email on the
+      // unlock screen).
+      const groupRes = await customComplianceAPI.getGroup(groupId);
       const g = groupRes.data?.data as
         | {
             _id?: string;
@@ -201,7 +201,16 @@ export default function CustomComplianceGroupPage() {
           docCount: typeof g.docCount === "number" ? g.docCount : 0,
         });
       }
-      setDocs((docsRes.data?.data ?? []) as Doc[]);
+      // Documents 403 when the folder is locked and this user has no grant.
+      // That's expected — the unlock screen renders from `group` + lockStatus
+      // alone, so we swallow the rejection and clear the doc list rather than
+      // failing the whole page load.
+      try {
+        const docsRes = await customComplianceAPI.listDocuments(groupId);
+        setDocs((docsRes.data?.data ?? []) as Doc[]);
+      } catch {
+        setDocs([]);
+      }
     } catch {
       toast.error("Failed to load", "Could not load this group");
     } finally {

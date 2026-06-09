@@ -233,6 +233,9 @@ export default function VehicleDetailPage() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadingInvoice, setUploadingInvoice] = useState(false);
+  const [removingInvoice, setRemovingInvoice] = useState(false);
+  const [confirmRemoveInvoice, setConfirmRemoveInvoice] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
   // Confirm + prompt replacements (no native browser dialogs anywhere).
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<{ id: string; label: string } | null>(null);
@@ -1115,6 +1118,41 @@ export default function VehicleDetailPage() {
     finally { setUploadingImages(false); }
   };
 
+  const handleInvoiceUpload = async (file: File | null) => {
+    if (!file || !params.id) return;
+    setUploadingInvoice(true);
+    try {
+      await vehicleAPI.uploadInvoice(params.id as string, file);
+      toast.success("Invoice uploaded", "Purchase invoice attached to this vehicle");
+      fetchVehicle();
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        "Could not upload the invoice";
+      toast.error("Upload failed", msg);
+    } finally {
+      setUploadingInvoice(false);
+    }
+  };
+
+  const handleInvoiceRemove = async () => {
+    if (!params.id) return;
+    setRemovingInvoice(true);
+    try {
+      await vehicleAPI.deleteInvoice(params.id as string);
+      toast.success("Invoice removed", "Reference cleared (file kept for audit)");
+      setConfirmRemoveInvoice(false);
+      fetchVehicle();
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        "Could not remove the invoice";
+      toast.error("Remove failed", msg);
+    } finally {
+      setRemovingInvoice(false);
+    }
+  };
+
   useEffect(() => {
     fetchVehicle();
     vehicleGroupAPI.getAll().then((res) => setAllGroups(res.data.data)).catch(() => {});
@@ -1904,6 +1942,98 @@ export default function VehicleDetailPage() {
                 <span className="text-sm text-gray-400 group-hover:text-yellow-600 font-medium mt-2">Click to upload vehicle photos</span>
                 <span className="text-[10px] text-gray-300 dark:text-gray-600 mt-0.5">JPG, PNG — up to 10 photos</span>
                 <input type="file" accept=".jpg,.jpeg,.png" multiple className="hidden" onChange={(e) => { const fs = pickValidatedFiles(e.target, (t, m) => toast.error(t, m), VEHICLE_IMAGE_PICK_OPTS); if (fs.length) { const dt = new DataTransfer(); fs.forEach((f) => dt.items.add(f)); handleImageUpload(dt.files); } }} />
+              </label>
+            )}
+          </div>
+
+          {/* Purchase Invoice — the document showing how the vehicle was
+              acquired (purchase / financing). Single file slot on the vehicle
+              row. Upload, view, replace, remove. Server keeps the file in
+              storage even after Remove so it's recoverable from the audit log
+              if needed. */}
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-brand-500" strokeWidth={2} />
+                  Purchase Invoice
+                </h3>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                  The document showing how this vehicle was purchased or financed.
+                </p>
+              </div>
+              {vehicle.invoiceUrl && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <a
+                    href={resolveImageUrl(vehicle.invoiceUrl) ?? vehicle.invoiceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> View
+                  </a>
+                  <label
+                    className={`inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 cursor-pointer ${uploadingInvoice ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    <Upload className="w-3.5 h-3.5" /> {uploadingInvoice ? "Uploading…" : "Replace"}
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      disabled={uploadingInvoice}
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
+                        if (f) handleInvoiceUpload(f);
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRemoveInvoice(true)}
+                    disabled={removingInvoice}
+                    className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold transition-colors dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 disabled:opacity-60"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Remove
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {vehicle.invoiceUrl ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/20 dark:bg-emerald-500/5 p-4 flex items-center gap-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" strokeWidth={2} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                    Invoice on file
+                  </p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                    {vehicle.invoiceUrl.split("/").pop() ?? vehicle.invoiceUrl}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <label
+                className={`rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-8 text-center flex flex-col items-center justify-center cursor-pointer hover:border-brand-300 dark:hover:border-brand-500/30 transition-colors ${uploadingInvoice ? "opacity-60 cursor-not-allowed" : ""}`}
+              >
+                <Upload className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" />
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  {uploadingInvoice ? "Uploading…" : "Upload Invoice"}
+                </span>
+                <span className="text-[10px] text-gray-400 mt-0.5">
+                  PDF, JPG, or PNG — up to 10 MB
+                </span>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  disabled={uploadingInvoice}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = pickValidatedFile(e.target, (t, m) => toast.error(t, m));
+                    if (f) handleInvoiceUpload(f);
+                  }}
+                />
               </label>
             )}
           </div>
@@ -3489,6 +3619,20 @@ export default function VehicleDetailPage() {
         loading={cancellingSale}
         onConfirm={handleCancelSale}
         onCancel={() => (cancellingSale ? undefined : setConfirmCancelSale(false))}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmRemoveInvoice}
+        title="Remove purchase invoice?"
+        message="The invoice reference will be cleared from this vehicle. The file itself stays in storage and can be recovered from the activity log if needed."
+        confirmLabel="Remove invoice"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={removingInvoice}
+        onConfirm={handleInvoiceRemove}
+        onCancel={() =>
+          removingInvoice ? undefined : setConfirmRemoveInvoice(false)
+        }
       />
 
       {/* Delete Vehicle — OTP-gated */}

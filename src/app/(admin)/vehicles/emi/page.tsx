@@ -24,15 +24,27 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Pencil,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import DatePicker from "@/components/ui/DatePicker";
 
 type VehicleBasic = {
   id: string;
   registrationNumber: string;
   ownerName?: string | null;
+  ownerPhone?: string | null;
   make: string;
   model: string;
+  brand?: string | null;
+  fuelType?: string | null;
+  vehicleUsage?: "PRIVATE" | "COMMERCIAL" | null;
+  color?: string | null;
+  registrationDate?: string | null;
+  manufacturingDate?: string | null;
+  financed?: boolean | null;
+  financer?: string | null;
+  profileImage?: string | null;
 };
 
 type EmiPlanRow = {
@@ -56,8 +68,18 @@ type EmiPlanRow = {
     id: string;
     registrationNumber: string;
     ownerName?: string | null;
+    ownerPhone?: string | null;
     make: string;
     model: string;
+    brand?: string | null;
+    fuelType?: string | null;
+    vehicleUsage?: "PRIVATE" | "COMMERCIAL" | null;
+    color?: string | null;
+    registrationDate?: string | null;
+    manufacturingDate?: string | null;
+    financed?: boolean | null;
+    financer?: string | null;
+    profileImage?: string | null;
   } | null;
 };
 
@@ -106,6 +128,9 @@ export default function EmiHubPage() {
   // Schedule peek — opens an installments-table modal in place of jumping
   // to the full vehicle detail page when "Schedule" is clicked in the list.
   const [scheduleFor, setScheduleFor] = useState<{ planId: string; row: EmiPlanRow } | null>(null);
+  // Edit-mode target — when set, the plan form modal opens in edit mode
+  // pre-filled with this plan's fields; submitting calls PATCH /emi/[id].
+  const [editingFor, setEditingFor] = useState<EmiPlanRow | null>(null);
   const [openCreatePicker, setOpenCreatePicker] = useState(false);
   const [createPickerSelection, setCreatePickerSelection] = useState("");
   const [calMonth, setCalMonth] = useState(() => {
@@ -513,6 +538,7 @@ export default function EmiHubPage() {
                     key={r.id ? String(r.id) : `row-${i}`}
                     row={r}
                     onOpenSchedule={() => setScheduleFor({ planId: r.id, row: r })}
+                    onEdit={() => setEditingFor(r)}
                   />
                 ))}
               </tbody>
@@ -703,10 +729,53 @@ export default function EmiHubPage() {
       {creatingFor && (
         <CreateEmiModal
           vehicle={creatingFor}
+          editingPlan={null}
+          existingActivePlan={
+            hub?.rows.find(
+              (r) => r.vehicleId === creatingFor.id && r.status === "ACTIVE",
+            ) ?? null
+          }
+          onSwitchToEdit={(plan) => {
+            setCreatingFor(null);
+            setEditingFor(plan);
+          }}
           onClose={() => setCreatingFor(null)}
-          onCreated={async () => {
+          onSaved={async () => {
             setCreatingFor(null);
             toast.success("EMI plan created", "Schedule generated successfully");
+            await load();
+          }}
+        />
+      )}
+
+      {/* Edit form modal — same component, runs in edit mode. Vehicle context
+          comes from the plan row's joined vehicle data. */}
+      {editingFor && editingFor.vehicle && (
+        <CreateEmiModal
+          vehicle={{
+            id: editingFor.vehicleId,
+            registrationNumber: editingFor.vehicle.registrationNumber,
+            ownerName: editingFor.vehicle.ownerName ?? null,
+            ownerPhone: editingFor.vehicle.ownerPhone ?? null,
+            make: editingFor.vehicle.make,
+            model: editingFor.vehicle.model,
+            brand: editingFor.vehicle.brand ?? null,
+            fuelType: editingFor.vehicle.fuelType ?? null,
+            vehicleUsage: editingFor.vehicle.vehicleUsage ?? null,
+            color: editingFor.vehicle.color ?? null,
+            registrationDate: editingFor.vehicle.registrationDate ?? null,
+            manufacturingDate: editingFor.vehicle.manufacturingDate ?? null,
+            financed: editingFor.vehicle.financed ?? null,
+            financer: editingFor.vehicle.financer ?? null,
+            profileImage: editingFor.vehicle.profileImage ?? null,
+          }}
+          editingPlan={editingFor}
+          existingActivePlan={null}
+          onSwitchToEdit={() => undefined}
+          onClose={() => setEditingFor(null)}
+          onSaved={async () => {
+            setEditingFor(null);
+            toast.success("EMI plan updated", "Changes saved");
             await load();
           }}
         />
@@ -1033,7 +1102,15 @@ function EmptyState({
   );
 }
 
-function Row({ row, onOpenSchedule }: { row: EmiPlanRow; onOpenSchedule: () => void }) {
+function Row({
+  row,
+  onOpenSchedule,
+  onEdit,
+}: {
+  row: EmiPlanRow;
+  onOpenSchedule: () => void;
+  onEdit: () => void;
+}) {
   const due = daysUntil(row.nextDueDate);
   const dueChip = (() => {
     if (row.status !== "ACTIVE" || !row.nextDueDate) return "—";
@@ -1164,6 +1241,11 @@ function Row({ row, onOpenSchedule }: { row: EmiPlanRow; onOpenSchedule: () => v
         </span>
       </td>
       <td className="px-5 py-3.5 text-right">
+        {/* Edit action is hidden in the row Actions column per UX direction —
+            users add new plans via the top-right "+ New EMI plan" button. The
+            backend Edit infrastructure (state, modal, PATCH, red blocker
+            banner "Edit existing plan instead") stays wired so that route is
+            still reachable from the create-blocker. */}
         <button
           type="button"
           onClick={onOpenSchedule}
@@ -1547,13 +1629,32 @@ function VehiclePickerModal({
 
 function CreateEmiModal({
   vehicle,
+  editingPlan,
+  existingActivePlan,
+  onSwitchToEdit,
   onClose,
-  onCreated,
+  onSaved,
 }: {
   vehicle: VehicleBasic;
+  /** When non-null, the form runs in EDIT mode against this plan: pre-fills
+   *  from its fields, calls PATCH on submit, and hides create-only sections
+   *  (schedule files + pre-fill banner + duplicate-active blocker). */
+  editingPlan: EmiPlanRow | null;
+  /** In CREATE mode only: if the picked vehicle already has an active plan,
+   *  this surfaces a red blocker banner with a one-click "Edit existing"
+   *  button so the user doesn't fill the form just to hit a server 409. */
+  existingActivePlan: EmiPlanRow | null;
+  /** Routes the user from the blocked Create form to the Edit form for the
+   *  pre-existing active plan. Parent closes Create + opens Edit. */
+  onSwitchToEdit: (plan: EmiPlanRow) => void;
   onClose: () => void;
-  onCreated: () => void | Promise<void>;
+  /** Fires after a successful create OR update. */
+  onSaved: () => void | Promise<void>;
 }) {
+  const isEdit = editingPlan !== null;
+  // Red blocker shows only in CREATE mode and only when a server 409 would
+  // actually fire on submit (vehicle already has an active plan).
+  const isBlockedByActive = !isEdit && existingActivePlan !== null;
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1573,6 +1674,10 @@ function CreateEmiModal({
     dueDayOfMonth: "5",
     reminderChannels: ["EMAIL", "IN_APP"] as Array<"EMAIL" | "WHATSAPP" | "IN_APP">,
     notes: "",
+    // Downpayment is create-time-only. Edit mode hides these inputs and the
+    // submit payload drops them (mirrors VehicleEmiPanel's behaviour).
+    downpaymentAmount: "",
+    downpaymentDate: "",
   });
   // Schedule documents — one or many PDFs/images of the amortization sheet.
   // Files accumulate as the user picks them; each can be removed individually.
@@ -1623,6 +1728,170 @@ function CreateEmiModal({
     };
   }, []);
 
+  // Pre-fill from this vehicle's most recent EMI plan (active OR closed) so
+  // re-financing, restructuring, or correcting a wrong plan doesn't require
+  // re-typing every lender / loan field. Runs once on modal open. If the
+  // vehicle has never had an EMI, this is a no-op.
+  //
+  // Note: startDate is intentionally NOT pre-filled — that's specific to the
+  // new plan. dueDayOfMonth + installments + amounts ARE pre-filled because
+  // they typically carry over for the same lender.
+  const [prefillSource, setPrefillSource] = useState<{
+    lenderName: string | null;
+    status: string | null;
+    fromPlanId: string | null;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    type PlanShape = {
+      id?: string;
+      _id?: string;
+      status?: string;
+      lenderName?: string;
+      lenderType?: string;
+      lenderContactPhone?: string | null;
+      lenderBranch?: string | null;
+      loanAccountNumber?: string | null;
+      debitBankName?: string | null;
+      debitAccountMasked?: string | null;
+      debitAccountHolder?: string | null;
+      principalAmount?: number | null;
+      emiAmount?: number;
+      totalInstallments?: number;
+      startDate?: string;
+      dueDayOfMonth?: number;
+      reminderChannels?: Array<"EMAIL" | "WHATSAPP" | "IN_APP">;
+      notes?: string | null;
+      createdAt?: string;
+    };
+    const applyTemplate = (t: PlanShape, opts: { useStartDate: boolean }) => {
+      setForm((prev) => ({
+        ...prev,
+        lenderName: t.lenderName ?? prev.lenderName,
+        lenderType: (t.lenderType ?? prev.lenderType) as
+          | "BANK"
+          | "NBFC"
+          | "PARTNER",
+        lenderContactPhone: t.lenderContactPhone ?? prev.lenderContactPhone,
+        lenderBranch: t.lenderBranch ?? prev.lenderBranch,
+        loanAccountNumber: t.loanAccountNumber ?? prev.loanAccountNumber,
+        debitBankName: t.debitBankName ?? prev.debitBankName,
+        debitAccountMasked: t.debitAccountMasked ?? prev.debitAccountMasked,
+        debitAccountHolder: t.debitAccountHolder ?? prev.debitAccountHolder,
+        principalAmount:
+          t.principalAmount != null
+            ? String(t.principalAmount)
+            : prev.principalAmount,
+        emiAmount:
+          t.emiAmount != null ? String(t.emiAmount) : prev.emiAmount,
+        totalInstallments:
+          t.totalInstallments != null
+            ? String(t.totalInstallments)
+            : prev.totalInstallments,
+        // Edit mode pre-fills startDate so the user sees the actual current
+        // value before editing; create mode keeps "today" as a fresh start.
+        startDate:
+          opts.useStartDate && t.startDate
+            ? new Date(t.startDate).toISOString().slice(0, 10)
+            : prev.startDate,
+        dueDayOfMonth:
+          t.dueDayOfMonth != null
+            ? String(t.dueDayOfMonth)
+            : prev.dueDayOfMonth,
+        reminderChannels: t.reminderChannels ?? prev.reminderChannels,
+        notes: t.notes ?? prev.notes,
+      }));
+    };
+
+    if (isEdit && editingPlan) {
+      // Edit mode — fetch the specific plan's full record so fields not on
+      // the hub row (lenderContactPhone, lenderBranch, debitAccountHolder,
+      // notes, reminderChannels) come through. Falls back to the row's
+      // fields if the network call fails.
+      applyTemplate(
+        {
+          lenderName: editingPlan.lenderName,
+          lenderType: editingPlan.lenderType,
+          loanAccountNumber: editingPlan.loanAccountNumber,
+          debitBankName: editingPlan.debitBankName,
+          debitAccountMasked: editingPlan.debitAccountMasked,
+          principalAmount: editingPlan.principalAmount,
+          emiAmount: editingPlan.emiAmount,
+          totalInstallments: editingPlan.totalInstallments,
+          startDate: editingPlan.startDate,
+          dueDayOfMonth: editingPlan.dueDayOfMonth,
+        },
+        { useStartDate: true },
+      );
+      emiAPI
+        .getPlan(editingPlan.id)
+        .then((res) => {
+          if (cancelled) return;
+          const data = res.data?.data as { plan?: PlanShape } | undefined;
+          if (data?.plan) applyTemplate(data.plan, { useStartDate: true });
+        })
+        .catch(() => {
+          // Already populated from the row — no toast needed.
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Create mode — auto-fill from this vehicle's most recent plan (any
+    // status) so re-financing / restructuring doesn't require re-typing
+    // every field. No-op if the vehicle has never had an EMI.
+    emiAPI
+      .getForVehicle(vehicle.id)
+      .then((res) => {
+        if (cancelled) return;
+        const plans = (res.data?.data ?? []) as PlanShape[];
+        if (plans.length === 0) return;
+        const sorted = [...plans].sort((a, b) => {
+          const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return tb - ta;
+        });
+        const t = sorted[0];
+        applyTemplate(t, { useStartDate: false });
+        setPrefillSource({
+          lenderName: t.lenderName ?? null,
+          status: t.status ?? null,
+          fromPlanId: String(t.id ?? t._id ?? ""),
+        });
+      })
+      .catch(() => {
+        // Silent — pre-fill is a convenience layer, not load-blocking.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clear all pre-filled fields — gives the operator a one-click "actually
+  // give me a blank form" escape hatch when the prior plan isn't relevant.
+  const clearPrefill = () => {
+    setForm((p) => ({
+      ...p,
+      lenderName: "",
+      lenderType: "BANK",
+      lenderContactPhone: "",
+      lenderBranch: "",
+      loanAccountNumber: "",
+      debitBankName: "",
+      debitAccountMasked: "",
+      debitAccountHolder: "",
+      principalAmount: "",
+      emiAmount: "",
+      totalInstallments: "12",
+      dueDayOfMonth: "5",
+      reminderChannels: ["EMAIL", "IN_APP"],
+      notes: "",
+    }));
+    setPrefillSource(null);
+  };
+
   // When the user picks a saved account, mirror its fields into the form so
   // submit (and the auto-upsert on save) still sees a consistent payload.
   useEffect(() => {
@@ -1652,34 +1921,92 @@ function CreateEmiModal({
     }));
   };
 
+  // Live downpayment validation — date becomes required the moment a positive
+  // amount is entered. Mirrors VehicleEmiPanel's flags. Both are zero-cost
+  // when the user leaves the fields empty (the typical case).
+  const dpAmtNum = Number(form.downpaymentAmount);
+  const dpAmtValid =
+    !form.downpaymentAmount || (Number.isFinite(dpAmtNum) && dpAmtNum >= 0);
+  const dpDateRequired = !isEdit && Number.isFinite(dpAmtNum) && dpAmtNum > 0;
+  const dpDateMissing = dpDateRequired && !form.downpaymentDate;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    // Pre-submit downpayment checks — server enforces the same rules but
+    // failing here keeps the form open with a friendly inline message.
+    if (!isEdit) {
+      if (!dpAmtValid) {
+        setError("Downpayment amount must be zero or positive");
+        return;
+      }
+      if (dpDateMissing) {
+        setError("Downpayment date is required when an amount is provided");
+        return;
+      }
+    }
     setSaving(true);
     try {
-      await emiAPI.create(vehicle.id, {
-        lenderName: form.lenderName.trim(),
-        lenderType: form.lenderType,
-        lenderContactPhone: form.lenderContactPhone.trim() || null,
-        lenderBranch: form.lenderBranch.trim() || null,
-        loanAccountNumber: form.loanAccountNumber.trim() || null,
-        debitBankName: form.debitBankName.trim() || null,
-        debitAccountMasked: form.debitAccountMasked.trim() || null,
-        debitAccountHolder: form.debitAccountHolder.trim() || null,
-        principalAmount: form.principalAmount ? Number(form.principalAmount) : null,
-        emiAmount: Number(form.emiAmount),
-        totalInstallments: Number(form.totalInstallments),
-        startDate: form.startDate,
-        dueDayOfMonth: Number(form.dueDayOfMonth),
-        reminderChannels: form.reminderChannels,
-        notes: form.notes.trim() || null,
-        scheduleDocuments: scheduleFiles,
-      });
-      await onCreated();
+      if (isEdit && editingPlan) {
+        // Edit mode — PATCH the existing plan. Server accepts a partial
+        // patch (every field on updateSchema is optional) and regenerates
+        // unpaid installments if schedule-affecting fields change.
+        // Schedule files are create-only per V1.
+        await emiAPI.updatePlan(editingPlan.id, {
+          lenderName: form.lenderName.trim(),
+          lenderType: form.lenderType,
+          lenderContactPhone: form.lenderContactPhone.trim() || null,
+          lenderBranch: form.lenderBranch.trim() || null,
+          loanAccountNumber: form.loanAccountNumber.trim() || null,
+          debitBankName: form.debitBankName.trim() || null,
+          debitAccountMasked: form.debitAccountMasked.trim() || null,
+          debitAccountHolder: form.debitAccountHolder.trim() || null,
+          principalAmount: form.principalAmount
+            ? Number(form.principalAmount)
+            : null,
+          emiAmount: Number(form.emiAmount),
+          totalInstallments: Number(form.totalInstallments),
+          startDate: form.startDate,
+          dueDayOfMonth: Number(form.dueDayOfMonth),
+          reminderChannels: form.reminderChannels,
+          notes: form.notes.trim() || null,
+        });
+      } else {
+        await emiAPI.create(vehicle.id, {
+          lenderName: form.lenderName.trim(),
+          lenderType: form.lenderType,
+          lenderContactPhone: form.lenderContactPhone.trim() || null,
+          lenderBranch: form.lenderBranch.trim() || null,
+          loanAccountNumber: form.loanAccountNumber.trim() || null,
+          debitBankName: form.debitBankName.trim() || null,
+          debitAccountMasked: form.debitAccountMasked.trim() || null,
+          debitAccountHolder: form.debitAccountHolder.trim() || null,
+          principalAmount: form.principalAmount
+            ? Number(form.principalAmount)
+            : null,
+          emiAmount: Number(form.emiAmount),
+          totalInstallments: Number(form.totalInstallments),
+          startDate: form.startDate,
+          dueDayOfMonth: Number(form.dueDayOfMonth),
+          reminderChannels: form.reminderChannels,
+          notes: form.notes.trim() || null,
+          scheduleDocuments: scheduleFiles,
+          // Downpayment is optional. Server creates an EMIPayment#0 when
+          // amount > 0 — PAID with the chosen paidDate if it's in the past,
+          // SCHEDULED if it's in the future. See emi.service.ts createEmiPlan.
+          downpaymentAmount: dpAmtNum > 0 ? dpAmtNum : undefined,
+          downpaymentDate:
+            dpAmtNum > 0 && form.downpaymentDate
+              ? form.downpaymentDate
+              : undefined,
+        });
+      }
+      await onSaved();
     } catch (err) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Failed to create EMI plan";
+          ?.message ??
+        (isEdit ? "Failed to update EMI plan" : "Failed to create EMI plan");
       setError(msg);
       toast.error("Save failed", msg);
     } finally {
@@ -1699,9 +2026,14 @@ function CreateEmiModal({
       <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[92vh]">
         <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 px-5 py-4 flex items-center justify-between flex-shrink-0">
           <div>
-            <h2 className="text-base font-bold text-white">New EMI plan</h2>
+            <h2 className="text-base font-bold text-white">
+              {isEdit ? "Edit EMI plan" : "New EMI plan"}
+            </h2>
             <p className="text-white/80 text-[11px] mt-0.5">
               {vehicle.registrationNumber} · {vehicle.make} {vehicle.model}
+              {isEdit && editingPlan
+                ? ` · ${editingPlan.lenderName} (${editingPlan.paidInstallments}/${editingPlan.totalInstallments} paid)`
+                : ""}
             </p>
           </div>
           <button
@@ -1717,6 +2049,69 @@ function CreateEmiModal({
           className="flex flex-col flex-1 min-h-0"
         >
           <div className="p-5 space-y-4 overflow-y-auto flex-1">
+            {isBlockedByActive && existingActivePlan && (
+              <div className="rounded-lg border-2 border-red-300 bg-red-50 dark:bg-red-500/10 dark:border-red-500/40 px-3 py-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-red-600 dark:text-red-400 text-base leading-none mt-0.5">⛔</span>
+                  <div className="flex-1 min-w-0 text-[12px] leading-snug">
+                    <p className="font-bold text-red-900 dark:text-red-200">
+                      This vehicle already has an active EMI plan with{" "}
+                      {existingActivePlan.lenderName} (
+                      {existingActivePlan.paidInstallments}/
+                      {existingActivePlan.totalInstallments} paid).
+                    </p>
+                    <p className="text-red-800 dark:text-red-300/90 mt-1">
+                      Creating a new plan will be rejected by the server. You
+                      can edit the existing plan instead, or close it first
+                      from the EMI hub.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => onSwitchToEdit(existingActivePlan)}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-red-600 hover:bg-red-700 text-white text-[11px] font-semibold px-3 py-1.5"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        Edit existing plan instead
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onClose()}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/30 text-[11px] font-semibold px-3 py-1.5"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {prefillSource && (
+              <div className="rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-500/10 dark:border-yellow-500/30 px-3 py-2 flex items-start gap-2">
+                <span className="text-yellow-600 dark:text-yellow-400 mt-0.5">✨</span>
+                <div className="flex-1 min-w-0 text-[11px] leading-snug">
+                  <p className="text-yellow-900 dark:text-yellow-200 font-semibold">
+                    Pre-filled from this vehicle's previous EMI plan
+                    {prefillSource.lenderName ? ` with ${prefillSource.lenderName}` : ""}
+                    {prefillSource.status ? ` (${prefillSource.status})` : ""}.
+                  </p>
+                  <p className="text-yellow-800/80 dark:text-yellow-300/70 mt-0.5">
+                    Review each field below and edit as needed. Start date,
+                    schedule documents, and downpayment are not pre-filled.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearPrefill}
+                  className="text-[10px] font-bold uppercase tracking-wider text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-200 flex-shrink-0 px-2 py-1 rounded hover:bg-yellow-100 dark:hover:bg-yellow-500/15"
+                  title="Clear all pre-filled fields and start blank"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
             <Section title="Loan details">
               <Grid2>
                 <Field label="Lender / Bank name" required>
@@ -1839,6 +2234,73 @@ function CreateEmiModal({
               </Grid2>
             </Section>
 
+            {/* Downpayment — create-time only. Optional; when amount > 0 the
+                date is required. Past/today date → server creates a PAID
+                EMIPayment#0 with that paidDate so it surfaces in Expenses for
+                the historical month. Future date → SCHEDULED EMIPayment#0. */}
+            {!isEdit && (
+              <Section title="Downpayment (optional)">
+                <Grid2>
+                  <Field label="Downpayment paid (₹)">
+                    <input
+                      className="input"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step="any"
+                      value={form.downpaymentAmount}
+                      onChange={(e) =>
+                        set(
+                          "downpaymentAmount",
+                          e.target.value.replace(/[^\d.]/g, ""),
+                        )
+                      }
+                      placeholder="0 (skip)"
+                    />
+                  </Field>
+                  <Field label="Date of downpayment">
+                    {/* Flatpickr picker matches the dashboard / expenses date
+                        UX. The DatePicker doesn't expose `disabled`, so we
+                        gate writes by ignoring onChange when not required. */}
+                    <div
+                      className={
+                        dpDateMissing
+                          ? "rounded-xl ring-2 ring-red-300 dark:ring-red-500/40"
+                          : ""
+                      }
+                    >
+                      <DatePicker
+                        value={form.downpaymentDate}
+                        onChange={(v) => {
+                          if (!dpDateRequired) return;
+                          set("downpaymentDate", v);
+                        }}
+                        placeholder={
+                          dpDateRequired ? "Pick a date" : "Set amount first"
+                        }
+                      />
+                    </div>
+                    <p
+                      className={`mt-1 text-[10px] leading-snug ${
+                        dpDateMissing
+                          ? "text-red-500"
+                          : "text-gray-400 dark:text-white/40"
+                      }`}
+                    >
+                      {dpDateMissing
+                        ? "Required when a downpayment amount is set"
+                        : dpAmtNum > 0
+                          ? new Date(form.downpaymentDate || Date.now()).getTime() >
+                            Date.now()
+                            ? "Future date — will be recorded as a scheduled downpayment."
+                            : "Past/today date — will appear in Expenses for that month."
+                          : "Leave both blank to skip the downpayment."}
+                    </p>
+                  </Field>
+                </Grid2>
+              </Section>
+            )}
+
             <Section title="Debit source">
               {savedDebits.length > 0 && (
                 <div className="flex items-center gap-2 mb-3">
@@ -1924,6 +2386,7 @@ function CreateEmiModal({
               )}
             </Section>
 
+            {!isEdit && (
             <Section title="EMI schedule documents">
               <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40 p-3 space-y-2.5">
                 <div className="flex items-center gap-3">
@@ -1998,6 +2461,7 @@ function CreateEmiModal({
                 )}
               </div>
             </Section>
+            )}
 
             <Section title="Reminders">
               <div className="flex flex-wrap gap-2">
@@ -2045,13 +2509,26 @@ function CreateEmiModal({
           <div className="flex gap-2.5 px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex-shrink-0">
             <button
               type="submit"
-              disabled={saving}
-              className="flex-1 h-10 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+              disabled={saving || isBlockedByActive}
+              title={
+                isBlockedByActive
+                  ? "Cannot create — an active EMI plan already exists for this vehicle. Use Edit instead."
+                  : undefined
+              }
+              className="flex-1 h-10 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
             >
               {saving && (
                 <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
               )}
-              {saving ? "Creating…" : "Create EMI plan"}
+              {saving
+                ? isEdit
+                  ? "Saving…"
+                  : "Creating…"
+                : isEdit
+                  ? "Save changes"
+                  : isBlockedByActive
+                    ? "Blocked — see warning above"
+                    : "Create EMI plan"}
             </button>
             <button
               type="button"

@@ -611,6 +611,10 @@ export const vehicleAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+  // Clears `Vehicle.invoiceUrl`. The file in storage is NOT deleted (it's
+  // recoverable from the audit log entry if needed).
+  deleteInvoice: (vehicleId: string) =>
+    api.delete(`/vehicles/${vehicleId}/invoice`),
   deleteImage: (vehicleId: string, imageUrl: string) =>
     api.delete(`/vehicles/${vehicleId}/images`, { data: { imageUrl } }),
   setProfileImage: (vehicleId: string, imageUrl: string) =>

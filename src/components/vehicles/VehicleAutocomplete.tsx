@@ -240,12 +240,14 @@ export function VehicleAutocomplete({
               // Portal-mounted dropdown — escapes any ancestor stacking context
               // (e.g. backdrop-blur toolbars, transformed cards). Positioned
               // with fixed coords from the input's bounding rect.
+              // z-index must stay above the highest modal in the app
+              // (Log Expense modal uses z-[99999]).
               style={{
                 position: "fixed",
                 top: dropdownRect.top,
                 left: dropdownRect.left,
                 width: dropdownRect.width,
-                zIndex: 9999,
+                zIndex: 100000,
               }}
               className={`max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 ${dims.dropdown}`}
             >

@@ -13,6 +13,7 @@ import {
   ImageIcon, Upload, Banknote, X, Receipt,
 } from "lucide-react";
 import { VehicleAutocomplete } from "@/components/vehicles/VehicleAutocomplete";
+import { VehicleSelectField } from "@/components/vehicles/VehicleSelectField";
 import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 
 interface VehicleBasic { id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; }
@@ -49,6 +50,20 @@ const CATEGORY_LABELS: Record<string, string> = {
   emi: "EMI",
   invoices: "Invoices",
 };
+
+// What appears as a filter option in the category dropdown. EMI is excluded
+// because it lives in its own EMI hub (EMIPlan + EMIPayment) and the
+// Vehicles → Expenses page is no longer the place to slice by it. Invoices
+// was retired — operators file vendor invoices under the concrete category
+// (Service / Compliance / FASTag / Challan) instead. We keep both in
+// CATEGORY_LABELS so legacy rows in the table still render with their
+// original label, just hide them from the filter dropdown.
+const CATEGORY_FILTER_KEYS = [
+  "challans",
+  "services",
+  "fastag",
+  "compliance",
+] as const;
 
 const CATEGORY_COLORS_HEX: Record<string, string> = {
   challans: "#ef4444",
@@ -579,7 +594,11 @@ function VehicleExpensesContent() {
             <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
               className="h-9 rounded-lg border border-gray-200/80 bg-white/80 dark:bg-gray-800/80 backdrop-blur px-3 text-xs text-gray-900 focus:border-yellow-400 focus:outline-none dark:border-gray-700 dark:text-white min-w-[150px]">
               <option value="">All Categories</option>
-              {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {CATEGORY_FILTER_KEYS.map((k) => (
+                <option key={k} value={k}>
+                  {CATEGORY_LABELS[k]}
+                </option>
+              ))}
             </select>
             <div className="flex gap-1 p-0.5 bg-gray-100/80 dark:bg-gray-800/80 backdrop-blur rounded-lg">
               {[{ key: "this_month", label: "This Month" }, { key: "last_month", label: "Last Month" }, { key: "this_quarter", label: "Quarter" }, { key: "this_year", label: "Year" }].map((p) => (
@@ -738,10 +757,16 @@ function VehicleExpensesContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Vehicle <span className="text-red-500">*</span></label>
-                    <select value={expVehicleId} onChange={(e) => setExpVehicleId(e.target.value)} className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white">
-                      <option value="">Select vehicle</option>
-                      {vehicles.map((v) => <option key={v.id} value={v.id}>{v.registrationNumber} — {v.make} {v.model}{v.ownerName ? ` (${v.ownerName})` : ""}</option>)}
-                    </select>
+                    {/* Classic select trigger with an embedded search field.
+                        Click → opens panel with full vehicle list; type in
+                        the panel's search bar to narrow it down. Scales to
+                        500+ vehicles. */}
+                    <VehicleSelectField
+                      vehicles={vehicles}
+                      value={expVehicleId}
+                      onChange={setExpVehicleId}
+                      placeholder="Select vehicle"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Category <span className="text-red-500">*</span></label>
