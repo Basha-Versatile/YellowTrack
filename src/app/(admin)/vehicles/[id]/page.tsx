@@ -252,6 +252,10 @@ export default function VehicleDetailPage() {
   const [editingPermit, setEditingPermit] = useState(false);
   const [permitInput, setPermitInput] = useState("");
   const [savingPermit, setSavingPermit] = useState(false);
+  // Inline-edit state for the owner name (shown as the header title).
+  const [editingOwner, setEditingOwner] = useState(false);
+  const [ownerInput, setOwnerInput] = useState("");
+  const [savingOwner, setSavingOwner] = useState(false);
   const [brandInput, setBrandInput] = useState("");
   const [savingBrand, setSavingBrand] = useState(false);
   // Inline-edit state for vehicle usage (PRIVATE / COMMERCIAL).
@@ -1257,6 +1261,30 @@ export default function VehicleDetailPage() {
     }
   };
 
+  // Owner-name inline edit. Empty string clears the field (stored as null).
+  const handleOwnerSave = async () => {
+    if (!vehicle) return;
+    const next = ownerInput.trim();
+    if (next === (vehicle.ownerName ?? "")) {
+      setEditingOwner(false);
+      return;
+    }
+    setSavingOwner(true);
+    try {
+      await vehicleAPI.updateDetails(vehicle.id, { ownerName: next || null });
+      await fetchVehicle();
+      setEditingOwner(false);
+      toast.success("Owner updated", next ? `Owner set to ${next}` : "Owner name cleared");
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Could not update owner name";
+      toast.error("Failed", msg);
+    } finally {
+      setSavingOwner(false);
+    }
+  };
+
   // Permit-type inline edit. Empty string clears the field.
   const handlePermitSave = async () => {
     if (!vehicle) return;
@@ -1353,9 +1381,58 @@ export default function VehicleDetailPage() {
                 )}
                 <div>
                   <div className="flex items-center gap-3 mb-1">
-                    <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
-                      {vehicle.ownerName ? titleCase(vehicle.ownerName) : titleCase(vehicle.make)}
-                    </h1>
+                    {editingOwner ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={ownerInput}
+                          onChange={(e) => setOwnerInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleOwnerSave();
+                            if (e.key === "Escape") setEditingOwner(false);
+                          }}
+                          disabled={savingOwner}
+                          placeholder="Owner name"
+                          className="h-9 rounded-lg border border-white/30 bg-white/15 backdrop-blur-sm px-3 text-lg sm:text-xl font-black text-white placeholder-white/50 focus:border-white/60 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:opacity-60"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleOwnerSave}
+                          disabled={savingOwner}
+                          className="text-white bg-emerald-500/40 hover:bg-emerald-500/60 rounded-lg p-1.5 disabled:opacity-40 transition-colors"
+                          title="Save"
+                        >
+                          <Check className="w-4 h-4" strokeWidth={2.5} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingOwner(false)}
+                          disabled={savingOwner}
+                          className="text-white bg-white/15 hover:bg-white/25 rounded-lg p-1.5 disabled:opacity-40 transition-colors"
+                          title="Cancel"
+                        >
+                          <X className="w-4 h-4" strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 group">
+                        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
+                          {vehicle.ownerName ? titleCase(vehicle.ownerName) : titleCase(vehicle.make)}
+                        </h1>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOwnerInput(vehicle.ownerName ?? "");
+                            setEditingOwner(true);
+                          }}
+                          className="text-white/60 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
+                          title="Edit owner name"
+                        >
+                          <Pencil className="w-4 h-4" strokeWidth={2} />
+                        </button>
+                      </div>
+                    )}
                     <span className="px-3 py-1 rounded-lg bg-white/20 text-white text-xs font-bold backdrop-blur-sm">
                       {vehicle.overallStatus}
                     </span>

@@ -387,30 +387,34 @@ const AppSidebar: React.FC = () => {
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Logo — header section. Sidebar is 320px / 80px when expanded /
-          collapsed. Zero padding around the logo container so all the
-          visible whitespace comes only from inside the SVG itself (the
-          brand mark's own breathing room inside its 1080×1080 viewBox). */}
+          collapsed. The SVG carries generous internal whitespace inside its
+          1080×1080 viewBox, so we keep the container tight and scale the mark
+          up (overflow-hidden crops the SVG's own padding) — that way the logo
+          reads large while the header takes minimal vertical space. */}
       <div
         className={`flex items-center justify-center transition-all duration-300 ${
-          expanded ? "p-0" : "px-2 pt-4 pb-3"
+          expanded ? "pt-3 pb-1" : "px-2 pt-4 pb-3"
         }`}
       >
         <Link
           href="/dashboard"
           aria-label="Yellow Track"
           // SVG vector source → infinitely sharp at this or any rendered
-          // size. Square container + 1:1 SVG viewBox (1080×1080) + the
-          // object-contain on the inner Image preserve the aspect ratio.
-          className={`relative block flex-shrink-0 transition-all duration-300 ${
-            expanded ? "size-64" : "size-16"
+          // size. Square container + 1:1 SVG viewBox (1080×1080) keep the
+          // aspect ratio; overflow-hidden + scale on the inner Image zoom
+          // past the mark's built-in breathing room.
+          className={`relative block flex-shrink-0 overflow-hidden transition-all duration-300 ${
+            expanded ? "size-36" : "size-16"
           }`}
         >
           <Image
             src="/images/logo/yellow-track-logo.svg"
             alt="Yellow Track"
             fill
-            sizes="256px"
-            className="object-contain"
+            sizes="144px"
+            className={`object-contain transition-transform duration-300 ${
+              expanded ? "scale-[1.45]" : "scale-100"
+            }`}
             priority
           />
         </Link>

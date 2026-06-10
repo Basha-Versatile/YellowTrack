@@ -114,7 +114,7 @@ export async function listGroups(ctx: ScopedContext) {
   }
 
   const docLimit =
-    ctx.tenantId === ALL_TENANTS ? 10 : await resolveTenantDocLimit(String(ctx.tenantId));
+    ctx.tenantId === ALL_TENANTS ? 20 : await resolveTenantDocLimit(String(ctx.tenantId));
 
   return groups.map((g) => {
     const b = bucket.get(String(g._id)) ?? { total: 0, byStatus: {} };
@@ -165,7 +165,7 @@ export async function getGroup(ctx: ScopedContext, id: string) {
   // "X / N documents" counter and disable Add at the limit.
   const capacity =
     ctx.tenantId === ALL_TENANTS
-      ? { used: 0, limit: 10 }
+      ? { used: 0, limit: 20 }
       : await getCustomComplianceGroupDocCapacity(String(ctx.tenantId), id);
   return sanitiseGroupForClient({
     ...group,

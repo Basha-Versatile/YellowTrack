@@ -76,7 +76,7 @@ export async function createPlan(input: PlanInput) {
     perDriverPerMonth: input.perDriverPerMonth ?? 0,
     customComplianceGroupPerMonth: input.customComplianceGroupPerMonth ?? 30,
     customComplianceDocsPerGroupLimit:
-      input.customComplianceDocsPerGroupLimit ?? 10,
+      input.customComplianceDocsPerGroupLimit ?? 20,
     gstPercent: input.gstPercent ?? 18,
   });
 }
