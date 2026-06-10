@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DashboardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import DatePicker from "@/components/ui/DatePicker";
+import { VehicleBrandIcon } from "@/components/icons/VehicleBrandIcon";
+import { resolveImageUrl } from "@/components/vehicles/VehicleThumb";
 import { Plus, UserPlus, Truck, Users, AlertTriangle, CheckCircle2, ChevronRight, FileText, BarChart3, PieChart as PieIcon, Disc3, RefreshCw, type LucideIcon } from "lucide-react";
 import type { IconType } from "react-icons";
 import {
@@ -31,7 +33,16 @@ const DonutApexChart = dynamic(() => import("react-apexcharts"), {
 interface DashboardStats {
   totalVehicles: number;
   compliance: { green: number; yellow: number; orange: number; red: number };
-  byBrand: Array<{ brand: string | null; count: number }>;
+  byBrand: Array<{
+    brand: string | null;
+    count: number;
+    /** Uploaded logo URL from VehicleBrand. When set it wins over the
+     *  hardcoded BRAND_ICONS map below. */
+    logoUrl?: string | null;
+    /** Preset react-icons key from VehicleBrand. Used only if no logoUrl AND
+     *  no hardcoded entry exists. */
+    iconKey?: string | null;
+  }>;
   tyreBrandPerformance: Array<{
     brand: string;
     avgKm: number;
@@ -629,8 +640,14 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                {stats.byBrand.map(({ brand, count }) => (
-                  <BrandCard key={brand ?? "__unbranded"} brand={brand} count={count} />
+                {stats.byBrand.map(({ brand, count, logoUrl, iconKey }) => (
+                  <BrandCard
+                    key={brand ?? "__unbranded"}
+                    brand={brand}
+                    count={count}
+                    logoUrl={logoUrl}
+                    iconKey={iconKey}
+                  />
                 ))}
               </div>
             )}
@@ -769,13 +786,34 @@ const BRAND_ICONS: Record<string, IconType> = {
   volovo: SiVolvo, // common typo
 };
 
-function BrandCard({ brand, count }: { brand: string | null; count: number }) {
+function BrandCard({
+  brand,
+  count,
+  logoUrl,
+  iconKey,
+}: {
+  brand: string | null;
+  count: number;
+  logoUrl?: string | null;
+  iconKey?: string | null;
+}) {
   const isUnbranded = !brand;
   const label = brand ?? "Unbranded";
   const palette = isUnbranded
     ? { avatar: "bg-gray-100 dark:bg-gray-800", icon: "text-gray-400 dark:text-gray-500" }
     : brandColor(label);
-  const Icon = isUnbranded ? null : BRAND_ICONS[label.toLowerCase()] ?? null;
+  // Priority chain for the visual:
+  //   1. Uploaded logoUrl from VehicleBrand (superadmin upload wins)
+  //   2. Hardcoded BRAND_ICONS map — kept intact so already-working brands
+  //      keep their existing look without any DB row required
+  //   3. iconKey from VehicleBrand (set via superadmin preset dropdown)
+  //   4. Letter-circle fallback
+  const HardcodedIcon =
+    !isUnbranded ? BRAND_ICONS[label.toLowerCase()] ?? null : null;
+  const showUploadedLogo = !isUnbranded && Boolean(logoUrl);
+  const showHardcoded = !showUploadedLogo && HardcodedIcon !== null;
+  const showSuperadminIconKey =
+    !showUploadedLogo && !showHardcoded && !isUnbranded && Boolean(iconKey);
   // `__none__` is the sentinel the vehicles list / repo recognises for
   // "vehicles with no brand on file". A bare `/vehicles` link is wrong
   // because it shows every vehicle, not just the unbranded ones.
@@ -789,9 +827,22 @@ function BrandCard({ brand, count }: { brand: string | null; count: number }) {
       title={`${label} — ${count} vehicle${count === 1 ? "" : "s"}`}
       className="group flex flex-col items-center text-center rounded-xl border border-gray-200/80 dark:border-gray-800 bg-white dark:bg-white/[0.02] p-3 transition-all hover:border-gray-300 dark:hover:border-gray-700 hover:shadow-sm"
     >
-      <div className={`flex-shrink-0 w-14 h-14 rounded-xl ${palette.avatar} flex items-center justify-center`}>
-        {Icon ? (
-          <Icon className={`w-9 h-9 ${palette.icon}`} />
+      <div className={`flex-shrink-0 w-14 h-14 rounded-xl ${palette.avatar} flex items-center justify-center overflow-hidden`}>
+        {showUploadedLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolveImageUrl(logoUrl as string) ?? (logoUrl as string)}
+            alt={label}
+            className="w-9 h-9 object-contain"
+          />
+        ) : showHardcoded && HardcodedIcon ? (
+          <HardcodedIcon className={`w-9 h-9 ${palette.icon}`} />
+        ) : showSuperadminIconKey ? (
+          <VehicleBrandIcon
+            brand={{ name: label, iconKey }}
+            size={36}
+            className={palette.icon}
+          />
         ) : (
           <span className={`text-2xl font-black ${palette.icon}`}>{label.charAt(0).toUpperCase()}</span>
         )}

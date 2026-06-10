@@ -8,6 +8,7 @@ import {
   Tyre,
   TyreReplacement,
   Vehicle,
+  VehicleBrand,
   VehicleDriverMapping,
   VehicleGroup,
   VehicleSale,
@@ -486,6 +487,46 @@ export async function getDashboardStats(ctx: ScopedContext) {
     { $group: { _id: null, sum: { $sum: "$amount" }, count: { $sum: 1 } } },
   ]);
 
+  // Enrich byBrand with the VehicleBrand master's logoUrl + iconKey so the
+  // dashboard "Fleet by Brand" cards can prefer an uploaded logo when one
+  // exists. The brand string on Vehicle is free-text; VehicleBrand stores
+  // a canonical `slug` (kebab-case via lower + non-alphanum→"-"). Must
+  // match the same slugifier used by vehicleBrand.service.ts:slugifyName.
+  const slugifyBrand = (name: string): string =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64);
+  const brandSlugs = (
+    (brandAgg as Array<{ brand: string | null; count: number }>) ?? []
+  )
+    .map((b) => (b.brand ? slugifyBrand(String(b.brand)) : null))
+    .filter((s): s is string => Boolean(s));
+  const brandMeta = brandSlugs.length
+    ? await VehicleBrand.find({ slug: { $in: brandSlugs } })
+        .select("slug logoUrl iconKey")
+        .lean()
+    : [];
+  const brandMetaBySlug = new Map(
+    brandMeta.map((b) => {
+      const row = b as { slug: string; logoUrl?: string | null; iconKey?: string | null };
+      return [row.slug, { logoUrl: row.logoUrl ?? null, iconKey: row.iconKey ?? null }];
+    }),
+  );
+  const brandAggEnriched = (
+    (brandAgg as Array<{ brand: string | null; count: number }>) ?? []
+  ).map((b) => {
+    const slug = b.brand ? slugifyBrand(String(b.brand)) : null;
+    const meta = slug ? brandMetaBySlug.get(slug) : undefined;
+    return {
+      brand: b.brand,
+      count: b.count,
+      logoUrl: meta?.logoUrl ?? null,
+      iconKey: meta?.iconKey ?? null,
+    };
+  });
+
   // Fleet-wide tyre brand performance: for each vehicle's sequence of tyre
   // replacements, the run-length of stint N is odo(N+1) − odo(N). We then
   // average run-length per brand across the whole fleet — the last stint on
@@ -536,7 +577,7 @@ export async function getDashboardStats(ctx: ScopedContext) {
       orange: orangeDocs,
       red: redDocs,
     },
-    byBrand: brandAgg,
+    byBrand: brandAggEnriched,
     tyreBrandPerformance,
     challans: {
       pendingCount: pendingAgg[0]?.count ?? 0,
