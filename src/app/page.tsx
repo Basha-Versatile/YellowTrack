@@ -51,14 +51,18 @@ function TopNav() {
   const [open, setOpen] = useState(false);
   return (
     <nav className="sticky top-0 z-50 backdrop-blur-md bg-white/80 dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 group">
-          <span className="relative w-35 h-35">
+          {/* Logo container needs an explicit size for next/image fill mode.
+              The old w-35 h-35 was an invalid Tailwind class (no 35 in the
+              default spacing scale) so the span collapsed to 0×0 and the
+              image rendered at its tiny intrinsic SVG size. */}
+          <span className="relative w-16 h-16">
             <Image
               src="/images/logo/yellow-track-logo.svg"
               alt="Yellow Track"
               fill
-              sizes="140px"
+              sizes="64px"
               className="object-contain"
               priority
             />
@@ -1046,12 +1050,15 @@ function Footer() {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-6 gap-8">
           <div className="col-span-2">
             <Link href="/" className="inline-flex items-center gap-2.5">
-              <span className="relative w-35 h-35">
+              {/* Same Tailwind fix as the nav — w-35 h-35 was invalid and
+                  collapsed the parent, leaving the logo at its tiny SVG
+                  intrinsic size. Footer can afford a larger logo than nav. */}
+              <span className="relative w-24 h-24">
                 <Image
                   src="/images/logo/yellow-track-logo.svg"
                   alt="Yellow Track"
                   fill
-                  sizes="140px"
+                  sizes="96px"
                   className="object-contain"
                 />
               </span>

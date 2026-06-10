@@ -111,11 +111,16 @@ const tenantSchema = new Schema(
     // Sidebar / UI gates read this via AuthContext.tenant.features.
     // Superadmin flips it via PATCH /superadmin/tenants/[id]/features.
     features: {
-      // Placeholder for the new section below Custom Compliance. Actual
-      // section content lands in a follow-up PR once the business flow
-      // is shared; the flag itself can be flipped on per-tenant today.
-      customComplianceExtraSection: { type: Boolean, default: false },
+      // Credit Cards section — manual credit-card bill tracker with WhatsApp
+      // due-date reminders. Off by default; superadmin flips it per tenant.
+      creditCardTracking: { type: Boolean, default: false },
     },
+
+    // Personal WhatsApp number that credit-card due-date reminders are sent to.
+    // One per tenant, set by the operator from the Credit Cards section. Stored
+    // as a plain string (E.164-ish, e.g. "919812345678"); no validation beyond
+    // trimming. Null until configured — the cron skips tenants without it.
+    creditCardAlertWhatsapp: { type: String, default: null, trim: true },
   },
   { timestamps: true },
 );

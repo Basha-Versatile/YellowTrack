@@ -473,7 +473,7 @@ function PlanEditor({
   const [customComplianceGroupPerMonth, setCustomComplianceGroupPerMonth] =
     useState(String(plan?.customComplianceGroupPerMonth ?? "30"));
   const [customComplianceDocsPerGroupLimit, setCustomComplianceDocsPerGroupLimit] =
-    useState(String(plan?.customComplianceDocsPerGroupLimit ?? "10"));
+    useState(String(plan?.customComplianceDocsPerGroupLimit ?? "20"));
   const [gstPercent, setGstPercent] = useState(String(plan?.gstPercent ?? 18));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -495,7 +495,7 @@ function PlanEditor({
         perDriverPerMonth: Number(perDriverPerMonth) || 0,
         customComplianceGroupPerMonth: Number(customComplianceGroupPerMonth) || 0,
         customComplianceDocsPerGroupLimit:
-          Number(customComplianceDocsPerGroupLimit) || 10,
+          Number(customComplianceDocsPerGroupLimit) || 20,
         gstPercent: Number(gstPercent) || 0,
       };
       if (isEditing && plan) {
@@ -668,7 +668,7 @@ function PlanEditor({
                     onChange={(e) =>
                       setCustomComplianceDocsPerGroupLimit(e.target.value)
                     }
-                    placeholder="10"
+                    placeholder="20"
                     className="input font-mono"
                   />
                 </Field>

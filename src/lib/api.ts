@@ -1041,6 +1041,39 @@ export const customComplianceAPI = {
     ),
 };
 
+// ── Credit Cards ───────────────────────────────────────────────────────────
+// Manual credit-card bill tracker (no bank API). Gated behind the per-tenant
+// `creditCardTracking` feature flag. GET returns cards (sorted by next due
+// date), aggregate stats, and the tenant's WhatsApp reminder number.
+export const creditCardAPI = {
+  list: () => api.get("/credit-cards"),
+  create: (data: {
+    bankName: string;
+    last4: string;
+    cardholderName: string;
+    billDayOfMonth: number;
+    dueDayOfMonth: number;
+    currentBillAmount?: number;
+  }) => api.post("/credit-cards", data),
+  update: (
+    id: string,
+    data: Partial<{
+      bankName: string;
+      last4: string;
+      cardholderName: string;
+      billDayOfMonth: number;
+      dueDayOfMonth: number;
+      currentBillAmount: number;
+    }>,
+  ) => api.patch(`/credit-cards/${id}`, data),
+  remove: (id: string) => api.delete(`/credit-cards/${id}`),
+  pay: (id: string) => api.post(`/credit-cards/${id}/pay`),
+  history: (id: string) => api.get(`/credit-cards/${id}/history`),
+  // One reminder number per tenant. Pass "" or null to clear it.
+  updateSettings: (alertWhatsapp: string | null) =>
+    api.patch("/credit-cards/settings", { alertWhatsapp }),
+};
+
 // ── Insurance ──────────────────────────────────────────────
 export const insuranceAPI = {
   getAll: (params?: { page?: number; limit?: number; status?: string; search?: string }) =>

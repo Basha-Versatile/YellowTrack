@@ -14,7 +14,7 @@ import {
 } from "../icons/index";
 import { BsFillCarFrontFill } from "react-icons/bs";
 import { MdSpaceDashboard } from "react-icons/md";
-import { Activity, Database, FolderArchive, Lightbulb, Shield, UsersRound,
+import { Activity, CreditCard, Database, FolderArchive, Lightbulb, Shield, UsersRound,
   // Bell
 
 } from "lucide-react";
@@ -80,14 +80,13 @@ const navItems: NavItem[] = [
     perm: "compliance:read",
   },
   {
-    // Placeholder for the new section below Custom Compliance. Path TBD
-    // once the section is implemented; the entry stays hidden until a
-    // superadmin enables `customComplianceExtraSection` on the tenant.
-    icon: <FolderArchive className="h-5 w-5" />,
-    name: "Custom Compliance · Extra",
-    path: "/custom-compliance/extra",
-    perm: "compliance:read",
-    featureFlag: "customComplianceExtraSection",
+    // Manual credit-card bill tracker. Hidden until a superadmin enables
+    // `creditCardTracking` on the tenant. No `perm` — any user in the tenant
+    // sees it once the flag is on.
+    icon: <CreditCard className="h-5 w-5" />,
+    name: "Credit Cards",
+    path: "/credit-cards",
+    featureFlag: "creditCardTracking",
   },
   {
     icon: <UsersRound className="h-5 w-5" />,
@@ -379,7 +378,7 @@ const AppSidebar: React.FC = () => {
         bg-gradient-to-b from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-r border-gray-200 dark:border-gray-800/50
         ${
           expanded
-            ? "w-[280px]"
+            ? "w-[320px]"
             : "w-[80px]"
         }
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
@@ -387,32 +386,39 @@ const AppSidebar: React.FC = () => {
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Logo */}
+      {/* Logo — header section. Sidebar is 320px / 80px when expanded /
+          collapsed. Zero padding around the logo container so all the
+          visible whitespace comes only from inside the SVG itself (the
+          brand mark's own breathing room inside its 1080×1080 viewBox). */}
       <div
-        className={`px-3 flex items-center justify-center transition-all duration-300 ${
-          expanded ? "pt-2 pb-2" : "pt-4 pb-3"
+        className={`flex items-center justify-center transition-all duration-300 ${
+          expanded ? "p-0" : "px-2 pt-4 pb-3"
         }`}
       >
         <Link
           href="/dashboard"
           aria-label="Yellow Track"
+          // SVG vector source → infinitely sharp at this or any rendered
+          // size. Square container + 1:1 SVG viewBox (1080×1080) + the
+          // object-contain on the inner Image preserve the aspect ratio.
           className={`relative block flex-shrink-0 transition-all duration-300 ${
-            expanded ? "size-36" : "size-16"
+            expanded ? "size-64" : "size-16"
           }`}
         >
           <Image
             src="/images/logo/yellow-track-logo.svg"
             alt="Yellow Track"
             fill
-            sizes="144px"
+            sizes="256px"
             className="object-contain"
             priority
           />
         </Link>
       </div>
 
-      {/* Divider */}
-      <div className="mx-5 mb-4">
+      {/* Divider — zero margin below so the menu sits as close as possible
+          to the brand mark. */}
+      <div className="mx-5">
         <div className="h-px bg-gradient-to-r from-transparent via-gray-300/60 to-transparent dark:via-gray-700/50" />
       </div>
 

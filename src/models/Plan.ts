@@ -52,7 +52,7 @@ const planSchema = new Schema(
     // Billed per group per month (e.g. ₹30/group/month). Each group can
     // hold at most `customComplianceDocsPerGroupLimit` documents.
     customComplianceGroupPerMonth: { type: Number, min: 0, default: 30 },
-    customComplianceDocsPerGroupLimit: { type: Number, min: 1, max: 1000, default: 10 },
+    customComplianceDocsPerGroupLimit: { type: Number, min: 1, max: 1000, default: 20 },
 
     // GST applied on the subtotal (percentage points, e.g. 18 = 18%).
     gstPercent: { type: Number, min: 0, max: 100, default: 18 },

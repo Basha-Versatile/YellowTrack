@@ -197,7 +197,7 @@ export default function CustomComplianceGroupPage() {
           id: String(g._id ?? g.id ?? groupId),
           name: g.name ?? "Group",
           description: g.description ?? null,
-          docLimit: typeof g.docLimit === "number" ? g.docLimit : 10,
+          docLimit: typeof g.docLimit === "number" ? g.docLimit : 20,
           docCount: typeof g.docCount === "number" ? g.docCount : 0,
         });
       }

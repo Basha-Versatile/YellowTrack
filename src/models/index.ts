@@ -146,3 +146,8 @@ export {
   ALERT_CHANNELS,
   ALERT_STATUS,
 } from "./AlertLog";
+export { CreditCard, type CreditCardAttrs } from "./CreditCard";
+export {
+  CreditCardBillHistory,
+  type CreditCardBillHistoryAttrs,
+} from "./CreditCardBillHistory";

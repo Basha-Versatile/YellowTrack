@@ -49,19 +49,20 @@ function sanitiseGroupForClient<T extends Record<string, unknown>>(g: T): T {
 
 // Single resolver used by listGroups/getGroup to inject the per-tenant
 // document cap onto each group payload (so the UI doesn't need to make a
-// second call per group). Defaults to 10 when the tenant has no plan or
-// the plan predates the field.
+// second call per group). Defaults to 20 when the tenant has no plan or
+// the plan predates the field. Keep in sync with
+// quota.service.ts:DEFAULT_DOCS_PER_GROUP_LIMIT.
 async function resolveTenantDocLimit(tenantId: string): Promise<number> {
   const tenant = await Tenant.findById(tenantId).select("planId").lean();
   const planId = (tenant as { planId?: unknown } | null)?.planId;
-  if (!planId) return 10;
+  if (!planId) return 20;
   const plan = await Plan.findById(planId)
     .select("customComplianceDocsPerGroupLimit")
     .lean();
   const n = (
     plan as { customComplianceDocsPerGroupLimit?: number } | null
   )?.customComplianceDocsPerGroupLimit;
-  return typeof n === "number" && n > 0 ? n : 10;
+  return typeof n === "number" && n > 0 ? n : 20;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

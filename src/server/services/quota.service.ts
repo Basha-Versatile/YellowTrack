@@ -72,7 +72,7 @@ export async function getTenantQuotaSummary(
 // (default 10). The cap lives on the Plan so superadmin can bump it for
 // premium tiers without code changes.
 
-const DEFAULT_DOCS_PER_GROUP_LIMIT = 10;
+const DEFAULT_DOCS_PER_GROUP_LIMIT = 20;
 
 async function resolveDocsPerGroupLimit(tenantId: string): Promise<number> {
   const tenant = await Tenant.findById(tenantId).select("planId").lean();

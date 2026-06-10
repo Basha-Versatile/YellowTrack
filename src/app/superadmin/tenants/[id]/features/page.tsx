@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { superadminAPI } from "@/lib/api";
 import { ArrowLeft, ToggleLeft, ToggleRight, Flag, Info } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 type CatalogEntry = {
   key: string;
@@ -28,6 +29,13 @@ export default function SuperadminTenantFeaturesPage() {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [okMessage, setOkMessage] = useState<string | null>(null);
+  // Gate every toggle behind a centred ConfirmDialog so single mis-clicks
+  // can't flip a flag for an entire tenant.
+  const [confirmToggle, setConfirmToggle] = useState<{
+    key: string;
+    label: string;
+    nextEnabled: boolean;
+  } | null>(null);
 
   const load = useCallback(async () => {
     if (!tenantId) return;
@@ -162,7 +170,13 @@ export default function SuperadminTenantFeaturesPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => void onToggle(entry.key, !enabled)}
+                    onClick={() =>
+                      setConfirmToggle({
+                        key: entry.key,
+                        label: entry.label,
+                        nextEnabled: !enabled,
+                      })
+                    }
                     disabled={pending}
                     aria-pressed={enabled}
                     className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -184,6 +198,33 @@ export default function SuperadminTenantFeaturesPage() {
           </ul>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmToggle !== null}
+        title={
+          confirmToggle?.nextEnabled
+            ? "Are you sure you want to enable this feature for this tenant?"
+            : "Are you sure you want to disable this feature for this tenant?"
+        }
+        message={
+          confirmToggle && data
+            ? `"${confirmToggle.label}" will be ${confirmToggle.nextEnabled ? "turned on" : "turned off"} for ${data.tenant.name ?? "this tenant"} on their next login or hard refresh.`
+            : ""
+        }
+        confirmLabel={confirmToggle?.nextEnabled ? "Enable" : "Disable"}
+        cancelLabel="Cancel"
+        variant={confirmToggle?.nextEnabled ? undefined : "warning"}
+        loading={pendingKey === confirmToggle?.key}
+        onConfirm={async () => {
+          if (!confirmToggle) return;
+          const { key, nextEnabled } = confirmToggle;
+          await onToggle(key, nextEnabled);
+          setConfirmToggle(null);
+        }}
+        onCancel={() => {
+          if (pendingKey === null) setConfirmToggle(null);
+        }}
+      />
     </div>
   );
 }

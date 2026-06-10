@@ -77,13 +77,28 @@ const CATEGORY_LABELS: Record<string, string> = {
   emi: "EMI",
   invoices: "Invoices",
 };
+// Chart category colors. Premium "glow" palette — vibrant enough to read on
+// a white surface, paired with a gradient fill on the chart that fades each
+// bar/slice from its base hue to a lighter shade for a luminous finish.
 const CATEGORY_COLORS_HEX: Record<string, string> = {
   challans: "#ef4444",
   services: "#3b82f6",
   fastag: "#f59e0b",
   compliance: "#10b981",
-  emi: "#a855f7",
+  emi: "#0ea5e9",
   invoices: "#06b6d4",
+};
+
+// Lighter complements for the gradient's `gradientToColors`. Each key maps
+// to the lighter shade Apex blends toward at the top of every bar / outer
+// edge of every donut slice — that's what creates the glow.
+const CATEGORY_GLOW_HEX: Record<string, string> = {
+  challans: "#fca5a5",
+  services: "#93c5fd",
+  fastag: "#fcd34d",
+  compliance: "#6ee7b7",
+  emi: "#7dd3fc",
+  invoices: "#67e8f9",
 };
 
 // Auto-refresh cadence — dashboard re-pulls every minute in the background.
@@ -343,19 +358,34 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {/* Vehicle Compliance */}
         <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-          <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-3 flex items-center justify-between">
+          {/* Header — soft yellow → warm amber gradient. Low-opacity blend
+              gives the card a premium tint without dominating the layout.
+              Icon chip and percentage still carry the strong colour cues. */}
+          <div className="px-4 py-3 flex items-center justify-between border-b border-amber-100/70 dark:border-gray-800 bg-gradient-to-r from-yellow-50 to-amber-100/60 dark:bg-none dark:bg-white/[0.02]">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Truck className="w-4 h-4 text-white" />
+              <div className="w-9 h-9 rounded-lg bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400 flex items-center justify-center shadow-sm">
+                <Truck className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white leading-tight">Vehicle Compliance</h3>
-                <p className="text-white/80 text-[10px]">{totalVDocs} docs · {stats?.totalVehicles || 0} vehicles</p>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">Vehicle Compliance</h3>
+                <p className="text-gray-600 dark:text-gray-400 text-[10px]">{totalVDocs} docs · {stats?.totalVehicles || 0} vehicles</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-xl font-black text-white leading-none">{vcPct}%</p>
-              <p className="text-[9px] text-white/70 uppercase tracking-wider font-bold mt-0.5">Compliant</p>
+              <p
+                className={`text-2xl font-black leading-none ${
+                  totalVDocs === 0
+                    ? "text-gray-400 dark:text-gray-500"
+                    : vcPct >= 90
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : vcPct >= 70
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-red-600 dark:text-red-400"
+                }`}
+              >
+                {vcPct}%
+              </p>
+              <p className="text-[9px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-bold mt-0.5">Compliant</p>
             </div>
           </div>
 
@@ -377,19 +407,35 @@ export default function DashboardPage() {
 
         {/* Driver Compliance */}
         <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] overflow-hidden">
-          <div className="bg-gradient-to-r from-yellow-400 to-yellow-500 px-4 py-3 flex items-center justify-between">
+          {/* Soft blue-gray → slate gradient. Visually differentiates the
+              card from Vehicle Compliance without competing colour intensity.
+              Icon chip switches to neutral slate so the percentage carries
+              the only strong colour. */}
+          <div className="px-4 py-3 flex items-center justify-between border-b border-slate-200/70 dark:border-gray-800 bg-gradient-to-r from-slate-50 to-blue-100/40 dark:bg-none dark:bg-white/[0.02]">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Users className="w-4 h-4 text-white" />
+              <div className="w-9 h-9 rounded-lg bg-slate-200/70 text-slate-700 dark:bg-slate-700/30 dark:text-slate-300 flex items-center justify-center shadow-sm">
+                <Users className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white leading-tight">Driver Compliance</h3>
-                <p className="text-white/80 text-[10px]">{totalDAll} docs · {driverStats?.totalDrivers || 0} drivers</p>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">Driver Compliance</h3>
+                <p className="text-gray-600 dark:text-gray-400 text-[10px]">{totalDAll} docs · {driverStats?.totalDrivers || 0} drivers</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-xl font-black text-white leading-none">{dlPct}%</p>
-              <p className="text-[9px] text-white/70 uppercase tracking-wider font-bold mt-0.5">Compliant</p>
+              <p
+                className={`text-2xl font-black leading-none ${
+                  totalDAll === 0
+                    ? "text-gray-400 dark:text-gray-500"
+                    : dlPct >= 90
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : dlPct >= 70
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-red-600 dark:text-red-400"
+                }`}
+              >
+                {dlPct}%
+              </p>
+              <p className="text-[9px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-bold mt-0.5">Compliant</p>
             </div>
           </div>
 
@@ -507,6 +553,11 @@ export default function DashboardPage() {
         const donutLabels = activeCategories.map(
           ([k]) => CATEGORY_LABELS[k] || k,
         );
+        // Lighter glow-stop per active category — index-aligned to the
+        // base colors so Apex can map gradient → colors 1:1.
+        const glowStops = activeCategories.map(
+          ([k]) => CATEGORY_GLOW_HEX[k] || "#cbd5e1",
+        );
         const donutColors = activeCategories.map(
           ([k]) => CATEGORY_COLORS_HEX[k] || "#6b7280",
         );
@@ -515,8 +566,8 @@ export default function DashboardPage() {
             {/* Bar Chart */}
             <div className="lg:col-span-2 rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-4">
               <h3 className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                  <BarChart3 className="w-3 h-3 text-white" />
+                <span className="w-6 h-6 rounded-md bg-yellow-100 text-yellow-600 dark:bg-yellow-500/15 dark:text-yellow-400 flex items-center justify-center">
+                  <BarChart3 className="w-3 h-3" />
                 </span>
                 Monthly Expense Trend
               </h3>
@@ -542,6 +593,21 @@ export default function DashboardPage() {
                   },
                   plotOptions: { bar: { borderRadius: 6, columnWidth: "50%" } },
                   legend: { position: "top", fontSize: "11px", fontWeight: 600 },
+                  // Vertical gradient on each bar — base hue at the bottom
+                  // fades up into the lighter glow-stop for a luminous finish.
+                  fill: {
+                    type: "gradient",
+                    gradient: {
+                      shade: "light",
+                      type: "vertical",
+                      shadeIntensity: 0.45,
+                      gradientToColors: glowStops,
+                      inverseColors: false,
+                      opacityFrom: 0.95,
+                      opacityTo: 0.85,
+                      stops: [0, 100],
+                    },
+                  },
                   tooltip: {
                     y: {
                       formatter: (v: number) => formatINRFull(v),
@@ -558,8 +624,8 @@ export default function DashboardPage() {
             {/* Donut Chart */}
             <div className="rounded-xl border border-gray-200/80 bg-white dark:border-gray-800 dark:bg-white/[0.02] p-4">
               <h3 className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-md bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-                  <PieIcon className="w-3 h-3 text-white" />
+                <span className="w-6 h-6 rounded-md bg-yellow-100 text-yellow-600 dark:bg-yellow-500/15 dark:text-yellow-400 flex items-center justify-center">
+                  <PieIcon className="w-3 h-3" />
                 </span>
                 Category Split
               </h3>
@@ -599,6 +665,21 @@ export default function DashboardPage() {
                   },
                   dataLabels: { enabled: false },
                   stroke: { width: 3, colors: ["#fff"] },
+                  // Same luminous gradient as the bar chart so the two
+                  // visualisations feel like a matched pair.
+                  fill: {
+                    type: "gradient",
+                    gradient: {
+                      shade: "light",
+                      type: "horizontal",
+                      shadeIntensity: 0.45,
+                      gradientToColors: glowStops,
+                      inverseColors: false,
+                      opacityFrom: 0.95,
+                      opacityTo: 0.85,
+                      stops: [0, 100],
+                    },
+                  },
                 }}
                 series={donutSeries}
               />
@@ -878,26 +959,34 @@ function StatChip({
       iconBg: "bg-yellow-100 text-yellow-600 dark:bg-yellow-500/15 dark:text-yellow-400",
       value: "text-gray-900 dark:text-white",
       ring: "hover:border-yellow-300 dark:hover:border-yellow-500/30",
+      surface:
+        "bg-gradient-to-br from-yellow-50/70 to-amber-50/40 dark:bg-white/[0.02] dark:bg-none",
     },
     indigo: {
-      iconBg: "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400",
+      iconBg: "bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
       value: "text-gray-900 dark:text-white",
-      ring: "hover:border-indigo-300 dark:hover:border-indigo-500/30",
+      ring: "hover:border-blue-300 dark:hover:border-blue-500/30",
+      surface:
+        "bg-gradient-to-br from-blue-50/70 to-sky-50/40 dark:bg-white/[0.02] dark:bg-none",
     },
     red: {
       iconBg: "bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400",
       value: "text-red-600 dark:text-red-400",
       ring: "hover:border-red-300 dark:hover:border-red-500/30",
+      surface:
+        "bg-gradient-to-br from-red-50/70 to-rose-50/40 dark:bg-white/[0.02] dark:bg-none",
     },
     emerald: {
       iconBg: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400",
       value: "text-emerald-600 dark:text-emerald-400",
       ring: "hover:border-emerald-300 dark:hover:border-emerald-500/30",
+      surface:
+        "bg-gradient-to-br from-emerald-50/70 to-green-50/40 dark:bg-white/[0.02] dark:bg-none",
     },
   }[tint];
 
   const content = (
-    <div className={`rounded-xl border border-gray-200/80 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-white/[0.02] transition-all ${palette.ring} ${href ? "cursor-pointer hover:shadow-md" : ""}`}>
+    <div className={`rounded-xl border border-gray-200/80 px-3 py-2.5 dark:border-gray-800 transition-all ${palette.surface} ${palette.ring} ${href ? "cursor-pointer hover:shadow-md" : ""}`}>
       <div className="flex items-center gap-2 mb-1">
         <span className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${palette.iconBg}`}>
           <Icon className="w-3.5 h-3.5" strokeWidth={2} />

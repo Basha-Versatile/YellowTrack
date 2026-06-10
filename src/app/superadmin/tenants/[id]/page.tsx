@@ -29,6 +29,9 @@ import {
   IdCard,
   Users,
   ShieldCheck,
+  Flag,
+  ToggleLeft,
+  ToggleRight,
   Infinity as InfinityIcon,
   UserCheck,
   KeyRound,
@@ -134,15 +137,38 @@ export default function TenantDetailPage() {
     message: string;
   } | null>(null);
 
+  // Feature flags — inline on this page so the superadmin doesn't have to
+  // bounce to /features. Catalog + current values come from the existing
+  // GET /api/superadmin/tenants/[id]/features endpoint; toggles use the
+  // same PATCH endpoint.
+  type FeatureCatalogEntry = {
+    key: string;
+    label: string;
+    description: string;
+  };
+  const [featureCatalog, setFeatureCatalog] = useState<FeatureCatalogEntry[]>([]);
+  const [featureValues, setFeatureValues] = useState<Record<string, boolean>>({});
+  const [pendingFeatureKey, setPendingFeatureKey] = useState<string | null>(null);
+  // Gate the actual toggle behind a centred ConfirmDialog so the superadmin
+  // can't accidentally flip a flag with one stray click.
+  const [confirmToggle, setConfirmToggle] = useState<{
+    key: string;
+    label: string;
+    nextEnabled: boolean;
+  } | null>(null);
+
   const load = async () => {
     setLoading(true);
     try {
-      const [tRes, pRes, qRes, uRes, rRes] = await Promise.all([
+      const [tRes, pRes, qRes, uRes, rRes, fRes] = await Promise.all([
         superadminAPI.getTenant(params.id),
         superadminAPI.listPlans(),
         superadminAPI.getTenantQuota(params.id),
         superadminAPI.getTenantUsers(params.id),
         superadminAPI.getTenantRoles(params.id),
+        // Best-effort — if the features endpoint hiccups we still render the
+        // rest of the page and the flags section just shows nothing.
+        superadminAPI.getTenantFeatures(params.id).catch(() => null),
       ]);
       setTenant(tRes.data.data as Tenant);
       const list = (pRes.data.data as Array<Plan & { _id?: string }>).map(
@@ -152,6 +178,14 @@ export default function TenantDetailPage() {
       setQuota((qRes.data.data as QuotaUsage[]) ?? []);
       setTenantUsers((uRes.data.data as TenantUser[]) ?? []);
       setTenantRoles((rRes.data.data as TenantRole[]) ?? []);
+      if (fRes) {
+        const fp = fRes.data.data as {
+          features: Record<string, boolean>;
+          catalog: FeatureCatalogEntry[];
+        };
+        setFeatureCatalog(fp.catalog ?? []);
+        setFeatureValues(fp.features ?? {});
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -174,6 +208,28 @@ export default function TenantDetailPage() {
     () => (tenant?.planId ? plans.find((p) => p.id === String(tenant.planId)) : null),
     [tenant, plans],
   );
+
+  const onToggleFeature = async (key: string, nextEnabled: boolean) => {
+    if (!params.id) return;
+    setPendingFeatureKey(key);
+    try {
+      await superadminAPI.setTenantFeature(params.id, key, nextEnabled);
+      setFeatureValues((prev) => ({ ...prev, [key]: nextEnabled }));
+      const label =
+        featureCatalog.find((c) => c.key === key)?.label ?? key;
+      setToast({
+        type: "success",
+        message: `"${label}" is now ${nextEnabled ? "enabled" : "disabled"} for this tenant.`,
+      });
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Failed to update flag";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setPendingFeatureKey(null);
+    }
+  };
 
   const onSuspendToggle = async () => {
     if (!tenant) return;
@@ -390,9 +446,12 @@ export default function TenantDetailPage() {
         )}
 
       {/* Subscription + General + Danger */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Stack each settings block full-width so the Subscription card,
+          Feature flags card, and Danger zone read top-to-bottom rather
+          than competing for horizontal real estate. */}
+      <div className="space-y-6">
         {/* Subscription */}
-        <div className="lg:col-span-2 rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+        <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-yellow-500" />
@@ -539,6 +598,95 @@ export default function TenantDetailPage() {
           </div>
         </div>
 
+        {/* Feature flags + Danger zone share a 2-up row on desktop; they
+            stack vertically below the lg breakpoint. items-stretch (the grid
+            default) ensures both cards match height for a balanced row. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Feature flags — inline toggle row per registered flag.
+            Catalog is loaded alongside the rest of the tenant data so the
+            superadmin can flip a flag without leaving this page. */}
+        <div className="rounded-2xl border border-gray-200/80 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.02]">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <Flag className="w-4 h-4 text-yellow-500" />
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Feature flags
+              </h2>
+            </div>
+            <Link
+              href={`/superadmin/tenants/${params.id}/features`}
+              className="text-[11px] font-semibold text-yellow-700 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-300"
+            >
+              Open full page →
+            </Link>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            Per-tenant toggles. Disabled by default — propagates to the
+            tenant&rsquo;s next login (or a hard refresh).
+          </p>
+          {featureCatalog.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">
+              No feature flags registered yet.
+            </p>
+          ) : (
+            <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+              {featureCatalog.map((entry) => {
+                const enabled = Boolean(featureValues[entry.key]);
+                const pending = pendingFeatureKey === entry.key;
+                return (
+                  <li
+                    key={entry.key}
+                    className="py-3 first:pt-0 last:pb-0 flex items-start justify-between gap-4"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">
+                          {entry.label}
+                        </p>
+                        <code className="text-[10px] font-mono text-gray-400 bg-gray-100 dark:bg-gray-800 dark:text-gray-500 rounded px-1.5 py-0.5">
+                          {entry.key}
+                        </code>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-snug">
+                        {entry.description}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setConfirmToggle({
+                          key: entry.key,
+                          label: entry.label,
+                          nextEnabled: !enabled,
+                        })
+                      }
+                      disabled={pending}
+                      aria-pressed={enabled}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${
+                        enabled
+                          ? "bg-emerald-500 text-white shadow shadow-emerald-500/20 hover:shadow-emerald-500/40"
+                          : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                      }`}
+                    >
+                      {enabled ? (
+                        <ToggleRight className="w-3.5 h-3.5" />
+                      ) : (
+                        <ToggleLeft className="w-3.5 h-3.5" />
+                      )}
+                      {pending
+                        ? "Saving…"
+                        : enabled
+                          ? "Enabled"
+                          : "Disabled"}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
         {/* Danger zone */}
         <div className="rounded-2xl border border-red-200/80 bg-gradient-to-br from-red-50/60 to-white p-6 dark:border-red-500/20 dark:from-red-500/[0.06] dark:to-gray-900">
           <div className="flex items-center gap-2 mb-3">
@@ -559,11 +707,17 @@ export default function TenantDetailPage() {
               </span>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div
+              // Medium-sized buttons sized to their content, sitting side by
+              // side on wider viewports and wrapping on narrow ones. Amber
+              // stays for the reversible suspend action; red for the
+              // destructive delete.
+              className="flex flex-wrap items-center gap-2.5"
+            >
               <button
                 onClick={onSuspendToggle}
                 disabled={busy}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-white border-2 border-amber-300 hover:bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700 disabled:opacity-50 transition-colors dark:bg-gray-900 dark:border-amber-500/30 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border-2 border-amber-300 hover:bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-700 disabled:opacity-50 transition-colors dark:bg-gray-900 dark:border-amber-500/30 dark:text-amber-400 dark:hover:bg-amber-500/10"
               >
                 {isActive ? (
                   <>
@@ -580,13 +734,15 @@ export default function TenantDetailPage() {
               <button
                 onClick={() => setPendingAction("delete")}
                 disabled={busy}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50 transition-colors shadow-md shadow-red-500/20"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-colors shadow-md shadow-red-500/20"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Soft-delete tenant
               </button>
             </div>
           )}
+        </div>
+        {/* /Feature flags + Danger zone 2-up row */}
         </div>
       </div>
 
@@ -669,6 +825,33 @@ export default function TenantDetailPage() {
         loading={busy}
         onConfirm={runCancel}
         onCancel={() => setPendingAction(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmToggle !== null}
+        title={
+          confirmToggle?.nextEnabled
+            ? "Are you sure you want to enable this feature for this tenant?"
+            : "Are you sure you want to disable this feature for this tenant?"
+        }
+        message={
+          confirmToggle
+            ? `"${confirmToggle.label}" will be ${confirmToggle.nextEnabled ? "turned on" : "turned off"} for ${tenant.name ?? "this tenant"} on their next login or hard refresh.`
+            : ""
+        }
+        confirmLabel={confirmToggle?.nextEnabled ? "Enable" : "Disable"}
+        cancelLabel="Cancel"
+        variant={confirmToggle?.nextEnabled ? undefined : "warning"}
+        loading={pendingFeatureKey === confirmToggle?.key}
+        onConfirm={async () => {
+          if (!confirmToggle) return;
+          const { key, nextEnabled } = confirmToggle;
+          await onToggleFeature(key, nextEnabled);
+          setConfirmToggle(null);
+        }}
+        onCancel={() => {
+          if (pendingFeatureKey === null) setConfirmToggle(null);
+        }}
       />
 
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
