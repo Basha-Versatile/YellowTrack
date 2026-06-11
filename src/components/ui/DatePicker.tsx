@@ -10,6 +10,10 @@ interface DatePickerProps {
   className?: string;
   minDate?: string;
   maxDate?: string;
+  // When set, a small "×" appears once a date is chosen so the user can clear
+  // the value (flatpickr offers no clear affordance and the input is
+  // read-only). Off by default to keep required date fields uncleared.
+  clearable?: boolean;
 }
 
 // flatpickr parses string inputs using `dateFormat` by default. Our values
@@ -32,6 +36,7 @@ export default function DatePicker({
   className = "",
   minDate,
   maxDate,
+  clearable = false,
 }: DatePickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const fpRef = useRef<flatpickr.Instance | null>(null);
@@ -80,6 +85,8 @@ export default function DatePicker({
     fpRef.current?.set("maxDate", isoToLocalDate(maxDate) || undefined);
   }, [maxDate]);
 
+  const showClear = clearable && Boolean(value);
+
   return (
     <div className="relative">
       <input
@@ -89,9 +96,30 @@ export default function DatePicker({
         readOnly
         className={`w-full h-11 rounded-xl border border-gray-200 bg-white px-4 pr-10 text-sm text-gray-900 placeholder:text-gray-400 focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white cursor-pointer ${className}`}
       />
-      <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-      </svg>
+      {showClear ? (
+        <button
+          type="button"
+          // stopPropagation so the click clears the value rather than opening
+          // the flatpickr calendar bound to the input.
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            fpRef.current?.clear();
+            onChange("");
+          }}
+          aria-label="Clear date"
+          title="Clear date"
+          className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-700 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      ) : (
+        <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+        </svg>
+      )}
     </div>
   );
 }

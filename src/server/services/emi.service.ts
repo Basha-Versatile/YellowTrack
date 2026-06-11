@@ -816,6 +816,100 @@ export async function markPaymentUnpaid(
   return updated;
 }
 
+/**
+ * Edit an already-PAID installment in place — adjust the paid date, amount,
+ * late fee, or reference/proof fields without first reverting it. The
+ * installment stays PAID (the plan's paidInstallments counter and any
+ * auto-close state are left untouched), and the auto-linked Expense row is
+ * kept in lock-step so spend reports stay accurate.
+ */
+export async function updatePaidPayment(
+  ctx: ScopedContext,
+  paymentId: string,
+  input: {
+    paidDate?: string | Date;
+    paidAmount?: number;
+    lateFee?: number;
+    transactionRef?: string | null;
+    proofUrl?: string | null;
+    notes?: string | null;
+  },
+) {
+  const payment = await emiRepo.findPaymentById(ctx, paymentId);
+  if (!payment) throw new NotFoundError("EMI payment not found");
+  if (payment.status !== "PAID") {
+    throw new ConflictError("Only a paid installment can be edited");
+  }
+
+  const plan = await emiRepo.findPlanById(ctx, String(payment.emiPlanId));
+  if (!plan) throw new NotFoundError("Parent EMI plan not found");
+
+  // Fall back to the row's current values for any field the caller omits, so
+  // a partial edit (e.g. just the paid date) leaves everything else intact.
+  const paidDate =
+    input.paidDate !== undefined
+      ? new Date(input.paidDate)
+      : new Date(payment.paidDate as unknown as string | Date);
+  const paidAmount = input.paidAmount ?? payment.paidAmount ?? payment.amount;
+  if (paidAmount < 0) throw new BadRequestError("paidAmount cannot be negative");
+  const lateFee = input.lateFee ?? payment.lateFee ?? 0;
+  if (lateFee < 0) throw new BadRequestError("lateFee cannot be negative");
+  const transactionRef =
+    input.transactionRef !== undefined
+      ? input.transactionRef
+      : (payment.transactionRef ?? null);
+  const proofUrl =
+    input.proofUrl !== undefined ? input.proofUrl : (payment.proofUrl ?? null);
+  const notes =
+    input.notes !== undefined ? input.notes : (payment.notes ?? null);
+
+  const description =
+    notes ?? `EMI installment ${payment.installmentNumber} of ${plan.totalInstallments}`;
+
+  // Sync the linked Expense. Update in place when one exists; recreate for
+  // legacy paid rows that predate the auto-link so the spend still shows.
+  let expenseId = payment.expenseId ?? null;
+  if (expenseId) {
+    await Expense.updateOne(
+      tenantFilter(ctx, { _id: expenseId }),
+      {
+        $set: {
+          amount: paidAmount,
+          handlingCharges: lateFee,
+          expenseDate: paidDate,
+          description,
+          proofUrl,
+          referenceId: transactionRef,
+        },
+      },
+    );
+  } else {
+    const expense = await Expense.create({
+      ...tenantStamp(ctx),
+      vehicleId: payment.vehicleId,
+      category: "EMI",
+      title: `EMI #${payment.installmentNumber} — ${plan.lenderName}`,
+      amount: paidAmount,
+      handlingCharges: lateFee,
+      expenseDate: paidDate,
+      description,
+      proofUrl,
+      referenceId: transactionRef,
+    });
+    expenseId = expense._id;
+  }
+
+  return emiRepo.updatePayment(ctx, paymentId, {
+    paidDate,
+    paidAmount,
+    lateFee,
+    transactionRef,
+    proofUrl,
+    notes,
+    expenseId,
+  });
+}
+
 // ── Hub / summary ───────────────────────────────────────────────────────────
 
 export async function getEmiHub(

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { emiAPI } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/modal";
+import DatePicker from "@/components/ui/DatePicker";
 import {
   Banknote,
   Plus,
@@ -120,6 +122,12 @@ export default function VehicleEmiPanel({
   const [unpaidLoading, setUnpaidLoading] = useState(false);
   const [pendingBulkPaid, setPendingBulkPaid] = useState(false);
   const [bulkPaidLoading, setBulkPaidLoading] = useState(false);
+  // Edit-a-paid-installment modal. Lets the user correct the paid date,
+  // amount, or late fee after marking paid — previously the only option was
+  // to revert ("Mark unpaid") and re-pay, which always reset to today.
+  const [editingPaid, setEditingPaid] = useState<EmiPayment | null>(null);
+  const [editPaidForm, setEditPaidForm] = useState({ paidDate: "", paidAmount: "", lateFee: "" });
+  const [savingPaidEdit, setSavingPaidEdit] = useState(false);
   // Close-plan two-step gate. Step 1 is a warning + "Send code" button;
   // step 2 is the OTP entry. Mirrors the doc-type / vehicle deletion flows.
   const [closePromptOpen, setClosePromptOpen] = useState(false);
@@ -312,6 +320,56 @@ export default function VehicleEmiPanel({
       toast.error("Could not revert", msg);
     } finally {
       setUnpaidLoading(false);
+    }
+  };
+
+  const openEditPaid = (payment: EmiPayment) => {
+    setEditPaidForm({
+      paidDate: payment.paidDate
+        ? new Date(payment.paidDate).toISOString().slice(0, 10)
+        : "",
+      paidAmount: String(payment.paidAmount ?? payment.amount),
+      lateFee: String(payment.lateFee ?? 0),
+    });
+    setEditingPaid(payment);
+  };
+
+  const runUpdatePaid = async () => {
+    if (!activePlan || !editingPaid) return;
+    const amount = Number(editPaidForm.paidAmount);
+    const fee = Number(editPaidForm.lateFee || 0);
+    if (!editPaidForm.paidDate) {
+      toast.error("Date required", "Pick the date this installment was paid");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error("Invalid amount", "Paid amount must be zero or positive");
+      return;
+    }
+    if (!Number.isFinite(fee) || fee < 0) {
+      toast.error("Invalid late fee", "Late fee must be zero or positive");
+      return;
+    }
+    setSavingPaidEdit(true);
+    try {
+      await emiAPI.updatePaidPayment(activePlan.id, editingPaid.id, {
+        paidDate: new Date(editPaidForm.paidDate).toISOString(),
+        paidAmount: amount,
+        lateFee: fee,
+      });
+      toast.success(
+        "Installment updated",
+        `Installment #${editingPaid.installmentNumber} saved`,
+      );
+      setEditingPaid(null);
+      await loadPlans();
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Failed to update installment";
+      toast.error("Could not update", msg);
+    } finally {
+      setSavingPaidEdit(false);
     }
   };
 
@@ -641,14 +699,24 @@ export default function VehicleEmiPanel({
                       </td>
                       <td className="px-4 py-2 text-right">
                         {p.status === "PAID" ? (
-                          <button
-                            type="button"
-                            onClick={() => setPendingUnpaid(p)}
-                            className="text-[10px] font-semibold text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 inline-flex items-center gap-1 transition-colors"
-                            title="Revert this installment back to scheduled"
-                          >
-                            <span className="text-emerald-500">✓</span> Mark unpaid
-                          </button>
+                          <div className="inline-flex items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => openEditPaid(p)}
+                              className="text-[10px] font-semibold text-gray-500 hover:text-yellow-700 dark:text-gray-400 dark:hover:text-yellow-400 inline-flex items-center gap-1 transition-colors"
+                              title="Edit the paid date, amount, or late fee"
+                            >
+                              <Pencil className="w-3 h-3" /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingUnpaid(p)}
+                              className="text-[10px] font-semibold text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 inline-flex items-center gap-1 transition-colors"
+                              title="Revert this installment back to scheduled"
+                            >
+                              <span className="text-emerald-500">✓</span> Mark unpaid
+                            </button>
+                          </div>
                         ) : p.status === "SKIPPED" ? (
                           <span className="text-[10px] text-gray-400">—</span>
                         ) : activePlan.status !== "ACTIVE" ? (
@@ -755,6 +823,92 @@ export default function VehicleEmiPanel({
         onConfirm={runMarkAllPaidTillToday}
         onCancel={() => setPendingBulkPaid(false)}
       />
+
+      {/* Edit a paid installment — adjust date / amount / late fee in place.
+          Keeps the row PAID and re-syncs the linked expense server-side. */}
+      <Modal
+        isOpen={editingPaid !== null}
+        onClose={() => !savingPaidEdit && setEditingPaid(null)}
+        className="max-w-md"
+      >
+        {editingPaid && (
+          <div className="p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+              Edit installment #{editingPaid.installmentNumber}
+            </h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Update the paid details. The linked expense entry is adjusted to match.
+            </p>
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5">
+                  Paid on
+                </label>
+                <DatePicker
+                  value={editPaidForm.paidDate}
+                  onChange={(v) => setEditPaidForm((f) => ({ ...f, paidDate: v }))}
+                  placeholder="Pick a date"
+                  maxDate={new Date().toISOString().slice(0, 10)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5">
+                    Paid amount (₹)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={editPaidForm.paidAmount}
+                    onChange={(e) =>
+                      setEditPaidForm((f) => ({
+                        ...f,
+                        paidAmount: e.target.value.replace(/[^\d.]/g, ""),
+                      }))
+                    }
+                    className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5">
+                    Late fee (₹)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={editPaidForm.lateFee}
+                    onChange={(e) =>
+                      setEditPaidForm((f) => ({
+                        ...f,
+                        lateFee: e.target.value.replace(/[^\d.]/g, ""),
+                      }))
+                    }
+                    className="w-full h-11 rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/10 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingPaid(null)}
+                disabled={savingPaidEdit}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={runUpdatePaid}
+                disabled={savingPaidEdit}
+                className="rounded-xl px-4 py-2 text-sm font-bold text-white bg-gradient-to-r from-yellow-400 to-yellow-500 shadow shadow-yellow-500/25 hover:shadow-yellow-500/40 disabled:opacity-50 transition-all"
+              >
+                {savingPaidEdit ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {closePromptOpen && activePlan && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">

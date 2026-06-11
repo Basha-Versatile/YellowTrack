@@ -363,6 +363,19 @@ export default function VehicleDetailPage() {
       toast.error("Missing fields", "Buyer name, phone and sale date are required");
       return;
     }
+    // Sale amount is optional, but when entered it must be a non-negative
+    // number. Validate up front so the user gets a clear message instead of
+    // the server's generic 400.
+    if (saleForm.soldPrice.trim()) {
+      const price = Number(saleForm.soldPrice);
+      if (!Number.isFinite(price) || price < 0) {
+        toast.error(
+          "Invalid sale amount",
+          "Sale amount can't be negative — enter 0 or a positive value.",
+        );
+        return;
+      }
+    }
     setSavingSale(true);
     try {
       const fd = new FormData();
@@ -379,8 +392,10 @@ export default function VehicleDetailPage() {
       toast.success(vehicle.status === "SOLD" ? "Sale Updated" : "Vehicle Sold", "Sale details saved");
       setShowSellModal(false);
       fetchVehicle();
-    } catch {
-      toast.error("Save Failed", "Could not save sale details");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message;
+      toast.error("Save Failed", msg || "Could not save sale details");
     } finally {
       setSavingSale(false);
     }
@@ -3603,7 +3618,8 @@ export default function VehicleDetailPage() {
               </div>
               <div>
                 <label className="mb-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sold Price (&#8377;) <span className="text-gray-400 normal-case">(optional)</span></label>
-                <input type="number" min="0" value={saleForm.soldPrice} onChange={(e) => setSaleForm({ ...saleForm, soldPrice: e.target.value })}
+                <input type="number" min="0" step="any" inputMode="decimal" value={saleForm.soldPrice}
+                  onChange={(e) => setSaleForm({ ...saleForm, soldPrice: e.target.value.replace(/[^\d.]/g, "") })}
                   className="w-full h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white" placeholder="0" />
               </div>
               <div>

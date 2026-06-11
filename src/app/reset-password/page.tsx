@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { authAPI } from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const toast = useToast();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -28,6 +30,12 @@ export default function ResetPasswordPage() {
     setSubmitting(true);
     try {
       await authAPI.resetPassword(newPassword, confirmPassword);
+      // Fire before navigating — the ToastProvider lives in the root layout,
+      // so the toast survives the client-side replace into /dashboard.
+      toast.success(
+        "Password Updated Successfully",
+        "Your new password is now active.",
+      );
       router.replace("/dashboard");
       router.refresh();
     } catch (err) {

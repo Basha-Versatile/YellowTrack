@@ -578,7 +578,10 @@ export const vehicleAPI = {
   // / Upcoming / Critical / Pending Fines). Server-side aggregation.
   getFleetSummary: (lifecycle?: "ACTIVE" | "SOLD") =>
     api.get("/vehicles/summary", {
-      params: lifecycle === "SOLD" ? { lifecycle } : undefined,
+      // Send the lifecycle whenever one is given (ACTIVE or SOLD) so the
+      // stat-card totals scope to the same set the list shows. Omitting it
+      // for ACTIVE used to count active + sold together.
+      params: lifecycle ? { lifecycle } : undefined,
     }),
   // ── Customized export ─────────────────────────────────────────
   // `listExportFields` returns the catalog of every selectable column
@@ -1304,6 +1307,24 @@ export const emiAPI = {
   markUnpaid: (planId: string, paymentId: string) =>
     api.post(`/emi/${planId}/payments/${paymentId}`, {
       action: "mark-unpaid",
+    }),
+  // Edit an installment that's already PAID without reverting it. Every
+  // field is optional — only what's passed is changed.
+  updatePaidPayment: (
+    planId: string,
+    paymentId: string,
+    data: {
+      paidDate?: string;
+      paidAmount?: number;
+      lateFee?: number;
+      transactionRef?: string | null;
+      proofUrl?: string | null;
+      notes?: string | null;
+    },
+  ) =>
+    api.post(`/emi/${planId}/payments/${paymentId}`, {
+      action: "update-paid",
+      ...data,
     }),
   markAllPaidUntil: (planId: string, untilDate?: string) =>
     api.post(`/emi/${planId}`, {

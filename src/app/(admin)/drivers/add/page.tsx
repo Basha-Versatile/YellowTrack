@@ -24,6 +24,13 @@ const INDIAN_STATES = [
   "Andaman & Nicobar Islands", "Chandigarh", "Dadra & Nagar Haveli and Daman & Diu", "Delhi", "Jammu & Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
 ];
 
+// Local-midnight today as ISO YYYY-MM-DD — used to cap the DOB picker so a
+// future date can't be selected. Computed per render to stay current.
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const AUTO_STEPS = [
   { title: "DL Verification", desc: "License verified from Sarathi/Parivahan database" },
   { title: "Driver Profile", desc: "Name, phone, vehicle class auto-fetched" },
@@ -187,6 +194,7 @@ export default function AddDriverPage() {
                     value={autoDob}
                     onChange={setAutoDob}
                     placeholder="Select date of birth"
+                    maxDate={todayISO()}
                   />
                   <p className="mt-1.5 text-[11px] text-gray-400">DOB is required to verify the license against the Sarathi / Surepass database.</p>
                   <button type="submit" disabled={autoLoading || !!success}

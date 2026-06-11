@@ -111,9 +111,14 @@ export async function fetchDrivingLicense(
         );
       }
       if (status === 401 || status === 403) {
+        // The upstream rejected OUR credentials (bad / expired / unauthorized
+        // DL API token). That's a provider/config problem, not an internal
+        // fault of this app — returning 500 made the Add Driver flow show a
+        // generic "Internal Server Error". Surface a clear 502 instead so the
+        // operator gets an actionable message.
         throw new AppError(
-          "DL lookup authentication failed — contact admin",
-          500,
+          `Licence verification service rejected our request (${upstreamMsg}). Please ask an administrator to check the DL API token.`,
+          502,
         );
       }
       if (status === 429) {

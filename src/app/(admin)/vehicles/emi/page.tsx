@@ -2201,16 +2201,15 @@ function CreateEmiModal({
                   />
                 </Field>
                 <Field label="Start date" required>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                    <input
-                      className="input pl-8"
-                      type="date"
-                      value={form.startDate}
-                      onChange={(e) => set("startDate", e.target.value)}
-                      required
-                    />
-                  </div>
+                  {/* Flatpickr DatePicker (same as the downpayment field
+                      below). Replaces a native <input type="date"> whose
+                      browser calendar indicator overlapped the overlaid icon
+                      and the value text. */}
+                  <DatePicker
+                    value={form.startDate}
+                    onChange={(v) => set("startDate", v)}
+                    placeholder="Pick a date"
+                  />
                 </Field>
                 <Field label="Due day of month" required>
                   <input

@@ -122,7 +122,10 @@ export default function VehiclesPage() {
         status: (opts?.overrideStatus ?? filterRef.current) !== "ALL" ? (opts?.overrideStatus ?? filterRef.current) : undefined,
         groupId: (opts?.overrideGroup ?? groupRef.current) !== "ALL" ? (opts?.overrideGroup ?? groupRef.current) : undefined,
         vehicleUsage: usage !== "ALL" ? usage : undefined,
-        lifecycle: lifecycle === "SOLD" ? "SOLD" : undefined,
+        // "All Vehicles" means the active fleet — sold vehicles live on the
+        // Sold tab. Requesting ACTIVE here keeps sold rows (and the count)
+        // out of the default list instead of mixing both lifecycles.
+        lifecycle: lifecycle === "SOLD" ? "SOLD" : "ACTIVE",
         brand: brandRef.current || undefined,
       });
       setVehicles(res.data.data.vehicles);
@@ -136,7 +139,8 @@ export default function VehiclesPage() {
   const fetchFleetStats = async (lifecycle: "ALL" | "SOLD") => {
     try {
       const res = await vehicleAPI.getFleetSummary(
-        lifecycle === "SOLD" ? "SOLD" : undefined,
+        // Match the list: "All Vehicles" → active fleet only, "Sold" → sold.
+        lifecycle === "SOLD" ? "SOLD" : "ACTIVE",
       );
       const data = res.data?.data as
         | {
@@ -804,6 +808,8 @@ export default function VehiclesPage() {
       <ExportVehiclesModal
         isOpen={exportOpen}
         onClose={() => setExportOpen(false)}
+        filteredCount={pagination.total}
+        fleetCount={fleetStats.total}
         filters={{
           lifecycle: lifecycleTab === "SOLD" ? "SOLD" : undefined,
           groupId: groupFilter !== "ALL" ? groupFilter : undefined,

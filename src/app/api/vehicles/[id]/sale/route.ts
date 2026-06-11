@@ -154,6 +154,13 @@ export const DELETE = withRoute<{ id: string }>(
       label = (v as { registrationNumber?: string } | null)?.registrationNumber ?? params.id;
       priorStatus = (v as { status?: string } | null)?.status ?? null;
     } catch { /* ignore */ }
+    // Snapshot the sale row BEFORE deleting so a revert can rebuild it. Without
+    // this, reverting the cancellation restored the vehicle's SOLD status but
+    // left no VehicleSale record — and the detail page gates the Edit/Cancel
+    // Sale actions on `status === "SOLD" && vehicle.sale`, so they vanished.
+    const saleSnap = (await VehicleSale.findOne(
+      tenantFilter(ctx, { vehicleId: params.id }),
+    ).lean()) as Record<string, unknown> | null;
     await VehicleSale.deleteOne(tenantFilter(ctx, { vehicleId: params.id }));
     await vehicleRepo.update(ctx, params.id, { status: "ACTIVE" });
     await logFromRequest(req, ctx, session, {
@@ -162,10 +169,11 @@ export const DELETE = withRoute<{ id: string }>(
       entityId: params.id,
       entityLabel: label,
       summary: `Cancelled sale of ${label}`,
-      // Revert support — restoring the vehicle's prior SOLD status. The
-      // deleted VehicleSale row isn't rebuilt; user re-records the sale.
+      // Revert restores the prior SOLD status AND re-creates the VehicleSale
+      // row from childSnapshots so the sale details (and their actions) return.
       revertable: priorStatus === "SOLD",
       beforeSnapshot: priorStatus ? { status: priorStatus } : null,
+      childSnapshots: saleSnap ? { VehicleSale: [saleSnap] } : null,
     });
     return success(null, "Sale cancelled — vehicle is active again");
   },

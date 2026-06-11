@@ -17,6 +17,9 @@ interface ServiceRecord {
   id: string; title: string; description: string | null; serviceDate: string; odometerKm: number | null;
   totalCost: number; receiptUrls: string[]; parts: ServicePart[]; nextDueDate: string | null;
   nextDueKm: number | null; status: string;
+  // "EXPENSE" rows are SERVICE-category expenses surfaced here; they're
+  // managed in the Expenses module, so deletes route to that endpoint.
+  source?: "SERVICE" | "EXPENSE";
 }
 interface Vehicle {
   id: string; registrationNumber: string; ownerName?: string | null; make: string; model: string; profileImage: string | null;
@@ -52,7 +55,13 @@ export default function VehicleServiceDetailPage() {
     if (!pendingDelete) return;
     setDeleting(true);
     try {
-      await vehicleAPI.deleteService(vehicleId, pendingDelete.id);
+      // Expense-sourced rows carry an `exp_<id>` key and live in the Expense
+      // collection — delete them through the expenses endpoint.
+      if (pendingDelete.source === "EXPENSE" || pendingDelete.id.startsWith("exp_")) {
+        await vehicleAPI.deleteExpense(vehicleId, pendingDelete.id.replace(/^exp_/, ""));
+      } else {
+        await vehicleAPI.deleteService(vehicleId, pendingDelete.id);
+      }
       setServices((prev) => prev.filter((s) => s.id !== pendingDelete.id));
       toast.success("Deleted", "Service record removed");
       setPendingDelete(null);

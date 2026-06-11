@@ -208,6 +208,34 @@ async function runUpdateShape(
     { $set: snap },
   );
 
+  // Restore any child rows captured at the write site — e.g. the VehicleSale
+  // row deleted during a sale cancellation. Recreate only the ones that don't
+  // already exist (de-dup by _id) so a re-revert can't duplicate them.
+  if (entry.childSnapshots) {
+    for (const [childName, rows] of Object.entries(entry.childSnapshots)) {
+      const CM = MODELS[childName];
+      if (!CM || !Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const r = { ...(row as Record<string, unknown>) };
+        delete r.deletedAt;
+        if (r._id) {
+          const exists = await CM.findOne(
+            tenantFilter(ctx, { _id: r._id }),
+          ).lean();
+          if (exists) continue;
+        }
+        try {
+          await CM.create({ ...r, ...tenantStamp(ctx) });
+        } catch (err) {
+          console.warn(
+            `[activityRevert] child restore ${childName} failed:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+    }
+  }
+
   // Build a fields[] preview for the new revert audit row.
   const before = current as Record<string, unknown>;
   const fields: ShapeResult["fields"] = [];
@@ -284,6 +312,35 @@ async function runDeleteShape(
     );
   }
   const M = MODELS[shape.modelName];
+
+  // Soft-delete models (Vehicle) keep the original row physically present with
+  // a `deletedAt` marker, and their related children (compliance, sale,
+  // challans, EMI…) are preserved too. The correct restore is to clear
+  // `deletedAt` — re-inserting from the snapshot would collide on `_id`, and
+  // re-creating cascade children would duplicate the preserved ones. Clearing
+  // the flag brings the row back exactly as it was, including its SOLD status
+  // and the linked VehicleSale record.
+  if (shape.modelName === "Vehicle") {
+    const softDeleted = (await M.findOne(tenantFilter(ctx, { _id: entry.entityId }))
+      .setOptions({ includeDeleted: true })
+      .lean()) as { deletedAt?: Date | null } | null;
+    if (softDeleted) {
+      if (!softDeleted.deletedAt) {
+        throw new ConflictError(
+          `${shape.modelName} already exists. Maybe it was restored already?`,
+        );
+      }
+      await M.updateOne(
+        tenantFilter(ctx, { _id: entry.entityId }),
+        { $set: { deletedAt: null } },
+      );
+      return {
+        summary: `Restored ${entry.entityLabel ?? shape.modelName.toLowerCase()}`,
+        fields: [],
+      };
+    }
+    // No row at all → it was hard-deleted; fall through to re-insert below.
+  }
 
   // Make sure the entity isn't already restored (avoid duplicate-key errors).
   const existing = await M.findOne(

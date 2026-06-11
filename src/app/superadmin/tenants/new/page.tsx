@@ -56,6 +56,35 @@ function slugify(s: string): string {
     .slice(0, 40);
 }
 
+// GSTIN: 2-digit state code, 5 letters (PAN), 4 digits, 1 letter, 1
+// entity/alpha-num, fixed "Z", 1 alpha-num checksum — 15 chars total.
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+
+// Returns an inline error string for an invalid GST number, or "" when the
+// value is empty (optional field) or a well-formed 15-char GSTIN.
+function gstinError(raw: string): string {
+  const v = raw.trim().toUpperCase();
+  if (!v) return "";
+  if (v.length !== 15 || !GSTIN_REGEX.test(v)) {
+    return "Invalid GST number. Please enter a valid 15-character GSTIN.";
+  }
+  return "";
+}
+
+// PAN: 5 letters, 4 digits, 1 letter — 10 chars total.
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
+// Returns an inline error string for an invalid PAN number, or "" when the
+// value is empty (optional field) or a well-formed 10-char PAN.
+function panError(raw: string): string {
+  const v = raw.trim().toUpperCase();
+  if (!v) return "";
+  if (v.length !== 10 || !PAN_REGEX.test(v)) {
+    return "Invalid PAN number. Format should be 10 characters: 5 letters, 4 digits, 1 letter.";
+  }
+  return "";
+}
+
 export default function NewTenantPage() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -72,7 +101,9 @@ export default function NewTenantPage() {
   const [adminProfileFile, setAdminProfileFile] = useState<File | null>(null);
   const [adminProfilePreview, setAdminProfilePreview] = useState<string | null>(null);
   const [gstNumber, setGstNumber] = useState("");
+  const [gstError, setGstError] = useState("");
   const [panNumber, setPanNumber] = useState("");
+  const [panErr, setPanErr] = useState("");
   const [addressLine, setAddressLine] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -147,6 +178,15 @@ export default function NewTenantPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    // Block provisioning on a malformed GSTIN and pin the error inline by
+    // the field (it's optional, so an empty value passes).
+    const gstMsg = gstinError(gstNumber);
+    const panMsg = panError(panNumber);
+    if (gstMsg || panMsg) {
+      setGstError(gstMsg);
+      setPanErr(panMsg);
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await superadminAPI.createTenant({
@@ -409,24 +449,38 @@ export default function NewTenantPage() {
             <section>
               <SectionHeading Icon={FileBadge} title="Tax identifiers" subtitle="Optional · used on invoices and reports" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                <Field label="GST Number" hint="15 chars, e.g. 27AAPCS9988A1Z5">
+                <Field label="GST Number" hint="15 chars, e.g. 27AAPCS9988A1Z5" error={gstError}>
                   <input
                     type="text"
                     value={gstNumber}
-                    onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      const next = e.target.value.toUpperCase();
+                      setGstNumber(next);
+                      // Live-clear the error once it becomes valid; surface it
+                      // on blur for partially-typed entries (see onBlur).
+                      if (gstError) setGstError(gstinError(next));
+                    }}
+                    onBlur={() => setGstError(gstinError(gstNumber))}
                     placeholder="27AAPCS9988A1Z5"
                     maxLength={15}
-                    className="input font-mono uppercase"
+                    aria-invalid={Boolean(gstError)}
+                    className={`input font-mono uppercase ${gstError ? "border-red-500 focus:border-red-500 focus:ring-red-500/30" : ""}`}
                   />
                 </Field>
-                <Field label="PAN Number" hint="10 chars, e.g. AAPCS9988A">
+                <Field label="PAN Number" hint="10 chars, e.g. AAPCS9988A" error={panErr}>
                   <input
                     type="text"
                     value={panNumber}
-                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      const next = e.target.value.toUpperCase();
+                      setPanNumber(next);
+                      if (panErr) setPanErr(panError(next));
+                    }}
+                    onBlur={() => setPanErr(panError(panNumber))}
                     placeholder="AAPCS9988A"
                     maxLength={10}
-                    className="input font-mono uppercase"
+                    aria-invalid={Boolean(panErr)}
+                    className={`input font-mono uppercase ${panErr ? "border-red-500 focus:border-red-500 focus:ring-red-500/30" : ""}`}
                   />
                 </Field>
               </div>
@@ -678,11 +732,13 @@ function Field({
   label,
   required,
   hint,
+  error,
   children,
 }: {
   label: string;
   required?: boolean;
   hint?: string;
+  error?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -693,8 +749,12 @@ function Field({
         </span>
       </div>
       {children}
-      {hint && (
-        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">{hint}</p>
+      {error ? (
+        <p className="text-[11px] font-medium text-red-500 dark:text-red-400 mt-1.5">{error}</p>
+      ) : (
+        hint && (
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">{hint}</p>
+        )
       )}
     </label>
   );

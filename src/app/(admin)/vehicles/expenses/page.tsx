@@ -611,15 +611,27 @@ function VehicleExpensesContent() {
             <div className="flex items-center gap-2">
               <DatePicker
                 value={customFrom}
-                onChange={(v) => { setCustomFrom(v); if (v) setPeriod("custom"); }}
+                onChange={(v) => {
+                  setCustomFrom(v);
+                  // Picking a date switches to the custom range; clearing the
+                  // last remaining custom date reverts to the default period.
+                  if (v) setPeriod("custom");
+                  else if (!customTo) setPeriod("this_year");
+                }}
                 placeholder="From"
+                clearable
               />
               <span className="text-xs text-gray-400">to</span>
               <DatePicker
                 value={customTo}
-                onChange={(v) => { setCustomTo(v); if (v) setPeriod("custom"); }}
+                onChange={(v) => {
+                  setCustomTo(v);
+                  if (v) setPeriod("custom");
+                  else if (!customFrom) setPeriod("this_year");
+                }}
                 placeholder="To"
                 minDate={customFrom}
+                clearable
               />
             </div>
           </div>

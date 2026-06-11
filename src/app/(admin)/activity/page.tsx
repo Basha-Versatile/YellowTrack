@@ -99,6 +99,39 @@ function relativeTime(iso: string): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
+// Render a field-diff value for display. Date-valued fields (EMI start date,
+// expiry dates, etc.) come back as raw ISO strings — show them as a friendly
+// "01 May 2026" instead of the database format. Everything else falls back to
+// JSON so objects/arrays/booleans still read clearly.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/;
+function formatFieldValue(value: unknown): string {
+  if (typeof value === "string" && ISO_DATE_RE.test(value)) {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    }
+  }
+  return JSON.stringify(value);
+}
+
+// Reverting these "creation" actions REMOVES the entity that was created
+// (the revert engine soft-deletes vehicles and removes the rest). These are
+// the destructive reverts that warrant a prominent warning + an explicit
+// acknowledgement before they run, to prevent accidental data loss.
+const REMOVAL_REVERT_ACTIONS = new Set([
+  "vehicle.create",
+  "driver.create",
+  "compliance.create",
+  "compliance.renew",
+  "user.invite",
+  "role.create",
+  "emi.plan.create",
+]);
+
 export default function ActivityLogPage() {
   const { hasPermission } = useAuth();
   const toast = useToast();
@@ -354,8 +387,8 @@ export default function ActivityLogPage() {
                               {r.fields.map((f, i) => (
                                 <tr key={i}>
                                   <td className="px-3 py-1.5 font-mono text-gray-700 dark:text-gray-300">{f.field}</td>
-                                  <td className="px-3 py-1.5 text-gray-500 dark:text-gray-400 break-all">{JSON.stringify(f.before)}</td>
-                                  <td className="px-3 py-1.5 text-gray-900 dark:text-white break-all">{JSON.stringify(f.after)}</td>
+                                  <td className="px-3 py-1.5 text-gray-500 dark:text-gray-400 break-all">{formatFieldValue(f.before)}</td>
+                                  <td className="px-3 py-1.5 text-gray-900 dark:text-white break-all">{formatFieldValue(f.after)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -441,6 +474,11 @@ function RevertModal({
   const [needsForce, setNeedsForce] = useState(false);
   const [forceChecked, setForceChecked] = useState(false);
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+  // Destructive reverts (undoing a creation) remove the record — gate them
+  // behind an explicit acknowledgement so they can't be triggered by a stray
+  // single click.
+  const isRemoval = REMOVAL_REVERT_ACTIONS.has(entry.action);
+  const [ackChecked, setAckChecked] = useState(false);
 
   const submit = async (force: boolean) => {
     setSubmitting(true);
@@ -529,12 +567,37 @@ function RevertModal({
                       <tr key={i}>
                         <td className="px-3 py-1.5 font-mono text-gray-700 dark:text-gray-300">{f.field}</td>
                         <td className="px-3 py-1.5 text-gray-900 dark:text-white break-all">
-                          {JSON.stringify(f.before)}
+                          {formatFieldValue(f.before)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {isRemoval && (
+            <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-500/10 dark:border-red-500/30 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-red-800 dark:text-red-300">
+                  <p className="font-bold uppercase tracking-wide">Destructive — this removes a record</p>
+                  <p className="mt-1">
+                    {entry.action === "vehicle.create"
+                      ? `Reverting will remove the onboarded vehicle "${entry.entityLabel ?? "this vehicle"}" and hide its associated records (compliance, challans, services, EMI, FASTag) from active views. You can restore it later by onboarding the same registration number again.`
+                      : `Reverting will remove the ${entry.entityType.replace(/_/g, " ")} "${entry.entityLabel ?? "this record"}" that this action created.`}
+                  </p>
+                  <label className="mt-2.5 flex items-center gap-2 font-semibold text-red-900 dark:text-red-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={ackChecked}
+                      onChange={(e) => setAckChecked(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-red-300 text-red-600 focus:ring-red-400"
+                    />
+                    I understand this removes the record and want to proceed.
+                  </label>
+                </div>
               </div>
             </div>
           )}
@@ -564,14 +627,26 @@ function RevertModal({
           <button
             type="button"
             onClick={() => submit(needsForce && forceChecked)}
-            disabled={submitting || (needsForce && !forceChecked)}
-            className="flex-1 h-10 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2"
+            disabled={
+              submitting ||
+              (needsForce && !forceChecked) ||
+              (isRemoval && !ackChecked)
+            }
+            className={`flex-1 h-10 rounded-lg text-white font-semibold text-sm shadow-lg disabled:opacity-50 inline-flex items-center justify-center gap-2 ${
+              isRemoval
+                ? "bg-gradient-to-r from-red-500 to-rose-600"
+                : "bg-gradient-to-r from-yellow-400 to-yellow-500"
+            }`}
           >
             {submitting && (
               <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
             )}
             <Undo2 className="w-3.5 h-3.5" />
-            {needsForce ? "Revert anyway" : "Confirm revert"}
+            {needsForce
+              ? "Revert anyway"
+              : isRemoval
+                ? "Remove record"
+                : "Confirm revert"}
           </button>
           <button
             type="button"

@@ -7,6 +7,7 @@ import {
   markPaymentPaid,
   markPaymentStatus,
   markPaymentUnpaid,
+  updatePaidPayment,
 } from "@/server/services/emi.service";
 import { logFromRequest } from "@/server/services/activityLog.service";
 import { EMIPayment } from "@/models";
@@ -33,10 +34,23 @@ const markUnpaidSchema = z.object({
   action: z.literal("mark-unpaid"),
 });
 
+// Edit an installment that's already PAID — every field optional so a
+// partial edit (e.g. just the paid date) is valid.
+const updatePaidSchema = z.object({
+  action: z.literal("update-paid"),
+  paidDate: z.string().optional(),
+  paidAmount: z.coerce.number().min(0).optional(),
+  lateFee: z.coerce.number().min(0).optional(),
+  transactionRef: z.string().nullable().optional(),
+  proofUrl: z.string().nullable().optional(),
+  notes: z.string().max(300).nullable().optional(),
+});
+
 const bodySchema = z.discriminatedUnion("action", [
   markPaidSchema,
   markStatusSchema,
   markUnpaidSchema,
+  updatePaidSchema,
 ]);
 
 export const POST = withRoute<{ planId: string; paymentId: string }>(
@@ -69,6 +83,21 @@ export const POST = withRoute<{ planId: string; paymentId: string }>(
           : null,
       });
       return success(updated, "Installment marked paid");
+    }
+
+    if (body.action === "update-paid") {
+      await requirePermission(session, "emi:update");
+      const updated = await updatePaidPayment(ctx, params.paymentId, body);
+      const p = updated as { installmentNumber?: number; paidAmount?: number };
+      await logFromRequest(req, ctx, session, {
+        action: "emi.payment.updated",
+        entityType: "emi",
+        entityId: params.paymentId,
+        entityLabel: `EMI #${p.installmentNumber ?? params.paymentId}`,
+        summary: `Edited paid installment #${p.installmentNumber ?? "?"}${p.paidAmount ? ` (₹${p.paidAmount.toLocaleString("en-IN")})` : ""}`,
+        metadata: { planId: params.planId, paidAmount: p.paidAmount },
+      });
+      return success(updated, "Paid installment updated");
     }
 
     if (body.action === "mark-unpaid") {

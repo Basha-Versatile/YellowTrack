@@ -182,12 +182,21 @@ export async function onboardVehicle(
         vehicleUsage
           ?? (previouslyDeleted as { vehicleUsage?: string | null }).vehicleUsage
           ?? null,
-      // The vehicle is being onboarded fresh — reset lifecycle so a SOLD
-      // status from before delete doesn't carry over and hide it from views.
-      status: "ACTIVE",
+      // Preserve the prior lifecycle status. A vehicle that was SOLD before
+      // deletion keeps its SOLD status on restore so its sale history (the
+      // VehicleSale row, which the delete flow preserves) and Sold-tab
+      // placement come back intact. Defaults to ACTIVE for vehicles that
+      // weren't sold. To put a restored-sold vehicle back into service, the
+      // operator can Cancel Sale from the detail page.
+      status:
+        (previouslyDeleted as { status?: string | null }).status ?? "ACTIVE",
     });
+    const wasSold =
+      (previouslyDeleted as { status?: string | null }).status === "SOLD";
     warnings.push(
-      "Previous data for this vehicle was restored (compliance, challans, services, EMI).",
+      wasSold
+        ? "Previous data for this vehicle was restored, including its SOLD status and sale details. Cancel the sale from the detail page to put it back into service."
+        : "Previous data for this vehicle was restored (compliance, challans, services, EMI).",
     );
   } else {
     const createdDoc = await vehicleRepo.create(ctx, {

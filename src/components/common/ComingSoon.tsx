@@ -33,7 +33,7 @@ export default function ComingSoon({
         </span>
         <div className="mt-8">
           <Link
-            href="/"
+            href="/dashboard"
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10 transition-all"
           >
             <ArrowLeft className="h-3.5 w-3.5" />

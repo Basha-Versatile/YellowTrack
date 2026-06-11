@@ -40,10 +40,16 @@ export function ExportVehiclesModal({
   isOpen,
   filters,
   onClose,
+  filteredCount,
+  fleetCount,
 }: {
   isOpen: boolean;
   filters?: Filters;
   onClose: () => void;
+  // Records matching the current page filters, and the whole tab's fleet.
+  // Used to block an export that would produce an empty file.
+  filteredCount?: number;
+  fleetCount?: number;
 }) {
   const toast = useToast();
   const [fields, setFields] = useState<Field[]>([]);
@@ -105,9 +111,23 @@ export function ExportVehiclesModal({
   const clearAll = () => setSelected(new Set());
   const resetDefaults = () => setSelected(new Set(DEFAULT_SELECTION));
 
+  // Records that will actually be exported given the chosen scope. With the
+  // page filters applied that's the filtered count; without, the whole fleet.
+  // `undefined` when the count wasn't supplied — we then fail open (don't
+  // block) so the server stays the source of truth.
+  const exportCount = applyCurrentFilters ? filteredCount : fleetCount;
+  const nothingToExport = exportCount === 0;
+
   const handleExport = async () => {
     if (selected.size === 0) {
       toast.error("Pick at least one field", "Tick what you want in the report");
+      return;
+    }
+    if (nothingToExport) {
+      toast.error(
+        "Nothing to export",
+        "At least one vehicle record is required to export. Adjust your filters or onboard a vehicle first.",
+      );
       return;
     }
     setExporting(true);
@@ -354,7 +374,12 @@ export function ExportVehiclesModal({
           </div>
         </div>
 
-        <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
+        <div className="px-6 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
+          {nothingToExport && (
+            <p className="mr-auto text-[11px] font-semibold text-red-500 dark:text-red-400">
+              No vehicle records to export — at least one is required.
+            </p>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -366,7 +391,7 @@ export function ExportVehiclesModal({
           <button
             type="button"
             onClick={handleExport}
-            disabled={exporting || selected.size === 0}
+            disabled={exporting || selected.size === 0 || nothingToExport}
             className="rounded-xl px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 shadow-sm transition-colors disabled:opacity-50 inline-flex items-center gap-2"
           >
             {exporting ? (

@@ -473,6 +473,7 @@ export default function DashboardPage() {
                 onChange={setDateFrom}
                 maxDate={dateTo || today()}
                 placeholder="Pick a date"
+                clearable
               />
             </div>
             <div className="flex flex-col gap-1 w-[170px]">
@@ -483,6 +484,7 @@ export default function DashboardPage() {
                 minDate={dateFrom}
                 maxDate={today()}
                 placeholder="Pick a date"
+                clearable
               />
             </div>
             <button
